@@ -12,6 +12,8 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
 # 查找依赖
 find_package(Threads REQUIRED)
 
+include_directories(third_part)
+
 # 包含目录
 include_directories("${CMAKE_SOURCE_DIR}/src")
 
