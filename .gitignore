@@ -1,2 +1,10 @@
 build/
 .vscode/
+*.o
+*.so
+*.a
+.DS_Store
+data/
+wal/
+snapshots/
+*.log
