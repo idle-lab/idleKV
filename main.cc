@@ -1,7 +1,8 @@
-#include "spdlog/spdlog.h"
 #include <iostream>
-#include <signal.h>
 #include <memory>
+#include <signal.h>
+
+#include "spdlog/spdlog.h"
 
 std::string banner() {
     return R"(

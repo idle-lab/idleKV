@@ -1,0 +1,69 @@
+# ===============================
+# 基础风格
+# ===============================
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++20
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+ColumnLimit: 100
+
+# ===============================
+# 对齐规则（系统代码友好）
+# ===============================
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignOperands: true
+AlignTrailingComments: true
+
+# ===============================
+# 空格规则
+# ===============================
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpaceAfterCStyleCast: false
+
+# ===============================
+# 指针 / 引用风格
+# ===============================
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# ===============================
+# include 顺序（工程级）
+# ===============================
+SortIncludes: true
+IncludeBlocks: Regroup
+
+IncludeCategories:
+  - Regex: '^<.*>'
+    Priority: 1
+  - Regex: '^".*"'
+    Priority: 2
+
+# ===============================
+# 命名空间 & 类
+# ===============================
+NamespaceIndentation: None
+FixNamespaceComments: true
+
+# ===============================
+# 注释
+# ===============================
+ReflowComments: true
+CommentPragmas: '^ IWYU pragma:'
+
+# ===============================
+# 其他细节（系统代码常用）
+# ===============================
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+Cpp11BracedListStyle: true
+DerivePointerAlignment: false
+AlwaysBreakTemplateDeclarations: Yes

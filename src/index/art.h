@@ -1,12 +1,9 @@
 #pragma once
 
-#include "common/types.h"
-#include <memory>
 #include <atomic>
+#include <memory>
 
 namespace idlekv {
-
-
 
 // ART索引主类
 class ART {};

@@ -1,11 +1,7 @@
 #pragma once
 
-namespace idlekv{
+namespace idlekv {
 
-class Index {
+class Index {};
 
-};
-
-} // namespace idlek
-
-
+} // namespace idlekv

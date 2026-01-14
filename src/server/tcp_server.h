@@ -1,16 +1,15 @@
 #pragma once
 
-#include "redis_protocol.h"
+#include <atomic>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
-#include <atomic>
-#include <memory>
+
+#include "redis_protocol.h"
 
 namespace idlekv {
 
-class TCPServer {
-
-};
+class TCPServer {};
 
 } // namespace idlekv
