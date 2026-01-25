@@ -17,7 +17,7 @@ class Server {
 public:
     Server() = delete;
 
-    Server(std::unique_ptr<Logger> lg, std::unique_ptr<const ServerConfig> cfg);
+    Server(std::unique_ptr<Logger> lg, std::unique_ptr<ServerConfig> cfg);
 
     void listen_and_server();
 
@@ -26,7 +26,7 @@ private:
     
     asio::io_context io_context_;
     asio::thread_pool workers;
-    std::unique_ptr<const ServerConfig> cfg_;
+    std::unique_ptr<ServerConfig> cfg_;
     std::unique_ptr<Logger> lg_;
 };
 

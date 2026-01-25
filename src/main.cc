@@ -140,15 +140,15 @@ int main(int argc, char** argv) {
     // } catch (std::exception& e) {
     //     std::printf("Exception: %s\n", e.what());
     // }
-    auto co = MyCoro();
-    co.resume();
-    for (;;) {}
+    // auto co = MyCoro();
+    // co.resume();
+    // for (;;) {}
     try {
         idlekv::Config cfg;
         cfg.parse(argc, argv);
         idlekv::Server srv(idlekv::make_default_logger(), idlekv::ServerConfig::build(cfg));
 
-
+        spdlog::info("start server");
         srv.listen_and_server();
     } catch (const std::exception& e) {
         spdlog::error(e.what());

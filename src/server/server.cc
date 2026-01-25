@@ -4,7 +4,7 @@
 
 namespace idlekv {
 
-Server::Server(std::unique_ptr<Logger> lg, std::unique_ptr<const ServerConfig> cfg) 
+Server::Server(std::unique_ptr<Logger> lg, std::unique_ptr<ServerConfig> cfg) 
   : lg_(std::move(lg)), 
     workers(cfg->worker_threads) {
     // 1. 初始化
@@ -18,7 +18,7 @@ Server::Server(std::unique_ptr<Logger> lg, std::unique_ptr<const ServerConfig> c
 
 
 void Server::listen_and_server() {
-    using namespace boost::asio;
+    using namespace asio;
 
     co_spawn(this->io_context_, [this]() -> awaitable<void> {
       ip::tcp::endpoint ep{
@@ -26,16 +26,16 @@ void Server::listen_and_server() {
             this->cfg_->port
       };
 
-      auto exec = co_await boost::asio::this_coro::executor;
+      auto exec = co_await asio::this_coro::executor;
       ip::tcp::acceptor acceptor(exec, ep);
 
 
       for (;;) {
         ip::tcp::socket socket = co_await acceptor.async_accept(use_awaitable);
 
-        co_await boost::asio::post(this->workers, use_awaitable);
+        co_await asio::post(this->workers, use_awaitable);
 
-        auto exec = co_await boost::asio::this_coro::executor;
+        auto exec = co_await asio::this_coro::executor;
 
       }
 

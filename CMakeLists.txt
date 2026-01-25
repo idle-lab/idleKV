@@ -12,7 +12,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
 # 查找依赖
 find_package(Threads REQUIRED)
 
-
 add_library(third_party INTERFACE)
 
 target_include_directories(third_party 
@@ -28,20 +27,7 @@ target_link_libraries(third_party
         spdlog::spdlog_header_only
 )
 
-set(SOURCES
-    main.cc
-    # 索引层
-    src/index/art.cc
-)
+set(PROJECT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_executable(idlekv ${SOURCES})
+add_subdirectory(src/)
 
-target_include_directories(idlekv
-    PRIVATE
-        src/
-)
-
-target_link_libraries(idlekv
-    PRIVATE
-        third_party
-)

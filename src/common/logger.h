@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
@@ -15,11 +16,8 @@ private:
     spdlog::logger lg_;
 };
 
-std::unique_ptr<Logger> make_default_logger() {
-    auto sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+std::unique_ptr<Logger> make_default_logger();
 
-    return std::make_unique<Logger>("default", sink);
-}
-    
+
 } // namespace idlekv 
 

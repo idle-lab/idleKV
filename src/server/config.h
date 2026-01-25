@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <asio/asio.hpp>
+#include <memory>
 #include <asio/asio/ip/tcp.hpp>
 
 #include <common/config.h>
@@ -12,9 +13,9 @@ namespace idlekv {
 
 class ServerConfig {
 public:
-    ServerConfig();
+    ServerConfig() = default;
 
-    static std::unique_ptr<const ServerConfig> build(const Config& cfg);
+    static std::unique_ptr<ServerConfig> build(const Config& cfg);
 
     // ipv4地址
     uint16_t port;

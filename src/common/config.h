@@ -1,6 +1,7 @@
 #pragma once
 
 #include <CLI11/CLI11.hpp>
+#include <spdlog/spdlog.h>
 #include <string>
 
 const std::string SERVER_NAME = "idlekv";
