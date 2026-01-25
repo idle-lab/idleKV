@@ -12,14 +12,20 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
 # 查找依赖
 find_package(Threads REQUIRED)
 
-add_subdirectory(third_part/spdlog)
 
 add_library(third_party INTERFACE)
 
 target_include_directories(third_party 
     INTERFACE
-        ${PROJECT_SOURCE_DIR}/third_part/asio
-        ${PROJECT_SOURCE_DIR}/third_part/CLI11
+        third_part
+        third_part/asio
+)
+
+add_subdirectory(third_part/spdlog)
+
+target_link_libraries(third_party
+    INTERFACE
+        spdlog::spdlog_header_only
 )
 
 set(SOURCES
@@ -32,7 +38,7 @@ add_executable(idlekv ${SOURCES})
 
 target_include_directories(idlekv
     PRIVATE
-        ${PROJECT_SOURCE_DIR}/src
+        src/
 )
 
 target_link_libraries(idlekv

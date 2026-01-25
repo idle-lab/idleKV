@@ -1,15 +1,12 @@
-#include <asio/co_spawn.hpp>
-#include <asio/detached.hpp>
-#include <asio/io_context.hpp>
-#include <asio/ip/tcp.hpp>
-#include <asio/signal_set.hpp>
-#include <asio/write.hpp>
 #include <coroutine>
 #include <cstdio>
 #include <format>
 #include <iostream>
 #include <memory>
 #include <signal.h>
+#include <CLI11/CLI11.hpp>
+#include <spdlog/spdlog.h>
+#include <asio/asio.hpp>
 
 using asio::awaitable;
 using asio::co_spawn;
@@ -18,7 +15,6 @@ using asio::use_awaitable;
 using asio::ip::tcp;
 namespace this_coro = asio::this_coro;
 
-#include "spdlog/spdlog.h"
 #include <common/config.h>
 #include <server/server.h>
 
@@ -147,14 +143,14 @@ int main(int argc, char** argv) {
     auto co = MyCoro();
     co.resume();
     for (;;) {}
-    // try {
-    //     idlekv::Config cfg;
-    //     cfg.parse(argc, argv);
-    //     idlekv::Server srv(idlekv::make_default_logger(), idlekv::ServerConfig::build(cfg));
+    try {
+        idlekv::Config cfg;
+        cfg.parse(argc, argv);
+        idlekv::Server srv(idlekv::make_default_logger(), idlekv::ServerConfig::build(cfg));
 
-    //     srv.listen_and_server();
-    // } catch (const std::exception& e) {
-    //     spdlog::error(e.what());
-    // }
 
+        srv.listen_and_server();
+    } catch (const std::exception& e) {
+        spdlog::error(e.what());
+    }
 }

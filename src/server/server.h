@@ -11,7 +11,7 @@
 
 namespace idlekv {
 
-using boost::asio::awaitable;
+using asio::awaitable;
 
 class Server {
 public:
@@ -24,8 +24,8 @@ public:
     void stop();
 private:
     
-    boost::asio::io_context io_context_;
-    boost::asio::thread_pool workers;
+    asio::io_context io_context_;
+    asio::thread_pool workers;
     std::unique_ptr<const ServerConfig> cfg_;
     std::unique_ptr<Logger> lg_;
 };
