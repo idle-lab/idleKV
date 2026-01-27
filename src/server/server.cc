@@ -4,11 +4,11 @@
 
 namespace idlekv {
 
-Server::Server(std::unique_ptr<Logger> lg, std::unique_ptr<ServerConfig> cfg) 
-  : lg_(std::move(lg)), 
-    workers(cfg->worker_threads) {
+Server::Server(const Config& cfg) 
+  : io_context_(cfg.io_threads_),
+    workers(cfg.worker_threads_) {
     // 1. 初始化
-
+    cfg_ = ServerConfig::build(cfg);
     // 2. 检查/创建数据文件夹
 
     // 3. 恢复数据
@@ -16,32 +16,22 @@ Server::Server(std::unique_ptr<Logger> lg, std::unique_ptr<ServerConfig> cfg)
 }
 
 
-
 void Server::listen_and_server() {
-    using namespace asio;
+    LOG(info, "start server");
+    io_context_.run();
+}
 
-    co_spawn(this->io_context_, [this]() -> awaitable<void> {
-      ip::tcp::endpoint ep{
-            ip::make_address(this->cfg_->ip),
-            this->cfg_->port
-      };
+void Server::register_handler(std::shared_ptr<Handler> handler) {
+    handlers_.push_back(handler);
+    LOG(info, "register handler: {}, {}:{}", handler->name(), handler->endpoint().address().to_string(), handler->endpoint().port());
+    asio::co_spawn(io_context_, handler->listen(), asio::detached);
+}
 
-      auto exec = co_await asio::this_coro::executor;
-      ip::tcp::acceptor acceptor(exec, ep);
+void Server::stop() { 
+    io_context_.stop(); 
+    workers.join();
 
-
-      for (;;) {
-        ip::tcp::socket socket = co_await acceptor.async_accept(use_awaitable);
-
-        co_await asio::post(this->workers, use_awaitable);
-
-        auto exec = co_await asio::this_coro::executor;
-
-      }
-
-    }, detached);
-
-    this->io_context_.run();
+    LOG(info, "server stopped");
 }
 
 } // namespace idlekv

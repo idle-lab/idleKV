@@ -5,6 +5,8 @@ set(SOURCES
     server/server.cc
     server/config.cc
 
+    redis/handler.cc
+
     common/logger.cc
 )
 

@@ -8,3 +8,4 @@ data/
 wal/
 snapshots/
 *.log
+.vs

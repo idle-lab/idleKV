@@ -7,17 +7,9 @@
 
 namespace idlekv {
 
-class Logger {
-public:
-    Logger(std::string name, spdlog::sink_ptr ptr) : lg_(name, ptr) {}
+std::shared_ptr<spdlog::logger> make_default_logger();
 
-    Logger(std::string name, spdlog::sinks_init_list lists) : lg_(name, lists) {}
-private:
-    spdlog::logger lg_;
-};
-
-std::unique_ptr<Logger> make_default_logger();
-
+#define LOG(level, ...) spdlog::##level(__VA_ARGS__)
 
 } // namespace idlekv 
 
