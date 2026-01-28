@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.17)
 project(idlekv)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -27,10 +27,12 @@ target_include_directories(third_party
 )
 
 add_subdirectory(third_part/spdlog)
+add_subdirectory(third_part/asiochan)
 
 target_link_libraries(third_party
     INTERFACE
         spdlog::spdlog_header_only
+        asiochan::asiochan
 )
 
 set(PROJECT_DIR ${CMAKE_CURRENT_SOURCE_DIR})

@@ -1,3 +1,6 @@
 [submodule "third_part/spdlog"]
 	path = third_part/spdlog
 	url = git@github.com:gabime/spdlog.git
+[submodule "third_part/asiochan"]
+	path = third_part/asiochan
+	url = git@github.com:idle-lab/asiochan.git

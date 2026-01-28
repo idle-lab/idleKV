@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 #include <cstdlib>
+#include <asiochan/asiochan.hpp>
 
 namespace idlekv {
 
@@ -18,6 +19,9 @@ public:
     { }
 
     asio::awaitable<void> handle(Connection& conn);
+
+    asio::awaitable<void> parse_and_execute(asiochan::channel<std::pair<std::string, bool>> in,
+                                            asiochan::channel<std::pair<std::string, bool>> out);
 
     virtual asio::awaitable<void> listen() override;
 

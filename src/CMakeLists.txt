@@ -21,3 +21,8 @@ target_link_libraries(idlekv
     PRIVATE
         third_party
 )
+
+target_compile_definitions(idlekv
+    PRIVATE
+        ASIOCHAN_USE_STANDALONE_ASIO=ON
+)

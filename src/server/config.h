@@ -4,7 +4,6 @@
 #include <string>
 #include <asio/asio.hpp>
 #include <memory>
-#include <asio/asio/ip/tcp.hpp>
 
 #include <common/config.h>
 
@@ -20,7 +19,6 @@ public:
     // ipv4地址
     uint16_t port;
     std::string ip;
-
 
     // io 和 命令 执行的线程数
     uint8_t io_threads, worker_threads;

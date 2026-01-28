@@ -12,12 +12,9 @@
 #include <common/config.h>
 #include <common/logger.h>
 #include <server/server.h>
-#include <asio/co_spawn.hpp>
-#include <asio/detached.hpp>
-#include <asio/io_context.hpp>
-#include <asio/ip/tcp.hpp>
-#include <asio/signal_set.hpp>
-#include <asio/write.hpp>
+#include <asiochan/asiochan.hpp>
+#include <span>
+#include <ranges>
 
 using asio::awaitable;
 using asio::co_spawn;
@@ -52,7 +49,7 @@ int main(int argc, char** argv) {
 
         srv->register_handler(std::make_shared<idlekv::RedisHandler>(cfg, srv));
 
-        asio::signal_set signals(srv->get_io_context(), SIGINT, SIGTERM);
+        asio::signal_set signals(srv->get_io_context(), SIGINT, SIGTERM, SIGABRT);
 
         signals.async_wait([srv](const asio::error_code&, int) {
             spdlog::info("signal received, stopping server...");

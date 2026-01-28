@@ -2,6 +2,9 @@
 
 namespace idlekv {
 
-class Index {};
+class Index {
+public:
+	
+};
 
 } // namespace idlekv
