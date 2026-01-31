@@ -7,9 +7,21 @@
 #include <vector>
 #include <memory>
 #include <cstdlib>
+#include <string>
 #include <asiochan/asiochan.hpp>
 
 namespace idlekv {
+
+struct Payload {
+    std::string msg;
+    bool        done;
+
+    Payload(std::string&& m, bool d)
+        : msg(std::move(m)), done(d) {}
+
+    Payload(std::string& m, bool d)
+        : msg(std::move(m)), done(d) {}
+};
 
 class RedisHandler : public Handler {
 public:
@@ -18,10 +30,12 @@ public:
       srv_(srv)
     { }
 
-    asio::awaitable<void> handle(Connection& conn);
+    asio::awaitable<void> handle(asio::ip::tcp::socket socket);
 
-    asio::awaitable<void> parse_and_execute(asiochan::channel<std::pair<std::string, bool>> in,
-                                            asiochan::channel<std::pair<std::string, bool>> out);
+    asio::awaitable<void> parse_and_execute(std::shared_ptr<Connection> conn, 
+                                            asiochan::channel<Payload>  in,
+                                            asiochan::channel<Payload>  out,
+                                            asiochan::channel<void, 3>  doneCh);
 
     virtual asio::awaitable<void> listen() override;
 
@@ -32,6 +46,22 @@ public:
 private:
     std::vector<Connection> conns_;
     std::shared_ptr<Server> srv_;
+};
+
+
+class Encoder {
+public:
+
+private:
+    asiochan::channel<Payload> out;
+};
+
+
+class Decoder {
+
+
+private:
+    asiochan::channel<Payload> in;
 };
 
 } // namespace idlekv

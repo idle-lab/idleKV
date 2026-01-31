@@ -2,6 +2,9 @@
 
 #include <asio/asio.hpp>
 #include <asio/asio/awaitable.hpp>
+#include <atomic>
+#include <unordered_set>
+#include <memory>
 
 namespace idlekv {
 
@@ -11,8 +14,29 @@ public:
 
     asio::ip::tcp::socket& socket() const { return socket_; }
 
+    void close() {
+        if (!closed_.exchange(true, std::memory_order_acq_rel)) {
+            this->socket_.shutdown(asio::ip::tcp::socket::shutdown_both);
+            this->socket_.close();
+        }
+    }
+
 private: 
     mutable asio::ip::tcp::socket socket_;
+    std::atomic<bool>             closed_{false};
+};
+
+class ConnectionManager {
+public:
+    void add(std::shared_ptr<Connection> c);
+    void remove(std::shared_ptr<Connection> c);
+
+    void   shutdown_all(); // ·þÎñÍË³ö
+    size_t size() const;
+
+private:
+    std::mutex                                      mu_;
+    std::unordered_set<std::shared_ptr<Connection>> conns_;
 };
 
 } // namespace idlekv
