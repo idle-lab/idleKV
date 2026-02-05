@@ -6,12 +6,13 @@ set(SOURCES
     server/config.cc
 
     redis/handler.cc
+    redis/type/base.cc
 
     common/logger.cc
 
     utils/timer/timer.hpp
-
     utils/io/writer.hpp
+    utils/io/reader.h
 )
 
 add_executable(idlekv ${SOURCES})

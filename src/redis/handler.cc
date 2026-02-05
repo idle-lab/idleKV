@@ -3,6 +3,7 @@
 #include <asiochan/select.hpp>
 #include <asiochan/asiochan.hpp>
 #include <utils/timer/timer.hpp>
+#include <redis/type/base.h>
 #include <chrono>
 
 namespace idlekv {
@@ -36,14 +37,12 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
 
                     size_t n = co_await asio::async_write(conn->socket(), asio::buffer(response),
                                                           asio::use_awaitable);
-                    LOG(debug, "send: {}", response);
                 }
             } catch (std::exception& e) {
                 LOG(error, "Connection write exception: {}", e.what());
             }
 
             co_await doneCh.write();
-            LOG(debug, "Connection write task done");
         }(out, doneCh),
         asio::detached
     );
@@ -69,7 +68,6 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
             }
 
             co_await doneCh.write();
-            LOG(debug, "Connection read task done");
         }(in, doneCh),
         asio::detached
     );
@@ -95,7 +93,6 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
         }
     }
 
-    LOG(debug, "Connection from {} closed", ep.address().to_string());
 }
 
 asio::awaitable<void> RedisHandler::parse_and_execute(std::shared_ptr<Connection> conn,
@@ -104,6 +101,8 @@ asio::awaitable<void> RedisHandler::parse_and_execute(std::shared_ptr<Connection
                                                       asiochan::channel<void, 3>  doneCh) {
     try {
         for (;;) {
+            auto dec = Decoder{in};
+
             auto [data, done] = co_await in.read();
             if (done) {
                 break;
@@ -118,10 +117,9 @@ asio::awaitable<void> RedisHandler::parse_and_execute(std::shared_ptr<Connection
     }
 
     co_await doneCh.write();
-    LOG(debug, "Parse and execute task done");
 }
 
-asio::awaitable<void> RedisHandler::listen() {
+asio::awaitable<void> RedisHandler::start() {
     auto exec = co_await asio::this_coro::executor;
     asio::ip::tcp::acceptor acceptor(exec, ep_);
 

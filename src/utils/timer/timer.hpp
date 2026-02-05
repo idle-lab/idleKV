@@ -32,9 +32,7 @@ auto set_timeout(std::chrono::steady_clock::duration dur) -> asiochan::read_chan
         timer_context(),
         [=]() mutable -> asio::awaitable<void> {
             co_await timer->async_wait(asio::use_awaitable);
-            LOG(debug, "123");
             co_await timeout.write();
-            LOG(debug, "-===");
         },
         asio::detached);
 

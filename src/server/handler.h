@@ -12,13 +12,13 @@ public:
 	
 	Handler(const std::string& ip, uint16_t port) : ep_(asio::ip::make_address(ip), port) {}
 
-	virtual asio::awaitable<void> listen() = 0;
+	virtual asio::awaitable<void> start() = 0;
 
 	virtual void stop() = 0;
 
 	virtual asio::ip::tcp::endpoint endpoint() { return ep_; }
 
-	virtual std::string name(){return "Unknow Handler" ; }
+	virtual std::string name() {return "Unknow Handler" ; }
 
 	virtual ~Handler() = default;
 protected:

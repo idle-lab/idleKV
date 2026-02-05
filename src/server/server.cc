@@ -24,12 +24,16 @@ void Server::listen_and_server() {
 void Server::register_handler(std::shared_ptr<Handler> handler) {
     handlers_.push_back(handler);
     LOG(info, "register handler: {}, {}:{}", handler->name(), handler->endpoint().address().to_string(), handler->endpoint().port());
-    asio::co_spawn(io_context_, handler->listen(), asio::detached);
+    asio::co_spawn(io_context_, handler->start(), asio::detached);
 }
 
 void Server::stop() { 
     io_context_.stop(); 
     workers.join();
+
+    for (auto& handler : handlers_) {
+        handler->stop();
+    }
 
     LOG(info, "server stopped");
 }

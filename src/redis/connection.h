@@ -26,6 +26,7 @@ private:
     std::atomic<bool>             closed_{false};
 };
 
+// TODO
 class ConnectionManager {
 public:
     void add(std::shared_ptr<Connection> c);

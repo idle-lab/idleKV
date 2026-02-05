@@ -4,6 +4,7 @@
 #include <server/server.h>
 #include <common/config.h>
 #include <redis/connection.h>
+#include <redis/type/base.h>
 #include <vector>
 #include <memory>
 #include <cstdlib>
@@ -11,17 +12,6 @@
 #include <asiochan/asiochan.hpp>
 
 namespace idlekv {
-
-struct Payload {
-    std::string msg;
-    bool        done;
-
-    Payload(std::string&& m, bool d)
-        : msg(std::move(m)), done(d) {}
-
-    Payload(std::string& m, bool d)
-        : msg(std::move(m)), done(d) {}
-};
 
 class RedisHandler : public Handler {
 public:
@@ -37,7 +27,7 @@ public:
                                             asiochan::channel<Payload>  out,
                                             asiochan::channel<void, 3>  doneCh);
 
-    virtual asio::awaitable<void> listen() override;
+    virtual asio::awaitable<void> start() override;
 
     virtual void stop() override {}
 
@@ -46,22 +36,6 @@ public:
 private:
     std::vector<Connection> conns_;
     std::shared_ptr<Server> srv_;
-};
-
-
-class Encoder {
-public:
-
-private:
-    asiochan::channel<Payload> out;
-};
-
-
-class Decoder {
-
-
-private:
-    asiochan::channel<Payload> in;
 };
 
 } // namespace idlekv
