@@ -1,9 +1,16 @@
 cmake_minimum_required(VERSION 3.17)
 project(idlekv)
 
+option(ENABLE_TEST "是否编译单元测试" ON)
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+        message(STATUS "Setting build type to `Debug` as none was specified.")
+        set(CMAKE_BUILD_TYPE "Debug")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
+set(PROJECT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 # 编译选项
 if (MSVC)
     add_compile_options(/W4 /utf-8)
@@ -18,24 +25,8 @@ endif()
 # 查找依赖
 find_package(Threads REQUIRED)
 
-add_library(third_party INTERFACE)
-
-target_include_directories(third_party 
-    INTERFACE
-        third_part
-        third_part/asio
-)
-
-add_subdirectory(third_part/spdlog)
-add_subdirectory(third_part/asiochan)
-
-target_link_libraries(third_party
-    INTERFACE
-        spdlog::spdlog_header_only
-        asiochan::asiochan
-)
-
-set(PROJECT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-
-add_subdirectory(src/)
-
+add_subdirectory(third_part)
+if (ENABLE_TEST)
+    add_subdirectory(test)
+endif()
+add_subdirectory(src)
