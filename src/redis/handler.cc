@@ -3,7 +3,6 @@
 #include <asiochan/select.hpp>
 #include <asiochan/asiochan.hpp>
 #include <utils/timer/timer.hpp>
-#include <redis/type/base.h>
 #include <chrono>
 
 namespace idlekv {
@@ -102,6 +101,7 @@ asio::awaitable<void> RedisHandler::parse_and_execute(std::shared_ptr<Connection
     try {
         for (;;) {
             auto dec = Decoder{in};
+
 
             auto [data, done] = co_await in.read();
             if (done) {

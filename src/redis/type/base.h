@@ -1,20 +1,20 @@
 #pragma once
 
-#include <string>
 #include <asio/asio.hpp>
 #include <asiochan/asiochan.hpp>
+#include <string>
 
 namespace idlekv {
 
-enum class DataType : char { 
-	String      = '+', 
-	Error       = '-',
-    Integers    = ':',
-    BulkString  = '$',
-    Arrays      = '*'
+enum class DataType : char {
+    String     = '+',
+    Error      = '-',
+    Integers   = ':',
+    BulkString = '$',
+    Arrays     = '*'
 };
 
-const char* CRLF = "\r\n";
+extern const char* CRLF;
 
 struct Payload {
     std::string msg;
@@ -26,65 +26,61 @@ struct Payload {
 };
 
 class Encoder {
+public:
 
+private:
+    asiochan::write_channel<Payload> out_;
 };
 
 class Decoder {
 public:
     Decoder(asiochan::read_channel<Payload> in) : in_(in) {}
 
-    asio::awaitable<std::string> read_line() {
-        size_t pos = 0;
+    auto read_line() -> asio::awaitable<std::string>;
 
-        while ((buffer_.find("\r\n", pos)) == std::string::npos) {
-            pos = buffer_.size();
-            co_await do_read();
-        }
-
-        auto line = buffer_.substr(0, pos);
-        buffer_          = buffer_.substr(pos + 2);
-        co_return line;
-    }
-
-    asio::awaitable<std::string> read_bytes(size_t len) { 
-        while (buffer_.size() < len) {
-            co_await do_read();
-        }
-
-        auto data = buffer_.substr(0, len);
-        buffer_   = buffer_.substr(len);
-        co_return data;
-    }
-
-    asio::awaitable<int> read_int() {
-
-    }
-
-    asio::awaitable<int> read_uint() {
-    
-    }
-
-    asio::awaitable<char> read_byte() { 
-        if (buffer_.size() < 1) {
-
-        }
-    }
+    auto read_bytes(size_t len) -> asio::awaitable<std::string>;
 
 private:
-    asio::awaitable<char> do_read() {
+    asio::awaitable<char> buffer_fill() {
+        if (r != 0) {
+            buffer_ = buffer_.substr(r);
+            r       = 0;
+        }
+
         auto [chunk, done] = co_await in_.read();
         if (done) {
-            throw std::runtime_error("Connection closed before line was complete");
+            throw std::runtime_error("Connection closed");
         }
+
         buffer_ += chunk;
     }
 
-    size_t rp = 0, wp = 0;
-    std::string buffer_;
+    size_t buffer_size() const noexcept { return buffer_.size() - r; }
+
+    // 返回从 r 开始到第一个 c （包含 c）的字符串的长度，如果没有找到则返回 npos
+    size_t buffer_find(char c) const noexcept {
+        if (size_t pos = buffer_.find(c, r); pos != std::string::npos) {
+            return pos - r + 1;
+        } else {
+            return std::string::npos;
+        }
+    }
+
+    // 获取从 r 开始的 len 个字符
+    std::string buffer_get(size_t len) noexcept {
+        assert(r + len <= buffer_.size());
+
+        r += len;
+        return buffer_.substr(r - len, len);
+    }
+
+    // 第一个还未读取的字符在 buffer_ 中的位置
+    size_t                          r = 0;
+    std::string                     buffer_;
     asiochan::read_channel<Payload> in_;
 };
 
-
-
-
 } // namespace idlekv
+
+
+

@@ -1,5 +1,4 @@
 set(SOURCES
-    main.cc
     # 索引层
     index/art.cc
     server/server.cc
@@ -11,23 +10,31 @@ set(SOURCES
     common/logger.cc
 
     utils/timer/timer.hpp
-    utils/io/writer.hpp
-    utils/io/reader.h
 )
 
-add_executable(idlekv ${SOURCES})
 
-target_include_directories(idlekv
-    PRIVATE
+add_library(idlekv_core ${SOURCES})
+
+target_include_directories(idlekv_core
+    PUBLIC
         ${PROJECT_DIR}/src
 )
 
-target_link_libraries(idlekv
-    PRIVATE
-        third_party
+target_link_libraries(idlekv_core
+    PUBLIC
+        third_part
 )
 
-target_compile_definitions(idlekv
-    PRIVATE
+target_compile_definitions(idlekv_core
+    PUBLIC
         ASIOCHAN_USE_STANDALONE_ASIO=ON
 )
+
+add_executable(idlekv main.cc)
+
+target_link_libraries(idlekv
+    PRIVATE
+        idlekv_core
+)
+
+
