@@ -1,14 +1,12 @@
 #pragma once
 
-#include <cstdint>
-#include <string>
 #include <asio/asio.hpp>
-#include <memory>
-
 #include <common/config.h>
+#include <cstdint>
+#include <memory>
+#include <string>
 
 namespace idlekv {
-
 
 class ServerConfig {
 public:
@@ -17,15 +15,13 @@ public:
     static std::unique_ptr<ServerConfig> build(const Config& cfg);
 
     // ipv4地址
-    uint16_t port;
+    uint16_t    port;
     std::string ip;
 
     // io 和 命令 执行的线程数
     uint8_t io_threads, worker_threads;
+
 private:
-
 };
-
-
 
 } // namespace idlekv

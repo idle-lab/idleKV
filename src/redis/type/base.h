@@ -27,7 +27,6 @@ struct Payload {
 
 class Encoder {
 public:
-
 private:
     asiochan::write_channel<Payload> out_;
 };
@@ -81,6 +80,3 @@ private:
 };
 
 } // namespace idlekv
-
-
-

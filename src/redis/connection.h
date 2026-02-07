@@ -3,14 +3,14 @@
 #include <asio/asio.hpp>
 #include <asio/asio/awaitable.hpp>
 #include <atomic>
-#include <unordered_set>
 #include <memory>
+#include <unordered_set>
 
 namespace idlekv {
 
 class Connection {
 public:
-    explicit Connection(asio::ip::tcp::socket&& socket) : socket_(std::move(socket)) {} 
+    explicit Connection(asio::ip::tcp::socket&& socket) : socket_(std::move(socket)) {}
 
     asio::ip::tcp::socket& socket() const { return socket_; }
 
@@ -21,7 +21,7 @@ public:
         }
     }
 
-private: 
+private:
     mutable asio::ip::tcp::socket socket_;
     std::atomic<bool>             closed_{false};
 };

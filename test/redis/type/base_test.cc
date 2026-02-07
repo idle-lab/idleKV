@@ -1,27 +1,27 @@
-#include <gtest/gtest.h>
 #include <asio/asio.hpp>
-#include <vector>
+#include <gtest/gtest.h>
 #include <redis/type/base.h>
+#include <vector>
 
 using namespace idlekv;
 
 auto run_test(std::vector<Payload>                                             msgs,
               std::function<asio::awaitable<void>(asiochan::channel<Payload>)> f) {
-    asio::io_context io;
+    asio::io_context           io;
     asiochan::channel<Payload> in;
 
-	asio::co_spawn(
-    io,
-    [in, &msgs]() mutable -> asio::awaitable<void> { 
-		for (auto& msg : msgs) {
-            co_await in.write(std::move(msg));
-		}
-    },
-    asio::detached);
+    asio::co_spawn(
+        io,
+        [in, &msgs]() mutable -> asio::awaitable<void> {
+            for (auto& msg : msgs) {
+                co_await in.write(std::move(msg));
+            }
+        },
+        asio::detached);
 
-	asio::co_spawn(io, f(in), asio::detached);
+    asio::co_spawn(io, f(in), asio::detached);
 
-	io.run();
+    io.run();
 }
 
 TEST(DecoderTest, ReadLine) {
@@ -34,7 +34,7 @@ TEST(DecoderTest, ReadLine) {
         {"$5\r\nhello\r\n", false},
     };
 
-	run_test(msgs, [&res](asiochan::channel<Payload> in) mutable -> asio::awaitable<void> {
+    run_test(msgs, [&res](asiochan::channel<Payload> in) mutable -> asio::awaitable<void> {
         auto d = Decoder{in};
         res.push_back(co_await d.read_line());
         res.push_back(co_await d.read_line());
@@ -42,7 +42,7 @@ TEST(DecoderTest, ReadLine) {
         res.push_back(co_await d.read_line());
     });
 
-	ASSERT_EQ(res[0], "1111222\r3333\r\n");
+    ASSERT_EQ(res[0], "1111222\r3333\r\n");
     ASSERT_EQ(res[1], "+OK\r\n");
     ASSERT_EQ(res[2], "$5\r\n");
     ASSERT_EQ(res[3], "hello\r\n");
@@ -56,7 +56,7 @@ TEST(DecoderTest, ReadBytes) {
         {"222\r3333\r\n", false},
     };
 
-	run_test(msgs, [&res](asiochan::channel<Payload> in) mutable -> asio::awaitable<void> {
+    run_test(msgs, [&res](asiochan::channel<Payload> in) mutable -> asio::awaitable<void> {
         auto d = Decoder{in};
         res.push_back(co_await d.read_bytes(2));
         res.push_back(co_await d.read_bytes(5));

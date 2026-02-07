@@ -4,7 +4,6 @@ namespace idlekv {
 
 const char* CRLF = "\r\n";
 
-
 auto Decoder::read_line() -> asio::awaitable<std::string> {
     std::string line;
 

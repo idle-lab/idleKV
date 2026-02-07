@@ -3,9 +3,12 @@
 CLANG_FORMAT ?= clang-format
 
 SRC_DIRS := src
-FILES := main.cc
+TEST_DIRS := test
 
-FORMAT_FILES := $(shell find $(SRC_DIRS) -type f \( -name '*.cc' -o -name '*.h' \)) $(FILES)
+SRC_FILES := $(shell find $(SRC_DIRS) -type f \( -name '*.cc' -o -name '*.h' \))
+TEST_FILES := $(shell find $(TEST_DIRS) -type f \( -name '*_test.cc' -o -name '*.h' \))
+
+FORMAT_FILES := $(SRC_FILES) $(TEST_FILES)
 
 format-check:
 	@$(CLANG_FORMAT) --dry-run --Werror $(FORMAT_FILES)

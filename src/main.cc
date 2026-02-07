@@ -1,20 +1,20 @@
+#include <CLI11/CLI11.hpp>
+#include <asio/asio.hpp>
+#include <asiochan/asiochan.hpp>
+#include <chrono>
+#include <common/config.h>
+#include <common/logger.h>
 #include <coroutine>
 #include <cstdio>
 #include <format>
 #include <iostream>
 #include <memory>
-#include <signal.h>
-#include <CLI11/CLI11.hpp>
-#include <spdlog/spdlog.h>
-#include <chrono>
-#include <redis/handler.h>
-#include <asio/asio.hpp>
-#include <common/config.h>
-#include <common/logger.h>
-#include <server/server.h>
-#include <asiochan/asiochan.hpp>
-#include <span>
 #include <ranges>
+#include <redis/handler.h>
+#include <server/server.h>
+#include <signal.h>
+#include <span>
+#include <spdlog/spdlog.h>
 
 using asio::awaitable;
 using asio::co_spawn;
@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
         idlekv::Config cfg;
 
         if (cfg.has_config_file()) {
-            cfg.parse_from_file();  
+            cfg.parse_from_file();
         } else {
             cfg.parse(argc, argv);
         }

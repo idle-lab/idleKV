@@ -41,17 +41,12 @@ ReferenceAlignment: Left
 SortIncludes: true
 IncludeBlocks: Regroup
 
-IncludeCategories:
-  - Regex: '^<.*>'
-    Priority: 1
-  - Regex: '^".*"'
-    Priority: 2
-
 # ===============================
 # 命名空间 & 类
 # ===============================
 NamespaceIndentation: None
 FixNamespaceComments: true
+AccessModifierOffset: -4
 
 # ===============================
 # 注释

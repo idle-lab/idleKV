@@ -1,9 +1,8 @@
-﻿#include <redis/handler.h>
-
+﻿#include <asiochan/asiochan.hpp>
 #include <asiochan/select.hpp>
-#include <asiochan/asiochan.hpp>
-#include <utils/timer/timer.hpp>
 #include <chrono>
+#include <redis/handler.h>
+#include <utils/timer/timer.hpp>
 
 namespace idlekv {
 
@@ -11,17 +10,14 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
     auto conn = std::make_shared<Connection>(std::move(socket));
     auto ep   = conn->socket().remote_endpoint();
 
-    using msgChan = asiochan::channel<Payload>;
+    using msgChan  = asiochan::channel<Payload>;
     using doneChan = asiochan::channel<void, 3>;
     auto in = msgChan(), out = msgChan();
     auto doneCh = doneChan();
 
     // 执行逻辑
-    asio::co_spawn(
-        srv_->get_worker_pool(), 
-        parse_and_execute(conn, in, out, doneCh),
-        asio::detached
-    );
+    asio::co_spawn(srv_->get_worker_pool(), parse_and_execute(conn, in, out, doneCh),
+                   asio::detached);
 
     // 写逻辑
     asio::co_spawn(
@@ -43,12 +39,11 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
 
             co_await doneCh.write();
         }(out, doneCh),
-        asio::detached
-    );
-    
+        asio::detached);
+
     // 读逻辑
     asio::co_spawn(
-        srv_->get_io_context(), 
+        srv_->get_io_context(),
         [conn](msgChan in, doneChan doneCh) -> asio::awaitable<void> {
             char buff[1024];
             try {
@@ -68,8 +63,7 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
 
             co_await doneCh.write();
         }(in, doneCh),
-        asio::detached
-    );
+        asio::detached);
 
     co_await doneCh.read();
     conn->close();
@@ -78,12 +72,10 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
     for (;;) {
         auto timeout = set_timeout(std::chrono::milliseconds(200));
 
-        auto res     = co_await asiochan::select(
-            asiochan::ops::write(Payload{"", true}, in, out),
-            asiochan::ops::read(timeout)
-        );
+        auto res = co_await asiochan::select(asiochan::ops::write(Payload{"", true}, in, out),
+                                             asiochan::ops::read(timeout));
 
-        while(doneCh.try_read()) {
+        while (doneCh.try_read()) {
             cnt++;
         }
 
@@ -91,7 +83,6 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
             break;
         }
     }
-
 }
 
 asio::awaitable<void> RedisHandler::parse_and_execute(std::shared_ptr<Connection> conn,
@@ -101,7 +92,6 @@ asio::awaitable<void> RedisHandler::parse_and_execute(std::shared_ptr<Connection
     try {
         for (;;) {
             auto dec = Decoder{in};
-
 
             auto [data, done] = co_await in.read();
             if (done) {
@@ -120,7 +110,7 @@ asio::awaitable<void> RedisHandler::parse_and_execute(std::shared_ptr<Connection
 }
 
 asio::awaitable<void> RedisHandler::start() {
-    auto exec = co_await asio::this_coro::executor;
+    auto                    exec = co_await asio::this_coro::executor;
     asio::ip::tcp::acceptor acceptor(exec, ep_);
 
     LOG(info, "Handler {} listening on {}:{}", name(), ep_.address().to_string(), ep_.port());

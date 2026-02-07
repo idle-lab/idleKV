@@ -3,7 +3,6 @@
 #include <asio/asio.hpp>
 #include <memory>
 
-
 namespace idlekv {
 
 class Reader {
@@ -12,9 +11,8 @@ public:
 
     virtual size_t read(const char* data, size_t n) = 0;
 
-    virtual  ~Reader() = default;
+    virtual ~Reader() = default;
 };
-
 
 class AsyncReader {
 public:

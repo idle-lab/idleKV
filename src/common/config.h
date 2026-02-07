@@ -1,11 +1,11 @@
 #pragma once
 
 #include <CLI11/CLI11.hpp>
+#include <exception>
 #include <spdlog/spdlog.h>
 #include <string>
-#include <exception>
 
-const std::string SERVER_NAME = "idlekv";
+const std::string SERVER_NAME  = "idlekv";
 const std::string DEFAULT_PORT = "4396";
 
 namespace idlekv {
@@ -20,28 +20,25 @@ public:
     }
 
     // 不能拷贝不能移动
-    Config(const Config&) = delete;
-    Config(Config&&) = delete;
+    Config(const Config&)            = delete;
+    Config(Config&&)                 = delete;
     Config& operator=(const Config&) = delete;
-    Config& operator=(Config&&) = delete;
+    Config& operator=(Config&&)      = delete;
 
-    void parse(int argc, char** argv) {
-        opts_.parse(argc, argv);
-    }
+    void parse(int argc, char** argv) { opts_.parse(argc, argv); }
 
-    void parse_from_file() { 
-        throw std::exception("Not yet implemented");
-    }
+    void parse_from_file() { throw std::exception("Not yet implemented"); }
 
     bool has_config_file() const { return !config_file_path.empty(); }
 
     std::string ip_, port_;
-    uint16_t    io_threads_ = 1;
+    uint16_t    io_threads_     = 1;
     uint16_t    worker_threads_ = 8;
 
     std::string config_file_path;
+
 private:
     CLI::App opts_;
 };
 
-} // namespace idlekv 
+} // namespace idlekv
