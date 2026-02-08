@@ -2,13 +2,13 @@
 #include <asiochan/select.hpp>
 #include <chrono>
 #include <redis/handler.h>
+#include <stdexcept>
 #include <utils/timer/timer.hpp>
 
 namespace idlekv {
 
 asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
     auto conn = std::make_shared<Connection>(std::move(socket));
-    auto ep   = conn->socket().remote_endpoint();
 
     using msgChan  = asiochan::channel<Payload>;
     using doneChan = asiochan::channel<void, 3>;
@@ -16,7 +16,7 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
     auto doneCh = doneChan();
 
     // 执行逻辑
-    asio::co_spawn(srv_->get_worker_pool(), parse_and_execute(conn, in, out, doneCh),
+    asio::co_spawn(srv_->get_worker_pool(), parse_and_execute(in, out, doneCh),
                    asio::detached);
 
     // 写逻辑
@@ -32,6 +32,10 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
 
                     size_t n = co_await asio::async_write(conn->socket(), asio::buffer(response),
                                                           asio::use_awaitable);
+                    
+                    if (n != response.size()) {
+                        throw std::runtime_error("async_write ");
+                    }
                 }
             } catch (std::exception& e) {
                 LOG(error, "Connection write exception: {}", e.what());
@@ -72,7 +76,7 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
     for (;;) {
         auto timeout = set_timeout(std::chrono::milliseconds(200));
 
-        auto res = co_await asiochan::select(asiochan::ops::write(Payload{"", true}, in, out),
+        co_await asiochan::select(asiochan::ops::write(Payload{"", true}, in, out),
                                              asiochan::ops::read(timeout));
 
         while (doneCh.try_read()) {
@@ -85,8 +89,7 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
     }
 }
 
-asio::awaitable<void> RedisHandler::parse_and_execute(std::shared_ptr<Connection> conn,
-                                                      asiochan::channel<Payload>  in,
+asio::awaitable<void> RedisHandler::parse_and_execute(asiochan::channel<Payload>  in,
                                                       asiochan::channel<Payload>  out,
                                                       asiochan::channel<void, 3>  doneCh) {
     try {

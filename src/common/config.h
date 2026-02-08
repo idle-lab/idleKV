@@ -27,7 +27,7 @@ public:
 
     void parse(int argc, char** argv) { opts_.parse(argc, argv); }
 
-    void parse_from_file() { throw std::exception("Not yet implemented"); }
+    void parse_from_file() { throw std::runtime_error("Not yet implemented"); }
 
     bool has_config_file() const { return !config_file_path.empty(); }
 

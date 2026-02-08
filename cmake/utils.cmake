@@ -1,0 +1,23 @@
+function(target_link_libraries_system target)
+  foreach(lib IN LISTS ARGN)
+    if (NOT TARGET ${lib})
+      message(FATAL_ERROR "${lib} is not a target")
+    endif()
+
+    get_target_property(lib_include_dirs ${lib} INTERFACE_INCLUDE_DIRECTORIES)
+
+    get_target_property(target_type ${target} TYPE)
+
+    if (target_type STREQUAL "INTERFACE_LIBRARY")
+      if (lib_include_dirs)
+        target_include_directories(${target} SYSTEM INTERFACE ${lib_include_dirs})
+      endif()
+      target_link_libraries(${target} INTERFACE ${lib})
+    else()
+      if (lib_include_dirs)
+        target_include_directories(${target} SYSTEM PRIVATE ${lib_include_dirs})
+      endif()
+      target_link_libraries(${target} PRIVATE ${lib})
+    endif()
+  endforeach()
+endfunction()

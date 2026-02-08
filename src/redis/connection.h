@@ -32,7 +32,7 @@ public:
     void add(std::shared_ptr<Connection> c);
     void remove(std::shared_ptr<Connection> c);
 
-    void   shutdown_all(); // ·şÎñÍË³ö
+    void   shutdown_all(); // æœåŠ¡é€€å‡º
     size_t size() const;
 
 private:

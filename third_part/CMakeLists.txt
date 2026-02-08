@@ -1,9 +1,9 @@
 add_library(third_part INTERFACE)
 
 target_include_directories(third_part
-    INTERFACE
+    SYSTEM INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}
-        asio
+        ${CMAKE_CURRENT_SOURCE_DIR}/asio
 )
 
 add_subdirectory(spdlog)
@@ -14,8 +14,7 @@ if (ENABLE_TEST)
     add_subdirectory(gtest)
 endif()
 
-target_link_libraries(third_part
-    INTERFACE
+target_link_libraries_system(third_part
         spdlog::spdlog_header_only
         asiochan::asiochan
 )

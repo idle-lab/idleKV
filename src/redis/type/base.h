@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <asio/asio.hpp>
 #include <asiochan/asiochan.hpp>
@@ -27,6 +27,7 @@ struct Payload {
 
 class Encoder {
 public:
+
 private:
     asiochan::write_channel<Payload> out_;
 };
@@ -38,6 +39,8 @@ public:
     auto read_line() -> asio::awaitable<std::string>;
 
     auto read_bytes(size_t len) -> asio::awaitable<std::string>;
+
+    auto read_uint()
 
 private:
     asio::awaitable<char> buffer_fill() {
@@ -56,7 +59,7 @@ private:
 
     size_t buffer_size() const noexcept { return buffer_.size() - r; }
 
-    // ·µ»Ø´Ó r ¿ªÊ¼µ½µÚÒ»¸ö c £¨°üº¬ c£©µÄ×Ö·û´®µÄ³¤¶È£¬Èç¹ûÃ»ÓĞÕÒµ½Ôò·µ»Ø npos
+    // è¿”å›ä» r å¼€å§‹åˆ°ç¬¬ä¸€ä¸ª c ï¼ˆåŒ…å« cï¼‰çš„å­—ç¬¦ä¸²çš„é•¿åº¦ï¼Œå¦‚æœæ²¡æœ‰æ‰¾åˆ°åˆ™è¿”å› npos
     size_t buffer_find(char c) const noexcept {
         if (size_t pos = buffer_.find(c, r); pos != std::string::npos) {
             return pos - r + 1;
@@ -65,7 +68,7 @@ private:
         }
     }
 
-    // »ñÈ¡´Ó r ¿ªÊ¼µÄ len ¸ö×Ö·û
+    // è·å–ä» r å¼€å§‹çš„ len ä¸ªå­—ç¬¦
     std::string buffer_get(size_t len) noexcept {
         assert(r + len <= buffer_.size());
 
@@ -73,7 +76,7 @@ private:
         return buffer_.substr(r - len, len);
     }
 
-    // µÚÒ»¸ö»¹Î´¶ÁÈ¡µÄ×Ö·ûÔÚ buffer_ ÖĞµÄÎ»ÖÃ
+    // ç¬¬ä¸€ä¸ªè¿˜æœªè¯»å–çš„å­—ç¬¦åœ¨ buffer_ ä¸­çš„ä½ç½®
     size_t                          r = 0;
     std::string                     buffer_;
     asiochan::read_channel<Payload> in_;

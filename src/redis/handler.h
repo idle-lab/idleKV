@@ -20,8 +20,7 @@ public:
 
     asio::awaitable<void> handle(asio::ip::tcp::socket socket);
 
-    asio::awaitable<void> parse_and_execute(std::shared_ptr<Connection> conn,
-                                            asiochan::channel<Payload>  in,
+    asio::awaitable<void> parse_and_execute(asiochan::channel<Payload>  in,
                                             asiochan::channel<Payload>  out,
                                             asiochan::channel<void, 3>  doneCh);
 

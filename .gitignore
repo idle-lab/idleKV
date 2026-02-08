@@ -9,3 +9,4 @@ wal/
 snapshots/
 *.log
 .vs
+.cache

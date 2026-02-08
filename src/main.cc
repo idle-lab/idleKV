@@ -1,27 +1,14 @@
 #include <CLI11/CLI11.hpp>
 #include <asio/asio.hpp>
 #include <asiochan/asiochan.hpp>
-#include <chrono>
 #include <common/config.h>
 #include <common/logger.h>
-#include <coroutine>
 #include <cstdio>
-#include <format>
-#include <iostream>
 #include <memory>
-#include <ranges>
 #include <redis/handler.h>
 #include <server/server.h>
 #include <signal.h>
-#include <span>
 #include <spdlog/spdlog.h>
-
-using asio::awaitable;
-using asio::co_spawn;
-using asio::detached;
-using asio::use_awaitable;
-using asio::ip::tcp;
-namespace this_coro = asio::this_coro;
 
 std::string banner() {
     return R"(

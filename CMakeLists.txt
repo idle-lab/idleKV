@@ -3,6 +3,8 @@ project(idlekv)
 
 option(ENABLE_TEST "是否编译单元测试" ON)
 
+include(cmake/utils.cmake)
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
         message(STATUS "Setting build type to `Debug` as none was specified.")
         set(CMAKE_BUILD_TYPE "Debug")
@@ -26,7 +28,7 @@ endif()
 find_package(Threads REQUIRED)
 
 add_subdirectory(third_part)
+add_subdirectory(src)
 if (ENABLE_TEST)
     add_subdirectory(test)
 endif()
-add_subdirectory(src)
