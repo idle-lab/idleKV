@@ -1,12 +1,13 @@
+#include "common/config.h"
+#include "common/logger.h"
+#include "redis/handler.h"
+#include "server/server.h"
+
 #include <CLI11/CLI11.hpp>
 #include <asio/asio.hpp>
 #include <asiochan/asiochan.hpp>
-#include <common/config.h>
-#include <common/logger.h>
 #include <cstdio>
 #include <memory>
-#include <redis/handler.h>
-#include <server/server.h>
 #include <signal.h>
 #include <spdlog/spdlog.h>
 

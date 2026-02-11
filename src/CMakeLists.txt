@@ -5,11 +5,12 @@ set(SOURCES
     server/config.cc
 
     redis/handler.cc
-    redis/type/base.cc
+    redis/protocol/parser.cc
+    redis/protocol/types.cc
 
     common/logger.cc
 
-    utils/timer/timer.hpp
+    utils/timer/timer.cc
 )
 
 

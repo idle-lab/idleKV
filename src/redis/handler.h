@@ -1,13 +1,14 @@
 #pragma once
 
+#include "common/config.h"
+#include "redis/connection.h"
+#include "redis/protocol/parser.h"
+#include "server/handler.h"
+#include "server/server.h"
+
 #include <asiochan/asiochan.hpp>
-#include <common/config.h>
 #include <cstdlib>
 #include <memory>
-#include <redis/connection.h>
-#include <redis/type/base.h>
-#include <server/handler.h>
-#include <server/server.h>
 #include <string>
 #include <vector>
 
@@ -20,9 +21,9 @@ public:
 
     asio::awaitable<void> handle(asio::ip::tcp::socket socket);
 
-    asio::awaitable<void> parse_and_execute(asiochan::channel<Payload>  in,
-                                            asiochan::channel<Payload>  out,
-                                            asiochan::channel<void, 3>  doneCh);
+    asio::awaitable<void> parse_and_execute(asiochan::channel<Payload> in,
+                                            asiochan::channel<Payload> out,
+                                            asiochan::channel<void, 3> doneCh);
 
     virtual asio::awaitable<void> start() override;
 

@@ -1,23 +1,14 @@
-#pragma once
-
-#include <chrono>
-#include <asiochan/asiochan.hpp>
-#include <asio/asio.hpp>
 #include <common/logger.h>
-#include <memory>
-#include <atomic>
+#include <utils/timer/timer.h>
 
 namespace idlekv {
 
 auto timer_context() -> asio::io_context& {
-    static std::atomic<bool> initialized = false;
-    static asio::io_context io_ctx;
-    static asio::executor_work_guard wg =
-        asio::make_work_guard(io_ctx);
+    static std::atomic<bool>         initialized = false;
+    static asio::io_context          io_ctx;
+    static asio::executor_work_guard wg = asio::make_work_guard(io_ctx);
     if (!initialized.exchange(true, std::memory_order_acq_rel)) {
-        static std::jthread timer_thread([&]() {
-            io_ctx.run();
-        });
+        static std::jthread timer_thread([&]() { io_ctx.run(); });
     }
     return io_ctx;
 }

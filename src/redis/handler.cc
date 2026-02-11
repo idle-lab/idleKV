@@ -1,9 +1,13 @@
-﻿#include <asiochan/asiochan.hpp>
+﻿#include "redis/handler.h"
+
+#include "common/logger.h"
+#include "redis/protocol/parser.h"
+#include "utils/timer/timer.h"
+
+#include <asiochan/asiochan.hpp>
 #include <asiochan/select.hpp>
 #include <chrono>
-#include <redis/handler.h>
 #include <stdexcept>
-#include <utils/timer/timer.hpp>
 
 namespace idlekv {
 
@@ -16,8 +20,7 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
     auto doneCh = doneChan();
 
     // 执行逻辑
-    asio::co_spawn(srv_->get_worker_pool(), parse_and_execute(in, out, doneCh),
-                   asio::detached);
+    asio::co_spawn(srv_->get_worker_pool(), parse_and_execute(in, out, doneCh), asio::detached);
 
     // 写逻辑
     asio::co_spawn(
@@ -32,7 +35,7 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
 
                     size_t n = co_await asio::async_write(conn->socket(), asio::buffer(response),
                                                           asio::use_awaitable);
-                    
+
                     if (n != response.size()) {
                         throw std::runtime_error("async_write ");
                     }
@@ -77,7 +80,7 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
         auto timeout = set_timeout(std::chrono::milliseconds(200));
 
         co_await asiochan::select(asiochan::ops::write(Payload{"", true}, in, out),
-                                             asiochan::ops::read(timeout));
+                                  asiochan::ops::read(timeout));
 
         while (doneCh.try_read()) {
             cnt++;
@@ -89,12 +92,12 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
     }
 }
 
-asio::awaitable<void> RedisHandler::parse_and_execute(asiochan::channel<Payload>  in,
-                                                      asiochan::channel<Payload>  out,
-                                                      asiochan::channel<void, 3>  doneCh) {
+asio::awaitable<void> RedisHandler::parse_and_execute(asiochan::channel<Payload> in,
+                                                      asiochan::channel<Payload> out,
+                                                      asiochan::channel<void, 3> doneCh) {
     try {
         for (;;) {
-            auto dec = Decoder{in};
+            auto dec = Parser{in};
 
             auto [data, done] = co_await in.read();
             if (done) {

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <CLI11/CLI11.hpp>
-#include <exception>
 #include <spdlog/spdlog.h>
 #include <string>
 

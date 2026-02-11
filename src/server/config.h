@@ -1,7 +1,8 @@
 #pragma once
 
+#include "common/config.h"
+
 #include <asio/asio.hpp>
-#include <common/config.h>
 #include <cstdint>
 #include <memory>
 #include <string>

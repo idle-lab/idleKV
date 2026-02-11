@@ -1,5 +1,6 @@
+#include "server/config.h"
+
 #include <algorithm>
-#include <server/config.h>
 
 namespace idlekv {
 

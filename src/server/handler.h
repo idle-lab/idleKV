@@ -1,7 +1,6 @@
 #pragma once
 
 #include <asio/asio.hpp>
-#include <common/logger.h>
 #include <string>
 
 namespace idlekv {

@@ -1,5 +1,8 @@
+#include "server/server.h"
+
+#include "common/logger.h"
+
 #include <asio/co_spawn.hpp>
-#include <server/server.h>
 
 namespace idlekv {
 

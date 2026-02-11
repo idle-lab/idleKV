@@ -1,13 +1,11 @@
 #pragma once
 
+#include "server/config.h"
+#include "server/handler.h"
+
 #include <asio.hpp>
 #include <asio/ip/tcp.hpp>
-#include <common/logger.h>
-#include <coroutine>
 #include <memory>
-#include <server/config.h>
-#include <server/handler.h>
-#include <string>
 
 namespace idlekv {
 
