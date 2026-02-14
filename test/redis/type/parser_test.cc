@@ -115,11 +115,9 @@ TEST(ParserTest, ParseMultipleCommands) {
     std::vector<std::vector<std::string>> res;
 
     std::vector<Payload> msgs{
-        {
-            "*1\r\n$4\r\nPING\r\n"
-            "*2\r\n$3\r\nSET\r\n$3\r\nkey\r\n",
-            false
-        },
+        {"*1\r\n$4\r\nPING\r\n"
+         "*2\r\n$3\r\nSET\r\n$3\r\nkey\r\n",
+         false},
     };
 
     run_test(msgs, [&res](asiochan::channel<Payload> in) mutable -> asio::awaitable<void> {
@@ -176,9 +174,7 @@ TEST(ParserTest, ParseIllegalHeader) {
         {"$3\r\nSET\r\n", false},
     };
 
-
-    run_test(msgs,
-    [&](asiochan::channel<Payload> in) -> asio::awaitable<void> {
+    run_test(msgs, [&](asiochan::channel<Payload> in) -> asio::awaitable<void> {
         Parser d{in};
         EXPECT_THROW(co_await d.parse_one(), std::runtime_error);
     });

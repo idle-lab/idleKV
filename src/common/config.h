@@ -32,7 +32,7 @@ public:
 
     std::string ip_, port_;
     uint16_t    io_threads_     = 1;
-    uint16_t    worker_threads_ = 8;
+    uint16_t    worker_threads_ = 0;
 
     std::string config_file_path;
 

@@ -6,7 +6,7 @@ set(SOURCES
 
     redis/handler.cc
     redis/protocol/parser.cc
-    redis/protocol/types.cc
+    redis/protocol/reply.cc
 
     common/logger.cc
 

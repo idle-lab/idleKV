@@ -6,6 +6,8 @@
 #include <asio.hpp>
 #include <asio/ip/tcp.hpp>
 #include <memory>
+#include <thread>
+#include <vector>
 
 namespace idlekv {
 
@@ -21,13 +23,14 @@ public:
 
     void register_handler(std::shared_ptr<Handler> handler);
 
-    asio::io_context&  get_io_context() { return io_context_; }
     asio::thread_pool& get_worker_pool() { return workers; }
+
+    void accept();
 
     void stop();
 
 private:
-    asio::io_context                      io_context_;
+    std::vector<std::thread>              io_threads_;
     asio::thread_pool                     workers;
     std::vector<std::shared_ptr<Handler>> handlers_;
     std::unique_ptr<ServerConfig>         cfg_;

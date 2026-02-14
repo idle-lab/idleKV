@@ -1,6 +1,7 @@
 #pragma once
 
 #include <asio/asio.hpp>
+#include <asio/awaitable.hpp>
 #include <string>
 
 namespace idlekv {
@@ -11,7 +12,7 @@ public:
 
     Handler(const std::string& ip, uint16_t port) : ep_(asio::ip::make_address(ip), port) {}
 
-    virtual asio::awaitable<void> start() = 0;
+    virtual asio::awaitable<void> handle(asio::ip::tcp::socket socket) = 0;
 
     virtual void stop() = 0;
 

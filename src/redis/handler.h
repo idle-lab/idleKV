@@ -19,17 +19,17 @@ public:
     RedisHandler(const Config& cfg, std::shared_ptr<Server> srv)
         : Handler(cfg.ip_, std::atoi(cfg.port_.c_str())), srv_(srv) {}
 
-    asio::awaitable<void> handle(asio::ip::tcp::socket socket);
+    virtual asio::awaitable<void> handle(asio::ip::tcp::socket socket) override;
 
-    asio::awaitable<void> parse_and_execute(asiochan::channel<Payload> in,
-                                            asiochan::channel<Payload> out,
-                                            asiochan::channel<void, 3> doneCh);
-
-    virtual asio::awaitable<void> start() override;
+    // asio::awaitable<void> parse_and_execute(asiochan::channel<Payload> in,
+    //                                         asiochan::channel<Payload> out,
+    //                                         asiochan::channel<void, 3> doneCh);
 
     virtual void stop() override {}
 
     virtual std::string name() override { return "Redis"; }
+
+    virtual ~RedisHandler() = default;
 
 private:
     std::vector<Connection> conns_;
