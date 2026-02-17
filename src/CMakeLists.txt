@@ -5,8 +5,8 @@ set(SOURCES
     server/config.cc
 
     redis/handler.cc
+    redis/connection.cc
     redis/protocol/parser.cc
-    redis/protocol/reply.cc
 
     common/logger.cc
 

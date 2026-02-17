@@ -35,20 +35,18 @@ void Server::accept() {
             [h, &io]() -> asio::awaitable<void> {
                 asio::ip::tcp::acceptor acceptor(io, h->endpoint());
                 for (;;) {
-                    auto [ec, socket] = co_await acceptor.async_accept(asio::as_tuple(asio::use_awaitable));
+                    auto [ec, socket] =
+                        co_await acceptor.async_accept(asio::as_tuple(asio::use_awaitable));
 
-                    if (ec)
-                    {
+                    if (ec) {
                         // 被主动关闭
                         if (ec == asio::error::operation_aborted ||
-                            ec == asio::error::bad_descriptor)
-                        {
+                            ec == asio::error::bad_descriptor) {
                             co_return; // 退出协程
                         }
 
                         // fd 耗尽
-                        if (ec == asio::error::no_descriptors)
-                        {
+                        if (ec == asio::error::no_descriptors) {
                             LOG(warn, "FD limit reached");
                             co_await set_timeout(std::chrono::seconds(1)).read();
                             continue;
@@ -60,10 +58,7 @@ void Server::accept() {
                         continue;
                     }
 
-
-                    asio::co_spawn(io,
-                                   h->handle(std::move(socket)),
-                                   asio::detached);
+                    asio::co_spawn(io, h->handle(std::move(socket)), asio::detached);
                 }
             }(),
             asio::detached);
@@ -77,13 +72,14 @@ void Server::listen_and_server() {
         io_threads_.emplace_back(&Server::accept, this);
     }
 
-    asio::io_context signal_handler;
+    asio::io_context          signal_handler;
     asio::executor_work_guard wg = asio::make_work_guard(signal_handler);
-    asio::signal_set signals(signal_handler, SIGINT, SIGTERM, SIGABRT);
+    asio::signal_set          signals(signal_handler, SIGINT, SIGTERM, SIGABRT);
 
-    signals.async_wait([this](const asio::error_code&, int) {
+    signals.async_wait([this, &wg](const asio::error_code&, int) {
         spdlog::info("signal received, stopping server...");
         stop();
+        wg.reset();
     });
 
     signal_handler.run();

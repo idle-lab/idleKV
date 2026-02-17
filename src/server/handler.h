@@ -12,7 +12,7 @@ public:
 
     Handler(const std::string& ip, uint16_t port) : ep_(asio::ip::make_address(ip), port) {}
 
-    virtual asio::awaitable<void> handle(asio::ip::tcp::socket socket) = 0;
+    virtual auto handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> = 0;
 
     virtual void stop() = 0;
 

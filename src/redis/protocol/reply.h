@@ -60,13 +60,6 @@ protected:
     std::string data_;
 };
 
-class Error : public SimpleString {
-public:
-    virtual auto type() -> DataType override { return DataType::Error; }
-
-    using SimpleString::to_bytes;
-};
-
 class BulkString : public SimpleString {
 public:
     virtual auto type() -> DataType override { return DataType::BulkString; }
@@ -85,7 +78,8 @@ public:
     virtual auto type() -> DataType override { return DataType::Arrays; }
 
     virtual auto to_bytes() -> std::string override {
-        std::string res = static_cast<char>(DataType::BulkString) + std::to_string(data_.size()) + CRLF;
+        std::string res =
+            static_cast<char>(DataType::BulkString) + std::to_string(data_.size()) + CRLF;
 
         for (auto s : data_) {
             res.append(s.to_bytes());

@@ -1,11 +1,12 @@
 ﻿#include "redis/handler.h"
-#include "redis/command.h"
 
 #include "redis/protocol/parser.h"
 
+#include <asio/co_spawn.hpp>
+#include <asio/post.hpp>
+#include <asio/use_awaitable.hpp>
 #include <asiochan/asiochan.hpp>
 #include <asiochan/select.hpp>
-#include <exception>
 
 namespace idlekv {
 
@@ -15,13 +16,21 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
     try {
         Parser p(conn);
 
-        auto c = Cmd(co_await p.parse_one());
+        auto [args, err] = co_await p.parse_one();
+        if (err != nullptr) {
+            
+        }
 
 
-    } catch (const std::exception& e) {
+
+
+        auto res = co_await asio::co_spawn(
+            srv_->get_worker_pool(), []() -> asio::awaitable<std::string> { co_return "21"; }(),
+            asio::use_awaitable);
+        
+
+    } catch (...) {
     }
-
-
 }
 
 // asio::awaitable<void> RedisHandler::parse_and_execute(asiochan::channel<Payload> in,

@@ -8,7 +8,6 @@
 #include <asiochan/asiochan.hpp>
 #include <cstdio>
 #include <memory>
-#include <signal.h>
 #include <spdlog/spdlog.h>
 
 std::string banner() {

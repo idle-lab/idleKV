@@ -32,9 +32,9 @@ public:
     auto socket() const -> asio::ip::tcp::socket& { return socket_; }
 
     // return a single line with '\n'
-    auto read_line() -> asio::awaitable<std::string>;
+    virtual auto read_line() noexcept -> asio::awaitable<Payload> override;
 
-    auto read_bytes(size_t len) -> asio::awaitable<std::string>;
+    virtual auto read_bytes(size_t len) noexcept -> asio::awaitable<Payload> override;
 
     void close() {
         if (!closed_.exchange(true, std::memory_order_acq_rel)) {
@@ -45,7 +45,7 @@ public:
 
 private:
     // fill reads a new chunk into the buffer.
-    auto fill() -> asio::awaitable<void>;
+    auto fill() noexcept -> asio::awaitable<std::error_code>;
 
     // claer buffer.
     void buffer_clear() { r_ = 0, w_ = 0; }
