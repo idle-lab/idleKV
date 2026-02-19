@@ -12,6 +12,8 @@ public:
     virtual auto type() -> DataType override { return DataType::Error; }
 
     virtual auto to_bytes() -> std::string override { return "-Err unknown\r\n"; }
+
+    virtual auto is_standard_error() const -> bool { return false; }
 };
 
 // SyntaxErrReply represents meeting unexpected arguments
@@ -36,12 +38,25 @@ private:
     std::string msg_;
 };
 
-// StandardErrReply represents server error
-class StandardErrReply : public Err {
+class ArgNumErr : public Err {
 public:
-    StandardErrReply(std::error_code ec) : ec_(ec) {}
+    ArgNumErr(std::string cmd) : cmd_(cmd) {}
+
+    virtual auto to_bytes() -> std::string override { return fmt::format("-ERR wrong number of arguments for '{}' command\r\n", cmd_); }
+private:
+    std::string cmd_;  
+};
+
+// StandardErrReply represents server error
+class StandardErr : public Err {
+public:
+    StandardErr(std::error_code ec) : ec_(ec) {}
 
     virtual auto to_bytes() -> std::string override { return fmt::format("-ERR error: '{}'\r\n", ec_.message()); }
+
+    auto error_code() const -> std::error_code { return ec_; }
+
+    virtual auto is_standard_error() const -> bool override { return true; }
 private:
     std::error_code ec_;
 };

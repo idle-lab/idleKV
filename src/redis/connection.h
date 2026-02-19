@@ -15,6 +15,7 @@
 #include <memory>
 #include <new>
 #include <optional>
+#include <string>
 #include <system_error>
 #include <unordered_set>
 
@@ -29,12 +30,12 @@ public:
         buffer_ = new char[defaultBufferSize];
     }
 
-    auto socket() const -> asio::ip::tcp::socket& { return socket_; }
-
     // return a single line with '\n'
     virtual auto read_line() noexcept -> asio::awaitable<Payload> override;
 
     virtual auto read_bytes(size_t len) noexcept -> asio::awaitable<Payload> override;
+
+    auto write(const std::string& reply) noexcept -> asio::awaitable<std::error_code> ;
 
     void close() {
         if (!closed_.exchange(true, std::memory_order_acq_rel)) {
@@ -50,7 +51,7 @@ private:
     // claer buffer.
     void buffer_clear() { r_ = 0, w_ = 0; }
 
-    mutable asio::ip::tcp::socket socket_;
+    asio::ip::tcp::socket socket_;
 
     char* buffer_;
     // buffer_ read and write positions

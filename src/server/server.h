@@ -13,6 +13,7 @@ namespace idlekv {
 
 using asio::awaitable;
 
+// Provide infrastructure such as network I/O and execution context, without involving business logic.
 class Server {
 public:
     Server() = delete;

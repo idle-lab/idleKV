@@ -70,4 +70,14 @@ auto Connection::read_bytes(size_t len) noexcept -> asio::awaitable<Payload> {
     }
 }
 
+auto Connection::write(const std::string& reply) noexcept -> asio::awaitable<std::error_code> {
+    auto [ec, n] = co_await asio::async_write(socket_, asio::buffer(reply),
+                                              asio::as_tuple(asio::use_awaitable));
+    if (ec) {
+        ec_.emplace(ec);
+        co_return ec;
+    }
+    co_return std::error_code();
+}
+
 } // namespace idlekv

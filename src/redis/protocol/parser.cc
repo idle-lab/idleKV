@@ -55,7 +55,7 @@ std::string escape_string(const std::string& s) {
 auto Parser::parse_one() noexcept -> asio::awaitable<Result> {
     auto [header, ec] = co_await rd_->read_line();
     if (ec != std::errc()) {
-        co_return Result{std::vector<std::string>{}, std::make_unique<StandardErrReply>(ec)};
+        co_return Result{std::vector<std::string>{}, std::make_unique<StandardErr>(ec)};
     }
 
     if (header[0] != static_cast<char>(DataType::Arrays)) [[unlikely]] {
@@ -74,7 +74,7 @@ auto Parser::parse_one() noexcept -> asio::awaitable<Result> {
     for (auto i : std::views::iota(0, arrLen)) {
         auto [line, ec] = co_await rd_->read_line();
         if (ec != std::errc()) {
-            co_return Result{std::vector<std::string>{}, std::make_unique<StandardErrReply>(ec)};
+            co_return Result{std::vector<std::string>{}, std::make_unique<StandardErr>(ec)};
         }
 
         if (line.size() < 4 || line[0] != static_cast<char>(DataType::BulkString)) [[unlikely]] {
@@ -95,7 +95,7 @@ auto Parser::parse_one() noexcept -> asio::awaitable<Result> {
 
         auto [data, ec0] = co_await rd_->read_bytes(strLen + 2 /* include CRLF */);
         if (ec0 != std::errc()) {
-            co_return Result{std::vector<std::string>{}, std::make_unique<StandardErrReply>(ec0)};
+            co_return Result{std::vector<std::string>{}, std::make_unique<StandardErr>(ec0)};
         }
 
         args[i] = data;

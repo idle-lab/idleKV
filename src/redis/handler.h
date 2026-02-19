@@ -25,7 +25,7 @@ public:
 
     virtual std::string name() override { return "Redis"; }
 
-    virtual ~RedisHandler() override = default;
+    ~RedisHandler() override = default;
 
 private:
     std::vector<Connection> conns_;
