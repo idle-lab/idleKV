@@ -13,7 +13,7 @@
 
 namespace idlekv {
 
-// ½öÓÃÓÚ debug
+// just for debug
 std::string escape_string(const std::string& s) {
     std::string out;
     out.reserve(s.size() * 2);
@@ -66,7 +66,8 @@ auto Parser::parse_one() noexcept -> asio::awaitable<Result> {
     auto [ptr, err] =
         std::from_chars(header.c_str() + 1, header.c_str() + header.size() - 2, arrLen);
     if (err != std::errc()) [[unlikely]] {
-        co_return Result{std::vector<std::string>{}, std::make_unique<ProtocolErr>(std::make_error_code(err).message())};
+        co_return Result{std::vector<std::string>{},
+                         std::make_unique<ProtocolErr>(std::make_error_code(err).message())};
     }
 
     std::vector<std::string> args(arrLen);
@@ -85,7 +86,8 @@ auto Parser::parse_one() noexcept -> asio::awaitable<Result> {
         auto [ptr, err] = std::from_chars(
             line.c_str() + 1, line.c_str() + line.size() - 2 /* exclude CRLF */, strLen);
         if (err != std::errc()) [[unlikely]] {
-            co_return Result{std::vector<std::string>{}, std::make_unique<ProtocolErr>(std::make_error_code(err).message())};
+            co_return Result{std::vector<std::string>{},
+                             std::make_unique<ProtocolErr>(std::make_error_code(err).message())};
         }
 
         // empty bulk string

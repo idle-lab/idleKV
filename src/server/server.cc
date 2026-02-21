@@ -29,11 +29,22 @@ Server::Server(const Config& cfg)
 
 void Server::accept() {
     asio::io_context io;
+
     for (auto& h : handlers_) {
         asio::co_spawn(
             io,
             [h, &io]() -> asio::awaitable<void> {
-                asio::ip::tcp::acceptor acceptor(io, h->endpoint());
+                asio::ip::tcp::acceptor acceptor(io);
+
+                // open the acceptor with the option to reuse the address
+                acceptor.open(h->endpoint().protocol());
+                acceptor.set_option(asio::ip::tcp::acceptor::reuse_address(true));
+                acceptor.bind(h->endpoint());
+                acceptor.listen();
+
+                LOG(info, "start handler {}, listen on {}:{}", h->name(),
+                    h->endpoint().address().to_string(), h->endpoint().port());
+
                 for (;;) {
                     auto [ec, socket] =
                         co_await acceptor.async_accept(asio::as_tuple(asio::use_awaitable));
@@ -63,6 +74,8 @@ void Server::accept() {
             }(),
             asio::detached);
     }
+
+    io.run();
 }
 
 void Server::listen_and_server() {
@@ -77,7 +90,7 @@ void Server::listen_and_server() {
     asio::signal_set          signals(signal_handler, SIGINT, SIGTERM, SIGABRT);
 
     signals.async_wait([this, &wg](const asio::error_code&, int) {
-        spdlog::info("signal received, stopping server...");
+        LOG(info, "signal received, stopping server...");
         stop();
         wg.reset();
     });

@@ -14,7 +14,7 @@
 
 namespace idlekv {
 
-asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
+asio::awaitable<void> RESPHandler::handle(asio::ip::tcp::socket socket) {
     auto conn = std::make_shared<Connection>(std::move(socket));
 
     for (;;) {
@@ -31,8 +31,6 @@ asio::awaitable<void> RedisHandler::handle(asio::ip::tcp::socket socket) {
                 break;
             }
         }
-
-        
     }
 
     conn->close();

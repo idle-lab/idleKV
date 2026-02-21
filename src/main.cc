@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
 
         auto srv = std::make_shared<idlekv::Server>(cfg);
 
-        srv->register_handler(std::make_shared<idlekv::RedisHandler>(cfg, srv));
+        srv->register_handler(std::make_shared<idlekv::RESPHandler>(cfg, srv));
 
         srv->listen_and_server();
     } catch (const std::exception& e) {

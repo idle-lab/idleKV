@@ -16,7 +16,7 @@ public:
 
     virtual void stop() = 0;
 
-    virtual asio::ip::tcp::endpoint endpoint() { return ep_; }
+    virtual auto endpoint() -> asio::ip::tcp::endpoint { return ep_; }
 
     virtual std::string name() { return "Unknow Handler"; }
 

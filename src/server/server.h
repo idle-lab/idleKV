@@ -13,7 +13,8 @@ namespace idlekv {
 
 using asio::awaitable;
 
-// Provide infrastructure such as network I/O and execution context, without involving business logic.
+// Provide infrastructure such as network I/O and execution context, without involving business
+// logic.
 class Server {
 public:
     Server() = delete;
@@ -29,7 +30,6 @@ public:
     void accept();
 
     void stop();
-
 private:
     std::vector<std::thread>              io_threads_;
     asio::thread_pool                     workers;

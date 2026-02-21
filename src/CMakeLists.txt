@@ -1,6 +1,6 @@
 set(SOURCES
     # 索引层
-    index/art.cc
+    db/index/art.cc
     server/server.cc
     server/config.cc
 

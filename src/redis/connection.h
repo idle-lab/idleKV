@@ -35,7 +35,7 @@ public:
 
     virtual auto read_bytes(size_t len) noexcept -> asio::awaitable<Payload> override;
 
-    auto write(const std::string& reply) noexcept -> asio::awaitable<std::error_code> ;
+    auto write(const std::string& reply) noexcept -> asio::awaitable<std::error_code>;
 
     void close() {
         if (!closed_.exchange(true, std::memory_order_acq_rel)) {
