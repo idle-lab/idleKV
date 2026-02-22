@@ -9,44 +9,6 @@
 
 namespace idlekv {
 
-std::string escape_string1(const std::string& s) {
-    std::string out;
-    out.reserve(s.size() * 2);
-
-    for (unsigned char c : s) {
-        switch (c) {
-        case '\n':
-            out += "\\n";
-            break;
-        case '\r':
-            out += "\\r";
-            break;
-        case '\t':
-            out += "\\t";
-            break;
-        case '\0':
-            out += "\\0";
-            break;
-        case '\\':
-            out += "\\\\";
-            break;
-        case '\"':
-            out += "\\\"";
-            break;
-        default:
-            if (std::isprint(c)) {
-                out += c;
-            } else {
-                char buf[5];
-                std::snprintf(buf, sizeof(buf), "\\x%02X", c);
-                out += buf;
-            }
-        }
-    }
-
-    return out;
-}
-
 auto Connection::fill() noexcept -> asio::awaitable<std::error_code> {
     if (r_ > 0 && r_ != w_) {
         std::memmove(buffer_, buffer_ + r_, w_ - r_);
@@ -59,7 +21,6 @@ auto Connection::fill() noexcept -> asio::awaitable<std::error_code> {
                                          asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_.emplace(ec);
-
         co_return ec;
     }
 

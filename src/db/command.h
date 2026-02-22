@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -14,7 +15,7 @@ namespace idlekv {
 
 // ExecFunc is interface for command executor
 using Exector = auto (*)(std::shared_ptr<DB> db, const std::vector<std::string>& args)
-    -> std::unique_ptr<Type>;
+    -> std::unique_ptr<Reply>;
 
 // PreFunc analyses command line when queued command to `multi`
 // returns related write keys and read keys
@@ -27,7 +28,7 @@ public:
         : name_(name), arity_(arity), exec_(exector), prepare_(prepare) {}
 
     auto exec(std::shared_ptr<DB> db, const std::vector<std::string>& args) const
-        -> std::unique_ptr<Type> {
+        -> std::unique_ptr<Reply> {
         return exec_(db, args);
     }
 
@@ -58,16 +59,6 @@ private:
     Exector exec_;
     // prepare returns related keys command
     Prepare prepare_;
-};
-
-class CmdMgr {
-public:
-    auto register_cmd(Cmd cmd) -> void;
-
-    auto find_cmd(std::string name) -> Cmd*;
-
-private:
-    std::unordered_map<std::string, Cmd> cmd_map_;
 };
 
 } // namespace idlekv

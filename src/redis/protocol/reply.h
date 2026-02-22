@@ -17,22 +17,24 @@ enum class DataType : char {
 
 extern const char* CRLF;
 
-class Type {
+class Reply {
 public:
-    virtual auto type() -> DataType = 0;
+    virtual auto type() const -> DataType = 0;
 
-    virtual auto to_bytes() -> std::string = 0;
+    virtual auto to_bytes() const -> std::string = 0;
 };
 
-class Integer : public Type {
+class Integer : public Reply {
 public:
     Integer(uint64_t data) : data_(data) {}
 
-    virtual auto type() -> DataType override { return DataType::Integers; }
+    static auto make_reply(uint64_t data) -> std::string;
+
+    virtual auto type() const -> DataType override { return DataType::Integers; }
 
     auto data() const -> int64_t { return data_; }
 
-    virtual auto to_bytes() -> std::string override {
+    virtual auto to_bytes() const -> std::string override {
         return static_cast<char>(DataType::Integers) + std::to_string(data_) + CRLF;
     }
 
@@ -40,17 +42,19 @@ private:
     int64_t data_;
 };
 
-class SimpleString : public Type {
+class SimpleString : public Reply {
 public:
     SimpleString(std::string&& data) : data_(std::move(data)) {}
 
-    virtual auto type() -> DataType override { return DataType::String; }
+    static auto make_reply(const std::string& data) -> std::string;
+
+    virtual auto type() const -> DataType override { return DataType::String; }
 
     auto data() const noexcept -> const std::string& { return data_; }
 
     auto size() const noexcept -> size_t { return data_.size(); }
 
-    virtual auto to_bytes() -> std::string override {
+    virtual auto to_bytes() const -> std::string override {
         return static_cast<char>(type()) + data_ + CRLF;
     }
 
@@ -62,9 +66,16 @@ protected:
 
 class BulkString : public SimpleString {
 public:
-    virtual auto type() -> DataType override { return DataType::BulkString; }
+    BulkString(std::string&& data, int32_t len) : SimpleString(std::move(data)), len_(len) {}
 
-    virtual auto to_bytes() -> std::string override {
+    static auto make_reply(const std::string& data, int32_t len) -> std::string;
+
+    virtual auto type() const -> DataType override { return DataType::BulkString; }
+
+    virtual auto to_bytes() const -> std::string override {
+        if (len_ < 0) {
+            return static_cast<char>(DataType::BulkString) + std::to_string(len_) + CRLF;
+        }
         return static_cast<char>(type()) + std::to_string(len_) + CRLF + data_ + CRLF;
     }
 
@@ -73,11 +84,15 @@ private:
 };
 
 // 目前 Array 只支持 BulkString 作为元素
-class Array : public Type {
+class Array : public Reply {
 public:
-    virtual auto type() -> DataType override { return DataType::Arrays; }
+    Array(std::vector<BulkString>&& data) : data_(std::move(data)) {}
 
-    virtual auto to_bytes() -> std::string override {
+    virtual auto type() const -> DataType override { return DataType::Arrays; }
+
+    static auto make_reply(const std::vector<BulkString>& data) -> std::string;
+
+    virtual auto to_bytes() const -> std::string override {
         std::string res =
             static_cast<char>(DataType::BulkString) + std::to_string(data_.size()) + CRLF;
 

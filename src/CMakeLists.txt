@@ -1,11 +1,13 @@
 set(SOURCES
     # 索引层
     db/index/art.cc
+    db/db.cc
     server/server.cc
     server/config.cc
 
     redis/handler.cc
     redis/connection.cc
+    redis/protocol/reply.cc
     redis/protocol/parser.cc
 
     common/logger.cc
@@ -37,5 +39,3 @@ target_link_libraries(idlekv
     PRIVATE
         idlekv_core
 )
-
-
