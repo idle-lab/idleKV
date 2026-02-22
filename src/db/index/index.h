@@ -4,6 +4,9 @@ namespace idlekv {
 
 class Index {
 public:
+
+    
+
     virtual ~Index() = default;
 };
 

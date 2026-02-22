@@ -1,6 +1,7 @@
 #include "server/server.h"
 
 #include "common/logger.h"
+#include "server/handler.h"
 #include "utils/timer/timer.h"
 
 #include <asio/as_tuple.hpp>
@@ -10,6 +11,7 @@
 #include <asio/io_context.hpp>
 #include <asio/ip/tcp.hpp>
 #include <cstdint>
+#include <memory>
 #include <ranges>
 #include <spdlog/spdlog.h>
 #include <thread>
@@ -33,7 +35,7 @@ void Server::accept() {
     for (auto& h : handlers_) {
         asio::co_spawn(
             io,
-            [h, &io]() -> asio::awaitable<void> {
+            [&io](std::shared_ptr<Handler> h) -> asio::awaitable<void> {
                 asio::ip::tcp::acceptor acceptor(io);
 
                 // open the acceptor with the option to reuse the address
@@ -71,7 +73,7 @@ void Server::accept() {
 
                     asio::co_spawn(io, h->handle(std::move(socket)), asio::detached);
                 }
-            }(),
+            }(h),
             asio::detached);
     }
 
@@ -100,8 +102,7 @@ void Server::listen_and_server() {
 
 void Server::register_handler(std::shared_ptr<Handler> handler) {
     handlers_.push_back(handler);
-    LOG(info, "register handler: {}, {}:{}", handler->name(),
-        handler->endpoint().address().to_string(), handler->endpoint().port());
+    LOG(info, "register handler: {}", handler->name());
 }
 
 void Server::stop() {

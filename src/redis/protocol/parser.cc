@@ -1,5 +1,6 @@
 #include "redis/protocol/parser.h"
 
+#include "common/logger.h"
 #include "redis/protocol/reply.h"
 
 #include <asio/awaitable.hpp>
@@ -12,6 +13,8 @@
 #include <vector>
 
 namespace idlekv {
+
+const char* CRLF = "\r\n";
 
 // just for debug
 std::string escape_string(const std::string& s) {

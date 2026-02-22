@@ -1,5 +1,6 @@
 #pragma once
 
+#include "db/index/index.h"
 #include "redis/connection.h"
 #include "redis/protocol/error.h"
 
@@ -18,6 +19,8 @@ public:
         -> asio::awaitable<std::pair<std::string, std::unique_ptr<Err>>>;
 
 private:
+
+    Index data_;
 };
 
 } // namespace idlekv

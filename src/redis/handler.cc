@@ -1,4 +1,5 @@
 #include "redis/handler.h"
+#include "common/logger.h"
 
 #include "redis/protocol/error.h"
 #include "redis/protocol/parser.h"
@@ -16,7 +17,7 @@ namespace idlekv {
 
 asio::awaitable<void> RESPHandler::handle(asio::ip::tcp::socket socket) {
     auto conn = std::make_shared<Connection>(std::move(socket));
-
+    LOG(debug, "connect a new client, {}:{}", conn->remote_endpoint().address().to_string(), conn->remote_endpoint().port());
     for (;;) {
         Parser p(conn);
 
@@ -30,7 +31,11 @@ asio::awaitable<void> RESPHandler::handle(asio::ip::tcp::socket socket) {
             if (ec != std::error_code()) {
                 break;
             }
+
+            break;
         }
+
+        co_await conn->write(SimpleString("OK").to_bytes());
     }
 
     conn->close();

@@ -37,6 +37,8 @@ public:
 
     auto write(const std::string& reply) noexcept -> asio::awaitable<std::error_code>;
 
+    auto remote_endpoint() const -> asio::ip::tcp::endpoint { return socket_.remote_endpoint(); }
+
     void close() {
         if (!closed_.exchange(true, std::memory_order_acq_rel)) {
             this->socket_.shutdown(asio::ip::tcp::socket::shutdown_both);
