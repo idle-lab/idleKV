@@ -13,7 +13,9 @@ class Err : public Reply {
 public:
     virtual auto type() const -> DataType override { return DataType::Error; }
 
-    virtual auto to_bytes() const -> std::string override { return "-Err unknown\r\n"; }
+    static auto make_reply() -> std::string;
+
+    virtual auto to_bytes() const -> std::string override { return make_reply(); }
 
     virtual auto is_standard_error() const -> bool { return false; }
 };
@@ -21,15 +23,17 @@ public:
 // SyntaxErrReply represents meeting unexpected arguments
 class SyntaxErr : public Err {
 public:
-    virtual auto to_bytes() const -> std::string override { return "-Err syntax error\r\n"; }
+    static auto make_reply() -> std::string;
+
+    virtual auto to_bytes() const -> std::string override { return make_reply(); }
 };
 
 // WrongTypeErrReply represents operation against a key holding the wrong kind of value
 class WrongTypeErr : public Err {
 public:
-    virtual auto to_bytes() const -> std::string override {
-        return "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n";
-    }
+    static auto make_reply() -> std::string;
+
+    virtual auto to_bytes() const -> std::string override { return make_reply(); }
 };
 
 // ProtocolErrReply represents meeting unexpected byte during parse requests
@@ -37,9 +41,9 @@ class ProtocolErr : public Err {
 public:
     ProtocolErr(std::string msg) : msg_(msg) {}
 
-    virtual auto to_bytes() const -> std::string override {
-        return fmt::format("-ERR Protocol error: '{}'\r\n", msg_);
-    }
+    static auto make_reply(const std::string& msg) -> std::string;
+
+    virtual auto to_bytes() const -> std::string override { return make_reply(msg_); }
 
 private:
     std::string msg_;
@@ -49,9 +53,9 @@ class ArgNumErr : public Err {
 public:
     ArgNumErr(std::string cmd) : cmd_(cmd) {}
 
-    virtual auto to_bytes() const -> std::string override {
-        return fmt::format("-ERR wrong number of arguments for '{}' command\r\n", cmd_);
-    }
+    static auto make_reply(const std::string& cmd) -> std::string;
+
+    virtual auto to_bytes() const -> std::string override { return make_reply(cmd_); }
 
 private:
     std::string cmd_;
@@ -61,9 +65,9 @@ class UnknownCmdErr : public Err {
 public:
     UnknownCmdErr(std::string cmd) : cmd_(std::move(cmd)) {}
 
-    virtual auto to_bytes() const -> std::string override {
-        return fmt::format("-ERR unknown command '{}'\r\n", cmd_);
-    }
+    static auto make_reply(const std::string& cmd) -> std::string;
+
+    virtual auto to_bytes() const -> std::string override { return make_reply(cmd_); }
 
 private:
     std::string cmd_;
@@ -74,9 +78,9 @@ class StandardErr : public Err {
 public:
     StandardErr(std::error_code ec) : ec_(ec) {}
 
-    virtual auto to_bytes() const -> std::string override {
-        return fmt::format("-ERR error: '{}'\r\n", ec_.message());
-    }
+    static auto make_reply(const std::error_code& ec) -> std::string;
+
+    virtual auto to_bytes() const -> std::string override { return make_reply(ec_); }
 
     auto error_code() const -> std::error_code { return ec_; }
 

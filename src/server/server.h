@@ -30,6 +30,7 @@ public:
     void accept();
 
     void stop();
+
 private:
     std::vector<std::thread>              io_threads_;
     asio::thread_pool                     workers;

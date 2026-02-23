@@ -7,6 +7,7 @@ set(SOURCES
 
     redis/handler.cc
     redis/connection.cc
+    redis/protocol/error.cc
     redis/protocol/reply.cc
     redis/protocol/parser.cc
 

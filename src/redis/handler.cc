@@ -1,9 +1,10 @@
 #include "redis/handler.h"
-#include "common/logger.h"
 
+#include "common/logger.h"
 #include "redis/protocol/error.h"
 #include "redis/protocol/parser.h"
 
+#include <asio/as_tuple.hpp>
 #include <asio/asio/error.hpp>
 #include <asio/co_spawn.hpp>
 #include <asio/error.hpp>
@@ -47,7 +48,8 @@ auto try_write_err(std::shared_ptr<Connection> conn, std::unique_ptr<Err>& err)
 
 asio::awaitable<void> RESPHandler::handle(asio::ip::tcp::socket socket) {
     auto conn = std::make_shared<Connection>(std::move(socket));
-    LOG(debug, "connect a new client, {}:{}", conn->remote_endpoint().address().to_string(), conn->remote_endpoint().port());
+    LOG(debug, "connect a new client, {}:{}", conn->remote_endpoint().address().to_string(),
+        conn->remote_endpoint().port());
     Parser p(conn);
 
     for (;;) {
@@ -75,22 +77,8 @@ asio::awaitable<void> RESPHandler::handle(asio::ip::tcp::socket socket) {
             break;
         }
 
-        auto [reply, exec_err] = co_await db_->exec(conn, args);
-        if (exec_err != nullptr) {
-            auto ec = co_await try_write_err(conn, exec_err);
-            if (ec != std::error_code() && is_fatal_write_error(ec)) {
-                break;
-            }
 
-            if (exec_err->is_standard_error()) {
-                auto* standard = dynamic_cast<StandardErr*>(exec_err.get());
-                if (standard != nullptr && is_connection_closed_error(standard->error_code())) {
-                    break;
-                }
-            }
-
-            continue;
-        }
+        auto reply = co_await asio::co_spawn(srv_->get_worker_pool(), engine_->exec(conn, args), asio::use_awaitable);
 
         auto ec = co_await conn->write(reply);
         if (ec != std::error_code()) {

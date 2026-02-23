@@ -39,6 +39,10 @@ public:
 
     auto remote_endpoint() const -> asio::ip::tcp::endpoint { return socket_.remote_endpoint(); }
 
+    auto db_index() const -> size_t { return db_idx_; }
+
+    auto select_db(size_t idx) -> void { db_idx_ = idx; }
+
     void close() {
         if (!closed_.exchange(true, std::memory_order_acq_rel)) {
             this->socket_.shutdown(asio::ip::tcp::socket::shutdown_both);
@@ -52,6 +56,8 @@ private:
 
     // claer buffer.
     void buffer_clear() { r_ = 0, w_ = 0; }
+
+    size_t db_idx_{0};
 
     asio::ip::tcp::socket socket_;
 

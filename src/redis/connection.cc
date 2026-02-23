@@ -1,4 +1,5 @@
 #include "redis/connection.h"
+
 #include "common/logger.h"
 
 #include <algorithm>
@@ -16,9 +17,8 @@ auto Connection::fill() noexcept -> asio::awaitable<std::error_code> {
         r_ = 0;
     }
 
-    auto [ec, n] =
-        co_await socket_.async_read_some(asio::buffer(buffer_ + w_, defaultBufferSize - w_),
-                                         asio::as_tuple(asio::use_awaitable));
+    auto [ec, n] = co_await socket_.async_read_some(
+        asio::buffer(buffer_ + w_, defaultBufferSize - w_), asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_.emplace(ec);
         co_return ec;
