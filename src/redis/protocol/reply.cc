@@ -32,4 +32,8 @@ auto Array::make_reply(const std::vector<BulkString>& data) -> std::string {
     return res;
 }
 
+auto PongReply::make_reply() -> std::string { return SimpleString::make_reply("PONG"); }
+
+auto OKReply::make_reply() -> std::string { return SimpleString::make_reply("OK"); }
+
 } // namespace idlekv

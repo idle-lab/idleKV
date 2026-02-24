@@ -2,6 +2,12 @@ set(SOURCES
     # 索引层
     db/index/art.cc
     db/db.cc
+    db/engine.cc
+    db/hash.cc
+    db/list.cc
+    db/strings.cc
+    db/systemcmd.cc
+
     server/server.cc
     server/config.cc
 

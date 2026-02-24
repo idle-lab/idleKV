@@ -35,6 +35,7 @@ int main(int argc, char** argv) {
         auto srv = std::make_shared<idlekv::Server>(cfg);
 
         srv->register_handler(std::make_shared<idlekv::RESPHandler>(cfg, srv));
+        // may be support rpc/http ?
 
         srv->listen_and_server();
     } catch (const std::exception& e) {

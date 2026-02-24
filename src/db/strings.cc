@@ -1,4 +1,12 @@
 
 #include "db/command.h"
+#include "db/engine.h"
 
-namespace idlekv {} // namespace idlekv
+namespace idlekv {
+
+auto init_strings(IdleEngine* eng) -> void {
+    
+}
+
+
+} // namespace idlekv

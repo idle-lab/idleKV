@@ -34,8 +34,7 @@ private:
     std::vector<Connection> conns_;
     std::shared_ptr<Server> srv_;
 
-    std::shared_ptr<IdleEngine> engine_;
-    std::shared_ptr<DB>         db_ = std::make_shared<DB>();
+    std::shared_ptr<IdleEngine> engine_ = std::make_shared<IdleEngine>();
 };
 
 } // namespace idlekv

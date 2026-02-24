@@ -15,8 +15,8 @@
 namespace idlekv {
 
 // ExecFunc is interface for command executor
-using Exector = auto (*)(std::shared_ptr<DB> db, std::shared_ptr<Connection> conn, const std::vector<std::string>& args)
-    -> std::unique_ptr<Reply>;
+using Exector = auto (*)(const std::shared_ptr<DB>& db, std::shared_ptr<Connection> conn, const std::vector<std::string>& args)
+    -> std::string;
 
 // PreFunc analyses command line when queued command to `multi`
 // returns related write keys and read keys
@@ -28,17 +28,20 @@ public:
     Cmd(const std::string& name, int32_t arity, bool is_systemcmd, Exector exector, Prepare prepare)
         : name_(name), arity_(arity), is_systemcmd_(is_systemcmd), exec_(exector), prepare_(prepare) {}
 
-    auto exec(std::shared_ptr<DB> db, std::shared_ptr<Connection> conn, const std::vector<std::string>& args) const
-        -> std::unique_ptr<Reply> {
+    auto exec(const std::shared_ptr<DB>& db, std::shared_ptr<Connection> conn, const std::vector<std::string>& args) const
+        -> std::string {
         return exec_(db, conn, args);
     }
 
     auto prepare(const std::vector<std::string>& args) const
         -> std::pair<std::vector<std::string>, std::vector<std::string>> {
+        
         return prepare_(args);
     }
 
     auto verification(const std::vector<std::string>& args) const -> bool {
+        if (arity_ == 0) return true;
+
         if (arity_ < 0) {
             return int32_t(args.size()) >= -arity_;
         }

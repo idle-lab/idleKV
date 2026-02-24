@@ -12,7 +12,9 @@ namespace idlekv {
 // IdleEngine is a kv store engine with full capabilities including multiple database, rdb loader
 class IdleEngine {
 public:
-    IdleEngine() { init_command(); }
+    IdleEngine() { 
+        init_command(); 
+    }
 
     auto exec(std::shared_ptr<Connection> conn, const std::vector<std::string>& args) noexcept
         -> asio::awaitable<std::string>;
@@ -31,5 +33,11 @@ private:
     std::unordered_map<std::string, Cmd> cmd_map_;
     std::vector<std::shared_ptr<DB>> db_set_;
 };
+
+auto init_systemcmd(IdleEngine*) -> void;
+auto init_strings(IdleEngine*) -> void;
+auto init_hash(IdleEngine*) -> void;
+auto init_list(IdleEngine*) -> void;
+
 
 } // namespace idlekv

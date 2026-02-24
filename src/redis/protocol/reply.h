@@ -107,4 +107,22 @@ private:
     std::vector<BulkString> data_;
 };
 
+class PongReply : public Reply {
+public:
+    static auto make_reply() -> std::string;
+
+    virtual auto type() const -> DataType override { return DataType::String; }
+
+    virtual auto to_bytes() const -> std::string override { return make_reply(); }
+};
+
+class OKReply : public Reply {
+public:
+    static auto make_reply() -> std::string;
+
+    virtual auto type() const -> DataType override { return DataType::String; }
+
+    virtual auto to_bytes() const -> std::string override { return make_reply(); }
+};
+
 } // namespace idlekv
