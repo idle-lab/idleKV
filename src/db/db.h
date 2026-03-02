@@ -1,14 +1,10 @@
 #pragma once
 
-#include "db/index/index.h"
-#include "redis/connection.h"
-#include "redis/protocol/error.h"
-
+#include "db/storage/kvstore.h"
+#include "db/storage/result.h"
 #include <asio/awaitable.hpp>
-#include <memory>
-#include <mutex>
+#include <memory_resource>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace idlekv {
@@ -16,14 +12,17 @@ namespace idlekv {
 // DB stores data and execute user's commands
 class DB {
 public:
-    auto exec(std::shared_ptr<Connection> conn, const std::vector<std::string>& args) noexcept
-        -> asio::awaitable<std::pair<std::string, std::unique_ptr<Err>>>;
+    DB(std::pmr::memory_resource* mr) : prime_(mr) { }
 
     auto locks(const std::vector<std::string>& ws, const std::vector<std::string>& rs) -> bool;
 
+    auto set(const std::string& key, DataEntity value) -> Result<bool> {
+        return prime_.set(key, value);
+    }
+
 private:
-    Index                                        data_;
-    std::mutex                                   data_mu_;
+    KvStore<DummyImpl<std::string, DataEntity>> prime_;
+
 };
 
 } // namespace idlekv

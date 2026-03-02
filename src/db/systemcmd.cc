@@ -1,5 +1,4 @@
-#pragma once
-
+#include "db/context.h"
 #include "db/db.h"
 #include "redis/connection.h"
 #include "db/engine.h"
@@ -7,7 +6,7 @@
 
 namespace idlekv {
 
-auto ping(const std::shared_ptr<DB>&, std::shared_ptr<Connection>, const std::vector<std::string>& args)
+auto ping(Context&, const std::vector<std::string>& args)
     -> std::string {
     switch (args.size()) {
     case 1:
@@ -19,8 +18,12 @@ auto ping(const std::shared_ptr<DB>&, std::shared_ptr<Connection>, const std::ve
     }
 }
 
+auto select(Context& ctx, const std::vector<std::string>& args) -> std::string {
+    
+}
+
 auto init_systemcmd(IdleEngine* eng) -> void {
-    eng->register_cmd("ping", 0, true, ping, nullptr);
+    eng->register_cmd("ping", 2, 0, 0, ping, nullptr);
 }
 
 

@@ -1,7 +1,9 @@
 #pragma once
 
+#include "db/db.h"
 #include "redis/protocol/parser.h"
 
+#include <array>
 #include <asio/as_tuple.hpp>
 #include <asio/asio.hpp>
 #include <asio/asio/awaitable.hpp>
@@ -39,9 +41,7 @@ public:
 
     auto remote_endpoint() const -> asio::ip::tcp::endpoint { return socket_.remote_endpoint(); }
 
-    auto db_index() const -> size_t { return db_idx_; }
-
-    auto select_db(size_t idx) -> void { db_idx_ = idx; }
+    auto closed() const -> bool { return closed_.load(std::memory_order_acquire); }
 
     void close() {
         if (!closed_.exchange(true, std::memory_order_acq_rel)) {
@@ -56,8 +56,6 @@ private:
 
     // claer buffer.
     void buffer_clear() { r_ = 0, w_ = 0; }
-
-    size_t db_idx_{0};
 
     asio::ip::tcp::socket socket_;
 

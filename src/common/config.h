@@ -1,6 +1,7 @@
 #pragma once
 
 #include <CLI11/CLI11.hpp>
+#include <cstdint>
 #include <spdlog/spdlog.h>
 #include <string>
 
@@ -16,6 +17,7 @@ public:
         opts_.add_option("--port", port_, "Listen port")->default_val(DEFAULT_PORT);
 
         opts_.add_option("-c,--config", config_file_path, "Config file path");
+        opts_.add_option("--db_num", db_num_, "number of DB");
     }
 
     // 不能拷贝不能移动
@@ -35,6 +37,8 @@ public:
     uint16_t    worker_threads_ = 0;
 
     std::string config_file_path;
+
+    uint8_t db_num_;
 
 private:
     CLI::App opts_;

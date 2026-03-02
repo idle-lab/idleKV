@@ -16,7 +16,7 @@ namespace idlekv {
 
 const char* CRLF = "\r\n";
 
-// just for debug
+// debug function
 std::string escape_string(const std::string& s) {
     std::string out;
     out.reserve(s.size() * 2);

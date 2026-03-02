@@ -1,6 +1,7 @@
 #include "redis/handler.h"
 
 #include "common/logger.h"
+#include "db/context.h"
 #include "redis/protocol/error.h"
 #include "redis/protocol/parser.h"
 
@@ -46,12 +47,14 @@ auto try_write_err(std::shared_ptr<Connection> conn, std::unique_ptr<Err>& err)
 
 } // namespace
 
-asio::awaitable<void> RESPHandler::handle(asio::ip::tcp::socket socket) {
+asio::awaitable<void> RespHandler::handle(asio::ip::tcp::socket socket) {
     auto conn = std::make_shared<Connection>(std::move(socket));
     LOG(debug, "connect a new client, {}:{}", conn->remote_endpoint().address().to_string(),
         conn->remote_endpoint().port());
     Parser p(conn);
-
+    auto ctx = Context(conn);
+    ctx.select_db(engine_->select_db(0));
+    
     for (;;) {
         auto [args, err] = co_await p.parse_one();
         if (err != nullptr) {
@@ -77,8 +80,7 @@ asio::awaitable<void> RESPHandler::handle(asio::ip::tcp::socket socket) {
             break;
         }
 
-
-        auto reply = co_await asio::co_spawn(srv_->get_worker_pool(), engine_->exec(conn, args), asio::use_awaitable);
+        auto reply = co_await asio::co_spawn(srv_->get_worker_pool(), engine_->exec(ctx, args), asio::use_awaitable);
 
         auto ec = co_await conn->write(reply);
         if (ec != std::error_code()) {

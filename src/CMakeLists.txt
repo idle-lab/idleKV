@@ -1,6 +1,5 @@
 set(SOURCES
     # 索引层
-    db/index/art.cc
     db/db.cc
     db/engine.cc
     db/hash.cc

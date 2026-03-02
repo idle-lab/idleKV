@@ -1,5 +1,6 @@
 #include "common/config.h"
 #include "common/logger.h"
+#include "db/engine.h"
 #include "redis/handler.h"
 #include "server/server.h"
 
@@ -33,8 +34,9 @@ int main(int argc, char** argv) {
         spdlog::set_default_logger(idlekv::make_default_logger());
 
         auto srv = std::make_shared<idlekv::Server>(cfg);
+        auto eng = std::make_shared<idlekv::IdleEngine>(cfg);
 
-        srv->register_handler(std::make_shared<idlekv::RESPHandler>(cfg, srv));
+        srv->register_handler(std::make_shared<idlekv::RespHandler>(cfg, srv, eng));
         // may be support rpc/http ?
 
         srv->listen_and_server();

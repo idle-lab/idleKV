@@ -1,21 +1,16 @@
 #pragma once
 
-#include "db/db.h"
-#include "redis/connection.h"
-#include "redis/protocol/reply.h"
+#include "db/context.h"
 
 #include <cstdint>
-#include <memory>
-#include <mutex>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace idlekv {
 
 // ExecFunc is interface for command executor
-using Exector = auto (*)(const std::shared_ptr<DB>& db, std::shared_ptr<Connection> conn, const std::vector<std::string>& args)
+using Exector = auto (*)(Context& ctx, const std::vector<std::string>& args)
     -> std::string;
 
 // PreFunc analyses command line when queued command to `multi`
@@ -25,17 +20,16 @@ using Prepare = auto (*)(const std::vector<std::string>& args)
 
 class Cmd {
 public:
-    Cmd(const std::string& name, int32_t arity, bool is_systemcmd, Exector exector, Prepare prepare)
-        : name_(name), arity_(arity), is_systemcmd_(is_systemcmd), exec_(exector), prepare_(prepare) {}
+    Cmd(const std::string& name, int32_t arity, int32_t first_key, int32_t last_key, Exector exector, Prepare prepare)
+        : name_(name), arity_(arity), first_key_(first_key), last_key_(last_key), exec_(exector), prepare_(prepare) {}
 
-    auto exec(const std::shared_ptr<DB>& db, std::shared_ptr<Connection> conn, const std::vector<std::string>& args) const
+    auto exec(Context& ctx, const std::vector<std::string>& args) const
         -> std::string {
-        return exec_(db, conn, args);
+        return exec_(ctx, args);
     }
 
     auto prepare(const std::vector<std::string>& args) const
         -> std::pair<std::vector<std::string>, std::vector<std::string>> {
-        
         return prepare_(args);
     }
 
@@ -48,8 +42,6 @@ public:
         return int32_t(args.size()) == arity_;
     }
 
-    auto is_systemcmd() const -> bool { return is_systemcmd_; }
-
     auto name() const -> std::string { return name_; }
 
     auto arity() const -> int32_t { return arity_; }
@@ -58,11 +50,15 @@ private:
     // name in lowercase letters
     std::string name_;
 
-    // arity means allowed number of cmdArgs, arity < 0 means len(args) >= -arity.
+    // arity means allowed number of cmdArgs.
+    // 1) arity < 0 means len(args) >= -arity.
+    // 2) arity > 0 means len(args) == arity.
     // for example: the arity of `get` is 2, `mget` is -2
     int32_t arity_;
 
-    bool is_systemcmd_;
+    int32_t first_key_;
+
+    int32_t last_key_;
 
     Exector exec_;
     // prepare returns related keys command

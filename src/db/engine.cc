@@ -1,6 +1,8 @@
 #include "db/engine.h"
+#include "db/context.h"
 #include "redis/protocol/error.h"
 
+#include <cstdint>
 #include <tuple>
 #include <utility>
 
@@ -20,11 +22,12 @@ auto to_lower(std::string s) -> std::string {
 }
 
 
-auto IdleEngine::exec(std::shared_ptr<Connection>     conn,
+
+auto IdleEngine::exec(Context& ctx,
                       const std::vector<std::string>& args) noexcept
     -> asio::awaitable<std::string> {
-
     auto cmd_name = to_lower(args[0]);
+
     auto cmd = get_cmd(cmd_name);
     if (cmd == nullptr) {
         co_return UnknownCmdErr::make_reply(cmd_name);
@@ -34,26 +37,22 @@ auto IdleEngine::exec(std::shared_ptr<Connection>     conn,
         co_return ArgNumErr::make_reply(cmd_name);
     }
 
-    if (cmd->is_systemcmd()) {
-        co_return cmd->exec(nullptr, conn, args);
-    }
-
-    auto db = select_db(conn->db_index());
     // auto [ws, rs] = cmd->prepare(args);
-    co_return cmd->exec(db, conn, args);
+
+    co_return cmd->exec(ctx, args);
 }
 
 auto IdleEngine::select_db(size_t idx) -> std::shared_ptr<DB> {
-    if (idx < 0 || idx >= db_set_.size()) {
+    if (idx >= db_set_.size()) {
         return nullptr;
     }
     return db_set_[idx];
 }
 
-auto IdleEngine::register_cmd(const std::string& name, int32_t arity, bool is_sys, Exector exector,
+auto IdleEngine::register_cmd(const std::string& name, int32_t arity, int32_t first_key, int32_t last_key, Exector exector,
                               Prepare prepare) -> void {
     cmd_map_.emplace(std::piecewise_construct, std::forward_as_tuple(name),
-                     std::forward_as_tuple(name, arity, is_sys, exector, prepare));
+                     std::forward_as_tuple(name, arity, first_key, last_key, exector, prepare));
 }
 
 auto IdleEngine::get_cmd(const std::string& name) -> Cmd* {
