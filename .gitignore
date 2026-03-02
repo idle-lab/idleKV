@@ -1,4 +1,4 @@
-build/
+*build*/
 .vscode/
 *.o
 *.so
@@ -10,3 +10,5 @@ snapshots/
 *.log
 .vs
 .cache
+
+__pycache__/

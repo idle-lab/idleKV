@@ -9,6 +9,7 @@
 #include <asiochan/asiochan.hpp>
 #include <cstdio>
 #include <memory>
+#include <mimalloc.h>
 #include <spdlog/spdlog.h>
 
 std::string banner() {
@@ -33,8 +34,10 @@ int main(int argc, char** argv) {
 
         spdlog::set_default_logger(idlekv::make_default_logger());
 
+        auto heap = mi_heap_new();
+
         auto srv = std::make_shared<idlekv::Server>(cfg);
-        auto eng = std::make_shared<idlekv::IdleEngine>(cfg);
+        auto eng = std::make_shared<idlekv::IdleEngine>(cfg, heap);
 
         srv->register_handler(std::make_shared<idlekv::RespHandler>(cfg, srv, eng));
         // may be support rpc/http ?

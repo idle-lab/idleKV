@@ -2,6 +2,7 @@
 
 #include "common/logger.h"
 #include "server/handler.h"
+#include "server/thread_state.h"
 #include "utils/timer/timer.h"
 
 #include <asio/as_tuple.hpp>
@@ -10,6 +11,8 @@
 #include <asio/detached.hpp>
 #include <asio/io_context.hpp>
 #include <asio/ip/tcp.hpp>
+#include <climits>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <ranges>
@@ -18,9 +21,9 @@
 
 namespace idlekv {
 
-Server::Server(const Config& cfg)
-    : workers(cfg.worker_threads_ == 0 ? std::thread::hardware_concurrency()
-                                       : cfg.worker_threads_) {
+Server::Server(const Config& cfg) {
+    // : workers(cfg.worker_threads_ == 0 ? std::thread::hardware_concurrency()
+    //                                    : cfg.worker_threads_) {
     // 1. 初始化
     cfg_ = ServerConfig::build(cfg);
 
@@ -29,62 +32,67 @@ Server::Server(const Config& cfg)
     // 3. 恢复数据
 }
 
-void Server::accept() {
-    asio::io_context io;
+auto Server::do_accept(std::shared_ptr<Handler> h, asio::io_context& io) -> asio::awaitable<void> {
+    asio::ip::tcp::acceptor acceptor(io);
 
-    for (auto& h : handlers_) {
-        asio::co_spawn(
-            io,
-            [&io](std::shared_ptr<Handler> h) -> asio::awaitable<void> {
-                asio::ip::tcp::acceptor acceptor(io);
+    // open the acceptor with the option to reuse the address
+    acceptor.open(h->endpoint().protocol());
+    acceptor.set_option(asio::ip::tcp::acceptor::reuse_address(true));
+    acceptor.bind(h->endpoint());
+    acceptor.listen();
 
-                // open the acceptor with the option to reuse the address
-                acceptor.open(h->endpoint().protocol());
-                acceptor.set_option(asio::ip::tcp::acceptor::reuse_address(true));
-                acceptor.bind(h->endpoint());
-                acceptor.listen();
+    LOG(info, "start handler {}, listen on {}:{}", h->name(),
+        h->endpoint().address().to_string(), h->endpoint().port());
 
-                LOG(info, "start handler {}, listen on {}:{}", h->name(),
-                    h->endpoint().address().to_string(), h->endpoint().port());
+    for (;;) {
+        auto [ec, socket] =
+            co_await acceptor.async_accept(asio::as_tuple(asio::use_awaitable));
 
-                for (;;) {
-                    auto [ec, socket] =
-                        co_await acceptor.async_accept(asio::as_tuple(asio::use_awaitable));
+        if (ec) {
+            // 被主动关闭
+            if (ec == asio::error::operation_aborted ||
+                ec == asio::error::bad_descriptor) {
+                co_return; // 退出协程
+            }
 
-                    if (ec) {
-                        // 被主动关闭
-                        if (ec == asio::error::operation_aborted ||
-                            ec == asio::error::bad_descriptor) {
-                            co_return; // 退出协程
-                        }
+            // fd 耗尽
+            if (ec == asio::error::no_descriptors) {
+                LOG(warn, "FD limit reached");
+                co_await set_timeout(std::chrono::seconds(1)).read();
+                continue;
+            }
 
-                        // fd 耗尽
-                        if (ec == asio::error::no_descriptors) {
-                            LOG(warn, "FD limit reached");
-                            co_await set_timeout(std::chrono::seconds(1)).read();
-                            continue;
-                        }
+            // 临时错误（握手中断等）
+            LOG(warn, "accept error:" + ec.message());
 
-                        // 临时错误（握手中断等）
-                        LOG(warn, "accept error:" + ec.message());
+            continue;
+        }
 
-                        continue;
-                    }
+        uint32_t mi = UINT_MAX;
+        ThreadState* mi_ts = nullptr;
+        for (auto& t : io_threads_) {
+            if (t->co_num() < mi) {
+                mi_ts = t.get();
+                mi = t->co_num();
+            }
+        }
 
-                    asio::co_spawn(io, h->handle(std::move(socket)), asio::detached);
-                }
-            }(h),
-            asio::detached);
+        mi_ts->assign(h->handle(std::move(socket)));
     }
-
-    io.run();
 }
 
 void Server::listen_and_server() {
     LOG(info, "start server");
 
-    for (auto i [[maybe_unused]] : std::views::iota(uint16_t(0), cfg_->io_threads)) {
-        io_threads_.emplace_back(&Server::accept, this);
+    io_threads_.resize(std::thread::hardware_concurrency());
+    for (auto& t : io_threads_) {
+        t = std::make_unique<ThreadState>();
+    }
+
+    for (size_t i = 0; i < handlers_.size(); i++) {
+        auto& ts = io_threads_[i % io_threads_.size()];
+
+        ts->assign(do_accept(handlers_[i], ts->io_context()));
     }
 
     asio::io_context          signal_handler;
@@ -106,7 +114,7 @@ void Server::register_handler(std::shared_ptr<Handler> handler) {
 }
 
 void Server::stop() {
-    workers.join();
+    // workers.join();
 
     for (auto& handler : handlers_) {
         handler->stop();

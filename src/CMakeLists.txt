@@ -1,24 +1,10 @@
-set(SOURCES
-    # 索引层
-    db/db.cc
-    db/engine.cc
-    db/hash.cc
-    db/list.cc
-    db/strings.cc
-    db/systemcmd.cc
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cc"
+)
 
-    server/server.cc
-    server/config.cc
-
-    redis/handler.cc
-    redis/connection.cc
-    redis/protocol/error.cc
-    redis/protocol/reply.cc
-    redis/protocol/parser.cc
-
-    common/logger.cc
-
-    utils/timer/timer.cc
+# main.cc is the executable entry and should not be part of idlekv_core.
+list(REMOVE_ITEM SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/main.cc"
 )
 
 
@@ -39,7 +25,7 @@ target_compile_definitions(idlekv_core
         ASIOCHAN_USE_STANDALONE_ASIO=ON
 )
 
-add_executable(idlekv main.cc)
+add_executable(idlekv "${CMAKE_CURRENT_SOURCE_DIR}/main.cc")
 
 target_link_libraries(idlekv
     PRIVATE

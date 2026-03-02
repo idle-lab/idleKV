@@ -80,7 +80,7 @@ asio::awaitable<void> RespHandler::handle(asio::ip::tcp::socket socket) {
             break;
         }
 
-        auto reply = co_await asio::co_spawn(srv_->get_worker_pool(), engine_->exec(ctx, args), asio::use_awaitable);
+        auto reply = engine_->exec(ctx, args);
 
         auto ec = co_await conn->write(reply);
         if (ec != std::error_code()) {

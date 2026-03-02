@@ -2,6 +2,7 @@
 
 #include "server/config.h"
 #include "server/handler.h"
+#include "server/thread_state.h"
 
 #include <asio.hpp>
 #include <asio/ip/tcp.hpp>
@@ -25,15 +26,12 @@ public:
 
     void register_handler(std::shared_ptr<Handler> handler);
 
-    asio::thread_pool& get_worker_pool() { return workers; }
-
-    void accept();
+    auto do_accept(std::shared_ptr<Handler> h, asio::io_context& io) -> asio::awaitable<void>;
 
     void stop();
 
 private:
-    std::vector<std::thread>              io_threads_;
-    asio::thread_pool                     workers;
+    std::vector<std::unique_ptr<ThreadState>>              io_threads_;
     std::vector<std::shared_ptr<Handler>> handlers_;
     std::unique_ptr<ServerConfig>         cfg_;
 };

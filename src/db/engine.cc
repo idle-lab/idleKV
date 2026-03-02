@@ -25,21 +25,21 @@ auto to_lower(std::string s) -> std::string {
 
 auto IdleEngine::exec(Context& ctx,
                       const std::vector<std::string>& args) noexcept
-    -> asio::awaitable<std::string> {
+    -> std::string {
     auto cmd_name = to_lower(args[0]);
 
     auto cmd = get_cmd(cmd_name);
     if (cmd == nullptr) {
-        co_return UnknownCmdErr::make_reply(cmd_name);
+        return UnknownCmdErr::make_reply(cmd_name);
     }
 
     if (!cmd->verification(args)) {
-        co_return ArgNumErr::make_reply(cmd_name);
+        return ArgNumErr::make_reply(cmd_name);
     }
 
     // auto [ws, rs] = cmd->prepare(args);
 
-    co_return cmd->exec(ctx, args);
+    return cmd->exec(ctx, args);
 }
 
 auto IdleEngine::select_db(size_t idx) -> std::shared_ptr<DB> {

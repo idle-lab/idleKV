@@ -19,11 +19,11 @@ auto ping(Context&, const std::vector<std::string>& args)
 }
 
 auto select(Context& ctx, const std::vector<std::string>& args) -> std::string {
-    
+
 }
 
 auto init_systemcmd(IdleEngine* eng) -> void {
-    eng->register_cmd("ping", 2, 0, 0, ping, nullptr);
+    eng->register_cmd("ping", -1, 0, 0, ping, nullptr);
 }
 
 
