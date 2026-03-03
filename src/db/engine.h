@@ -4,7 +4,6 @@
 #include "db/command.h"
 #include "db/context.h"
 #include "db/db.h"
-#include "db/xmalloc.h"
 
 #include <cstddef>
 #include <memory>
@@ -23,7 +22,7 @@ public:
         db_set_.resize(cfg.db_num_);
 
         for (auto& db : db_set_) {
-            db = std::make_shared<DB>(&alloc_);
+            db = std::make_shared<DB>(mr_);
         }
     }
 
@@ -40,7 +39,7 @@ public:
 private:
     auto init_command() -> void;
 
-    XAlloctor alloc_;
+    std::pmr::memory_resource* mr_;
 
     // read-only
     std::unordered_map<std::string, Cmd> cmd_map_;

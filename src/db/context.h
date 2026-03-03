@@ -23,7 +23,6 @@ public:
 private:
     std::shared_ptr<DB> cur_db_;
     std::shared_ptr<Connection> owner_;
-
 };
 
 } // namespace idlekv

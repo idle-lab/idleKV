@@ -1,4 +1,4 @@
-#include "db/xmalloc.h"
+#include "server/xmalloc.h"
 
 namespace idlekv {
 

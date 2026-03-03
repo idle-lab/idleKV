@@ -31,7 +31,7 @@ public:
     void stop();
 
 private:
-    std::vector<std::unique_ptr<ThreadState>>              io_threads_;
+    std::vector<std::unique_ptr<ThreadState>> threads_;
     std::vector<std::shared_ptr<Handler>> handlers_;
     std::unique_ptr<ServerConfig>         cfg_;
 };

@@ -27,6 +27,11 @@ Server::Server(const Config& cfg) {
     // 1. 初始化
     cfg_ = ServerConfig::build(cfg);
 
+    threads_.resize(std::thread::hardware_concurrency());
+    for (auto& t : threads_) {
+        t = std::make_unique<ThreadState>();
+    }
+
     // 2. 检查/创建数据文件夹
 
     // 3. 恢复数据
@@ -70,7 +75,7 @@ auto Server::do_accept(std::shared_ptr<Handler> h, asio::io_context& io) -> asio
 
         uint32_t mi = UINT_MAX;
         ThreadState* mi_ts = nullptr;
-        for (auto& t : io_threads_) {
+        for (auto& t : threads_) {
             if (t->co_num() < mi) {
                 mi_ts = t.get();
                 mi = t->co_num();
@@ -84,13 +89,9 @@ auto Server::do_accept(std::shared_ptr<Handler> h, asio::io_context& io) -> asio
 void Server::listen_and_server() {
     LOG(info, "start server");
 
-    io_threads_.resize(std::thread::hardware_concurrency());
-    for (auto& t : io_threads_) {
-        t = std::make_unique<ThreadState>();
-    }
 
     for (size_t i = 0; i < handlers_.size(); i++) {
-        auto& ts = io_threads_[i % io_threads_.size()];
+        auto& ts = threads_[i % threads_.size()];
 
         ts->assign(do_accept(handlers_[i], ts->io_context()));
     }
