@@ -11,6 +11,7 @@
 #ifndef ASIO_DETAIL_IMPL_IO_URING_SERVICE_IPP
 #define ASIO_DETAIL_IMPL_IO_URING_SERVICE_IPP
 
+#include <iostream>
 #if defined(_MSC_VER) && (_MSC_VER >= 1200)
 # pragma once
 #endif // defined(_MSC_VER) && (_MSC_VER >= 1200)

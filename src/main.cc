@@ -2,6 +2,7 @@
 #include "common/logger.h"
 #include "db/engine.h"
 #include "redis/handler.h"
+#include "server/el_pool.h"
 #include "server/server.h"
 
 #include <CLI11/CLI11.hpp>
@@ -39,7 +40,7 @@ int main(int argc, char** argv) {
         auto srv = std::make_shared<idlekv::Server>(cfg);
         auto eng = std::make_shared<idlekv::IdleEngine>(cfg, heap);
 
-        srv->register_handler(std::make_shared<idlekv::RespHandler>(cfg, srv, eng));
+        srv->register_handler(std::make_unique<idlekv::RespHandler>(cfg, srv.get(), eng));
         // may be support rpc/http ?
 
         srv->listen_and_server();

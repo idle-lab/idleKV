@@ -17,7 +17,7 @@ namespace idlekv {
 // Currently, only RESP2 is supported.
 class RespHandler : public Handler {
 public:
-    RespHandler(const Config& cfg, const std::shared_ptr<Server>& srv, const std::shared_ptr<IdleEngine>& engine)
+    RespHandler(const Config& cfg, Server* srv, const std::shared_ptr<IdleEngine>& engine)
         : Handler(cfg.ip_, std::atoi(cfg.port_.c_str())), srv_(srv), engine_(engine) {}
 
     virtual auto handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> override;
@@ -30,7 +30,8 @@ public:
 
 private:
     std::vector<Connection> conns_;
-    std::shared_ptr<Server> srv_;
+
+    Server* srv_;
 
     std::shared_ptr<IdleEngine> engine_;
 };

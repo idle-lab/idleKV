@@ -25,6 +25,33 @@ target_compile_definitions(idlekv_core
         ASIOCHAN_USE_STANDALONE_ASIO=ON
 )
 
+option(ENABLE_ASIO_IO_URING "Enable Asio io_uring backend" ON)
+
+if (ENABLE_ASIO_IO_URING)
+    find_library(LIBURING_LIBRARY uring)
+    if (NOT LIBURING_LIBRARY)
+        message(FATAL_ERROR
+            "ENABLE_ASIO_IO_URING=ON but liburing was not found. "
+            "Install liburing-dev, or configure with -DENABLE_ASIO_IO_URING=OFF.")
+    endif()
+
+    target_compile_definitions(idlekv_core
+        PUBLIC
+            ASIO_HAS_IO_URING=1
+            ASIO_DISABLE_EPOLL=1
+    )
+
+    target_link_libraries(idlekv_core
+        PUBLIC
+            ${LIBURING_LIBRARY}
+    )
+else()
+    target_compile_definitions(idlekv_core
+        PUBLIC
+            ASIO_DISABLE_IO_URING=1
+    )
+endif()
+
 add_executable(idlekv "${CMAKE_CURRENT_SOURCE_DIR}/main.cc")
 
 target_link_libraries(idlekv

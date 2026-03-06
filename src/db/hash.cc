@@ -2,9 +2,6 @@
 
 namespace idlekv {
 
-auto init_hash(IdleEngine*) -> void {
-    
-}
-
+auto init_hash(IdleEngine*) -> void {}
 
 } // namespace idlekv

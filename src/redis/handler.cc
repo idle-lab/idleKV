@@ -4,10 +4,13 @@
 #include "db/context.h"
 #include "redis/protocol/error.h"
 #include "redis/protocol/parser.h"
+#include "server/thread_state.h"
 
 #include <asio/as_tuple.hpp>
 #include <asio/asio/error.hpp>
+#include <asio/awaitable.hpp>
 #include <asio/co_spawn.hpp>
+#include <asio/detached.hpp>
 #include <asio/error.hpp>
 #include <asio/post.hpp>
 #include <asio/use_awaitable.hpp>
@@ -51,12 +54,11 @@ asio::awaitable<void> RespHandler::handle(asio::ip::tcp::socket socket) {
     auto conn = std::make_shared<Connection>(std::move(socket));
     LOG(debug, "connect a new client, {}:{}", conn->remote_endpoint().address().to_string(),
         conn->remote_endpoint().port());
-    Parser p(conn);
-    auto ctx = Context(conn);
-    ctx.select_db(engine_->select_db(0));
-    
+    auto& io = ThreadState::tlocal()->io_context();
+    auto ctx = Context(conn, io);
+
     for (;;) {
-        auto [args, err] = co_await p.parse_one();
+        auto [args, err] = co_await ctx.parser().parse_one();
         if (err != nullptr) {
             if (err->is_standard_error()) {
                 auto* standard = dynamic_cast<StandardErr*>(err.get());
@@ -80,19 +82,21 @@ asio::awaitable<void> RespHandler::handle(asio::ip::tcp::socket socket) {
             break;
         }
 
-        auto reply = engine_->exec(ctx, args);
+        engine_->exec(ctx, args);
 
-        auto ec = co_await conn->write(reply);
-        if (ec != std::error_code()) {
-            if (is_connection_closed_error(ec)) {
-                break;
-            }
+        if (ctx.sender().should_flush()) {
+            co_await ctx.sender().flush();
+        } else if(!ctx.has_sender_timer()) {
+            ctx.start_a_sender_timer();
+            asio::co_spawn(io, [&ctx]() -> asio::awaitable<void> {
+                ctx.sender_timer().expires_after(kMaxReplyFlushInterval);
+                co_await ctx.sender_timer().async_wait(asio::use_awaitable);
 
-            if (is_transient_io_error(ec)) {
-                continue;
-            }
-
-            break;
+                if (!ctx.connection()->closed() && ctx.sender().has_pending()) {
+                    co_await ctx.sender().flush();
+                }
+                ctx.sender_timer_done();
+            }, asio::detached);
         }
     }
 

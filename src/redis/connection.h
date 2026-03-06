@@ -15,38 +15,33 @@
 #include <cstddef>
 #include <cstring>
 #include <memory>
-#include <new>
 #include <optional>
 #include <string>
 #include <system_error>
 #include <unordered_set>
+#include <utility>
 
 namespace idlekv {
 
-constexpr size_t defaultBufferSize = 4096;
-
-class Connection : public Reader {
+class Connection : public Reader, public Writer {
 public:
-    explicit Connection(asio::ip::tcp::socket&& socket) : socket_(std::move(socket)) {
-        // TODO(use jemalloc?)
-        buffer_ = new char[defaultBufferSize];
-    }
+    Connection() = default;
 
-    // return a single line with '\n'
-    virtual auto read_line() noexcept -> asio::awaitable<Payload> override;
+    explicit Connection(asio::ip::tcp::socket&& socket)
+        : Reader(kDefaultReadBufferSize), Writer(kDefaultWriteBufferSize), socket_(std::move(socket)) {}
 
-    virtual auto read_bytes(size_t len) noexcept -> asio::awaitable<Payload> override;
+    virtual auto read_impl(byte* buf, size_t size) noexcept  -> asio::awaitable<ResultT<size_t>> override;
 
-    auto write(const std::string& reply) noexcept -> asio::awaitable<std::error_code>;
+    virtual auto write_impl(const byte* data, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> override;
 
-    auto remote_endpoint() const -> asio::ip::tcp::endpoint { return socket_.remote_endpoint(); }
+    auto remote_endpoint() const -> asio::ip::tcp::endpoint { return socket_->remote_endpoint(); }
 
     auto closed() const -> bool { return closed_.load(std::memory_order_acquire); }
 
     void close() {
         if (!closed_.exchange(true, std::memory_order_acq_rel)) {
-            this->socket_.shutdown(asio::ip::tcp::socket::shutdown_both);
-            this->socket_.close();
+            this->socket_->shutdown(asio::ip::tcp::socket::shutdown_both);
+            this->socket_->close();
         }
     }
 
@@ -54,14 +49,8 @@ private:
     // fill reads a new chunk into the buffer.
     auto fill() noexcept -> asio::awaitable<std::error_code>;
 
-    // claer buffer.
-    void buffer_clear() { r_ = 0, w_ = 0; }
+    std::optional<asio::ip::tcp::socket> socket_;
 
-    asio::ip::tcp::socket socket_;
-
-    char* buffer_;
-    // buffer_ read and write positions
-    size_t r_{0}, w_{0};
     // error occurred when the connection was disconnected
     std::optional<std::error_code> ec_;
 

@@ -1,6 +1,7 @@
 #include "server/server.h"
 
 #include "common/logger.h"
+#include "server/el_pool.h"
 #include "server/handler.h"
 #include "server/thread_state.h"
 #include "utils/timer/timer.h"
@@ -9,15 +10,17 @@
 #include <asio/awaitable.hpp>
 #include <asio/co_spawn.hpp>
 #include <asio/detached.hpp>
+#include <asio/executor_work_guard.hpp>
 #include <asio/io_context.hpp>
 #include <asio/ip/tcp.hpp>
+#include <asio/use_future.hpp>
 #include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <ranges>
+#include <optional>
 #include <spdlog/spdlog.h>
-#include <thread>
+#include <sys/socket.h>
 
 namespace idlekv {
 
@@ -25,19 +28,16 @@ Server::Server(const Config& cfg) {
     // : workers(cfg.worker_threads_ == 0 ? std::thread::hardware_concurrency()
     //                                    : cfg.worker_threads_) {
     // 1. 初始化
-    cfg_ = ServerConfig::build(cfg);
-
-    threads_.resize(std::thread::hardware_concurrency());
-    for (auto& t : threads_) {
-        t = std::make_unique<ThreadState>();
-    }
+    cfg_ = &cfg;
+    elp_ = std::make_unique<EventLoopPool>();
 
     // 2. 检查/创建数据文件夹
 
     // 3. 恢复数据
 }
 
-auto Server::do_accept(std::shared_ptr<Handler> h, asio::io_context& io) -> asio::awaitable<void> {
+auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
+    auto&                   io = ThreadState::tlocal()->io_context();
     asio::ip::tcp::acceptor acceptor(io);
 
     // open the acceptor with the option to reuse the address
@@ -46,23 +46,22 @@ auto Server::do_accept(std::shared_ptr<Handler> h, asio::io_context& io) -> asio
     acceptor.bind(h->endpoint());
     acceptor.listen();
 
-    LOG(info, "start handler {}, listen on {}:{}", h->name(),
-        h->endpoint().address().to_string(), h->endpoint().port());
+    LOG(info, "start handler {}, listen on {}:{}", h->name(), h->endpoint().address().to_string(),
+        h->endpoint().port());
 
     for (;;) {
-        auto [ec, socket] =
-            co_await acceptor.async_accept(asio::as_tuple(asio::use_awaitable));
+        auto [ec, socket] = co_await acceptor.async_accept(asio::as_tuple(asio::use_awaitable));
 
         if (ec) {
             // 被主动关闭
-            if (ec == asio::error::operation_aborted ||
-                ec == asio::error::bad_descriptor) {
+            if (ec == asio::error::operation_aborted || ec == asio::error::bad_descriptor) {
                 co_return; // 退出协程
             }
 
             // fd 耗尽
             if (ec == asio::error::no_descriptors) {
                 LOG(warn, "FD limit reached");
+
                 co_await set_timeout(std::chrono::seconds(1)).read();
                 continue;
             }
@@ -73,54 +72,62 @@ auto Server::do_accept(std::shared_ptr<Handler> h, asio::io_context& io) -> asio
             continue;
         }
 
-        uint32_t mi = UINT_MAX;
-        ThreadState* mi_ts = nullptr;
-        for (auto& t : threads_) {
-            if (t->co_num() < mi) {
-                mi_ts = t.get();
-                mi = t->co_num();
-            }
-        }
-
-        mi_ts->assign(h->handle(std::move(socket)));
+        pick_up_conn_el(socket)->dispatch(h->handle(std::move(socket)));
     }
+}
+
+auto Server::pick_up_conn_el(asio::ip::tcp::socket& sock) -> EventLoop* {
+    uint32_t res_id = UINT32_MAX;
+    // int fd = sock.native_handle();
+
+    // int cpu;
+    // socklen_t len = sizeof(cpu);
+
+    // if (0 == getsockopt(fd, SOL_SOCKET, SO_INCOMING_CPU, &cpu, &len)) {
+    //     LOG(info, "CPU for connection {} is {}", fd, cpu);
+
+    //     const std::vector<unsigned>& ids = elp_->map_cpu_to_threads(cpu);
+    //     if (!ids.empty()) {
+    //       res_id = ids[0];
+    //     }
+    // }
+
+    return res_id == UINT_MAX ? elp_->pick_up_el() : elp_->at(res_id);
 }
 
 void Server::listen_and_server() {
     LOG(info, "start server");
-
+    elp_->run();
+    elp_->await_foreach(
+        [](size_t i, EventLoop* el) { ThreadState::init(i, el->io_context(), el->thread_id()); });
 
     for (size_t i = 0; i < handlers_.size(); i++) {
-        auto& ts = threads_[i % threads_.size()];
-
-        ts->assign(do_accept(handlers_[i], ts->io_context()));
+        elp_->dispatch(do_accept(handlers_[i].get()));
     }
 
-    asio::io_context          signal_handler;
-    asio::executor_work_guard wg = asio::make_work_guard(signal_handler);
-    asio::signal_set          signals(signal_handler, SIGINT, SIGTERM, SIGABRT);
-
+    asio::io_context          signals_handler;
+    asio::executor_work_guard wg = asio::make_work_guard(signals_handler);
+    asio::signal_set          signals(signals_handler, SIGINT, SIGTERM, SIGABRT);
     signals.async_wait([this, &wg](const asio::error_code&, int) {
         LOG(info, "signal received, stopping server...");
         stop();
         wg.reset();
     });
 
-    signal_handler.run();
+    signals_handler.run();
 }
 
-void Server::register_handler(std::shared_ptr<Handler> handler) {
-    handlers_.push_back(handler);
+void Server::register_handler(std::unique_ptr<Handler> handler) {
+    handlers_.push_back(std::move(handler));
     LOG(info, "register handler: {}", handler->name());
 }
 
 void Server::stop() {
-    // workers.join();
-
     for (auto& handler : handlers_) {
         handler->stop();
     }
 
+    elp_->stop();
     LOG(info, "server stopped");
 }
 

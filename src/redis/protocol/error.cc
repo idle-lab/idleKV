@@ -1,7 +1,6 @@
 #include "redis/protocol/error.h"
 
 #include <spdlog/fmt/fmt.h>
-
 #include <string>
 #include <system_error>
 

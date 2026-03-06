@@ -1,6 +1,7 @@
 #pragma once
 
 #include "db/context.h"
+#include "redis/protocol/reply.h"
 
 #include <cstdint>
 #include <string>
@@ -10,8 +11,7 @@
 namespace idlekv {
 
 // ExecFunc is interface for command executor
-using Exector = auto (*)(Context& ctx, const std::vector<std::string>& args)
-    -> std::string;
+using Exector = auto (*)(Context& ctx, const std::vector<std::string>& args) -> void;
 
 // PreFunc analyses command line when queued command to `multi`
 // returns related write keys and read keys
@@ -20,13 +20,12 @@ using Prepare = auto (*)(const std::vector<std::string>& args)
 
 class Cmd {
 public:
-    Cmd(const std::string& name, int32_t arity, int32_t first_key, int32_t last_key, Exector exector, Prepare prepare)
-        : name_(name), arity_(arity), first_key_(first_key), last_key_(last_key), exec_(exector), prepare_(prepare) {}
+    Cmd(const std::string& name, int32_t arity, int32_t first_key, int32_t last_key,
+        Exector exector, Prepare prepare)
+        : name_(name), arity_(arity), first_key_(first_key), last_key_(last_key), exec_(exector),
+          prepare_(prepare) {}
 
-    auto exec(Context& ctx, const std::vector<std::string>& args) const
-        -> std::string {
-        return exec_(ctx, args);
-    }
+    auto exec(Context& ctx, const std::vector<std::string>& args) const { exec_(ctx, args); }
 
     auto prepare(const std::vector<std::string>& args) const
         -> std::pair<std::vector<std::string>, std::vector<std::string>> {
@@ -34,7 +33,8 @@ public:
     }
 
     auto verification(const std::vector<std::string>& args) const -> bool {
-        if (arity_ == 0) return true;
+        if (arity_ == 0)
+            return true;
 
         if (arity_ < 0) {
             return int32_t(args.size()) >= -arity_;
