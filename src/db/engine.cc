@@ -22,13 +22,13 @@ auto to_lower(std::string s) -> std::string {
     return s;
 }
 
-auto IdleEngine::exec(Context& ctx, const std::vector<std::string>& args) noexcept -> void {
+auto IdleEngine::exec(Context& ctx, const std::vector<std::string>& args) noexcept -> std::string {
     auto cmd_name = to_lower(args[0]);
 
     auto cmd = get_cmd(cmd_name);
-    // if (cmd == nullptr) {
-    //     return UnknownCmdErr::make_reply(cmd_name);
-    // }
+    if (cmd == nullptr) {
+        return UnknownCmdErr::make_reply(cmd_name);
+    }
 
     // if (!cmd->verification(args)) {
     //     return ArgNumErr::make_reply(cmd_name);
@@ -36,7 +36,7 @@ auto IdleEngine::exec(Context& ctx, const std::vector<std::string>& args) noexce
 
     // auto [ws, rs] = cmd->prepare(args);
 
-    cmd->exec(ctx, args);
+    return cmd->exec(ctx, args);
 }
 
 auto IdleEngine::select_db(size_t idx) -> std::shared_ptr<DB> {

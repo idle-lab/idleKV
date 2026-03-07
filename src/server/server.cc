@@ -18,7 +18,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <spdlog/spdlog.h>
 #include <sys/socket.h>
 
@@ -104,7 +103,6 @@ void Server::listen_and_server() {
     for (size_t i = 0; i < handlers_.size(); i++) {
         elp_->dispatch(do_accept(handlers_[i].get()));
     }
-
     asio::io_context          signals_handler;
     asio::executor_work_guard wg = asio::make_work_guard(signals_handler);
     asio::signal_set          signals(signals_handler, SIGINT, SIGTERM, SIGABRT);
@@ -118,8 +116,8 @@ void Server::listen_and_server() {
 }
 
 void Server::register_handler(std::unique_ptr<Handler> handler) {
-    handlers_.push_back(std::move(handler));
     LOG(info, "register handler: {}", handler->name());
+    handlers_.push_back(std::move(handler));
 }
 
 void Server::stop() {

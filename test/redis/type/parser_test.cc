@@ -1,11 +1,14 @@
 #include "redis/protocol/parser.h"
 
+#include <algorithm>
 #include <asio/asio.hpp>
 #include <asio/co_spawn.hpp>
 #include <asio/detached.hpp>
 #include <asio/io_context.hpp>
 #include <gtest/gtest.h>
+#include <cstring>
 #include <memory>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -14,39 +17,23 @@ using namespace idlekv;
 
 class MockReader : public Reader {
 public:
-    explicit MockReader(const std::string& data) : data_(data) {}
-
-    auto read_line() noexcept -> asio::awaitable<Payload> override { co_return read_line_impl(); }
-
-    auto read_bytes(size_t len) noexcept -> asio::awaitable<Payload> override {
-        co_return read_bytes_impl(len);
-    }
+    explicit MockReader(const std::string& data) : Reader(kDefaultReadBufferSize), data_(data) {}
 
     void set_data(const std::string& data) { data_ = data; }
 
     void reset() { pos_ = 0; }
 
 private:
-    auto read_line_impl() -> Payload {
+    auto read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> override {
         if (pos_ >= data_.size()) {
-            return Payload{"", std::make_error_code(std::errc::no_message)};
+            co_return ResultT<size_t>(std::make_error_code(std::errc::no_message));
         }
-        size_t crlf_pos = data_.find("\r\n", pos_);
-        if (crlf_pos == std::string::npos) {
-            return Payload{"", std::make_error_code(std::errc::no_message)};
-        }
-        std::string line = data_.substr(pos_, crlf_pos - pos_ + 2);
-        pos_             = crlf_pos + 2;
-        return Payload{line, std::error_code()};
-    }
 
-    auto read_bytes_impl(size_t len) -> Payload {
-        if (pos_ + len > data_.size()) {
-            return Payload{"", std::make_error_code(std::errc::no_message)};
-        }
-        std::string bytes = data_.substr(pos_, len);
-        pos_ += len;
-        return Payload{bytes, std::error_code()};
+        const size_t n = std::min(size, data_.size() - pos_);
+        std::memcpy(buf, data_.data() + pos_, n);
+        pos_ += n;
+
+        co_return ResultT<size_t>(std::error_code{}, size_t(n));
     }
 
     std::string data_;
@@ -57,43 +44,47 @@ class ParserTest : public ::testing::Test {
 protected:
     void SetUp() override {
         reader_ = std::make_shared<MockReader>("");
-        parser_ = std::make_unique<Parser>(reader_);
+        parser_ = std::make_unique<Parser>(reader_.get());
     }
 
     auto parse(const std::string& data) -> std::vector<std::string> {
         reader_->set_data(data);
         reader_->reset();
 
-        asio::io_context         ctx;
-        std::vector<std::string> result;
+        asio::io_context                ctx;
+        std::optional<idlekv::ParserResut> result;
         asio::co_spawn(
             ctx,
             [&]() -> asio::awaitable<void> {
-                auto [args, err] = co_await parser_->parse_one();
-                result           = std::move(args);
+                result = co_await parser_->parse_one();
                 co_return;
             },
             asio::detached);
         ctx.run();
-        return result;
+
+        if (!result.has_value() || !result->ok()) {
+            return {};
+        }
+
+        return std::move(result->value());
     }
 
     auto parse_and_expect_error(const std::string& data) -> bool {
         reader_->set_data(data);
         reader_->reset();
 
-        asio::io_context ctx;
-        bool             has_error = false;
+        asio::io_context                 ctx;
+        std::optional<idlekv::ParserResut> result;
         asio::co_spawn(
             ctx,
             [&]() -> asio::awaitable<void> {
-                auto [args, err] = co_await parser_->parse_one();
-                has_error        = (err != nullptr);
+                result = co_await parser_->parse_one();
                 co_return;
             },
             asio::detached);
         ctx.run();
-        return has_error;
+
+        return !result.has_value() || !result->ok();
     }
 
     std::shared_ptr<MockReader> reader_;

@@ -1,18 +1,11 @@
 #pragma once
 
-#include "db/db.h"
 #include "redis/connection.h"
 #include "redis/protocol/parser.h"
-#include "redis/protocol/reply.h"
-#include "server/thread_state.h"
 
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
-#include <cstddef>
 #include <memory>
-#include <queue>
-#include <string_view>
-#include <vector>
 namespace idlekv {
 
 // all contextual information required for command execution

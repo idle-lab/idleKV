@@ -17,9 +17,9 @@ public:
 
     auto locks(const std::vector<std::string>& ws, const std::vector<std::string>& rs) -> bool;
 
-    auto set(const std::string& key, DataEntity value) -> Result<bool> {
-        // return prime_.set(key, value);
-    }
+    // auto set(const std::string& key, DataEntity value) -> Result<bool> {
+    //     // return prime_.set(key, value);
+    // }
 
 private:
     // KvStore<DummyImpl<std::string, DataEntity>> prime_;

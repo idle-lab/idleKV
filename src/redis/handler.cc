@@ -39,15 +39,6 @@ auto is_fatal_write_error(const std::error_code& ec) -> bool {
     return is_connection_closed_error(ec) || !is_transient_io_error(ec);
 }
 
-auto try_write_err(std::shared_ptr<Connection> conn, std::unique_ptr<Err>& err)
-    -> asio::awaitable<std::error_code> {
-    if (err == nullptr) {
-        co_return std::error_code();
-    }
-
-    co_return co_await conn->write(err->to_bytes());
-}
-
 } // namespace
 
 asio::awaitable<void> RespHandler::handle(asio::ip::tcp::socket socket) {
@@ -56,25 +47,21 @@ asio::awaitable<void> RespHandler::handle(asio::ip::tcp::socket socket) {
         conn->remote_endpoint().port());
     auto& io = ThreadState::tlocal()->io_context();
     auto ctx = Context(conn, io);
+    auto& p = ctx.parser();
+    auto& s= ctx.sender();
 
     for (;;) {
-        auto [args, err] = co_await ctx.parser().parse_one();
-        if (err != nullptr) {
-            if (err->is_standard_error()) {
-                auto* standard = dynamic_cast<StandardErr*>(err.get());
-                if (standard != nullptr && is_connection_closed_error(standard->error_code())) {
+        auto res = co_await p.parse_one();
+        if (!res.ok()) {
+            if (res == ParserResut::STD_ERROR) {
+                if (is_connection_closed_error(res.error_code())) {
                     break;
                 }
 
-                if (standard != nullptr && is_transient_io_error(standard->error_code())) {
+                if (is_transient_io_error(res.error_code())) {
                     continue;
                 }
 
-                break;
-            }
-
-            auto ec = co_await try_write_err(conn, err);
-            if (ec != std::error_code() && is_fatal_write_error(ec)) {
                 break;
             }
 
@@ -82,21 +69,10 @@ asio::awaitable<void> RespHandler::handle(asio::ip::tcp::socket socket) {
             break;
         }
 
-        engine_->exec(ctx, args);
+        co_await s.send(engine_->exec(ctx, res.value()));
 
-        if (ctx.sender().should_flush()) {
-            co_await ctx.sender().flush();
-        } else if(!ctx.has_sender_timer()) {
-            ctx.start_a_sender_timer();
-            asio::co_spawn(io, [&ctx]() -> asio::awaitable<void> {
-                ctx.sender_timer().expires_after(kMaxReplyFlushInterval);
-                co_await ctx.sender_timer().async_wait(asio::use_awaitable);
-
-                if (!ctx.connection()->closed() && ctx.sender().has_pending()) {
-                    co_await ctx.sender().flush();
-                }
-                ctx.sender_timer_done();
-            }, asio::detached);
+        if (res != ParserResut::HAS_MORE) {
+            co_await s.flush();
         }
     }
 

@@ -3,17 +3,18 @@
 #include "db/engine.h"
 #include "redis/connection.h"
 #include "redis/protocol/reply.h"
+#include <string>
 
 namespace idlekv {
 
-auto ping(Context& ctx, std::vector<std::string>& args) -> void {
+auto ping(Context& ctx, const std::vector<std::string>& args) -> std::string {
     switch (args.size()) {
         case 1:
-            ctx.sender().send_pong();
+            return PongReply::make_reply();
         case 2:
-            ctx.sender().send_simple_string(std::move(args[1]));
-        // default:
-        //     return ArgNumErr::make_reply(args[0]);
+            return SimpleString::make_reply(args[0]); 
+        default:
+            return ArgNumErr::make_reply(args[0]);
     }
 }
 

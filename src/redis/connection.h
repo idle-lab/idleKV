@@ -28,20 +28,21 @@ public:
     Connection() = default;
 
     explicit Connection(asio::ip::tcp::socket&& socket)
-        : Reader(kDefaultReadBufferSize), Writer(kDefaultWriteBufferSize), socket_(std::move(socket)) {}
+        : Reader(kDefaultReadBufferSize), Writer(256), socket_(std::move(socket)) {}
 
     virtual auto read_impl(byte* buf, size_t size) noexcept  -> asio::awaitable<ResultT<size_t>> override;
 
     virtual auto write_impl(const byte* data, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> override;
+    virtual auto writev_impl(const std::vector<BufView>& bufs) noexcept -> asio::awaitable<ResultT<size_t>> override;
 
-    auto remote_endpoint() const -> asio::ip::tcp::endpoint { return socket_->remote_endpoint(); }
+    auto remote_endpoint() const -> asio::ip::tcp::endpoint { return socket_.remote_endpoint(); }
 
     auto closed() const -> bool { return closed_.load(std::memory_order_acquire); }
 
     void close() {
         if (!closed_.exchange(true, std::memory_order_acq_rel)) {
-            this->socket_->shutdown(asio::ip::tcp::socket::shutdown_both);
-            this->socket_->close();
+            this->socket_.shutdown(asio::ip::tcp::socket::shutdown_both);
+            this->socket_.close();
         }
     }
 
@@ -49,7 +50,7 @@ private:
     // fill reads a new chunk into the buffer.
     auto fill() noexcept -> asio::awaitable<std::error_code>;
 
-    std::optional<asio::ip::tcp::socket> socket_;
+    asio::ip::tcp::socket socket_;
 
     // error occurred when the connection was disconnected
     std::optional<std::error_code> ec_;

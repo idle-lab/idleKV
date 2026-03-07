@@ -25,7 +25,7 @@ public:
         }
     }
 
-    auto exec(Context& ctx, const std::vector<std::string>& args) noexcept -> void;
+    auto exec(Context& ctx, const std::vector<std::string>& args) noexcept -> std::string ;
 
     // return the database at the specified index. If the index is out of bounds, return null
     auto select_db(size_t idx) -> std::shared_ptr<DB>;

@@ -9,6 +9,8 @@
 
 namespace idlekv {
 
+constexpr const char* kSyntaxErr = "-Err syntax error\r\n";
+
 class Err : public Reply {
 public:
     virtual auto type() const -> DataType override { return DataType::Error; }
