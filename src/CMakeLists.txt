@@ -25,7 +25,7 @@ target_compile_definitions(idlekv_core
         ASIOCHAN_USE_STANDALONE_ASIO=ON
 )
 
-option(ENABLE_ASIO_IO_URING "Enable Asio io_uring backend" ON)
+option(ENABLE_ASIO_IO_URING "Enable Asio io_uring backend" OFF)
 
 if (ENABLE_ASIO_IO_URING)
     find_library(LIBURING_LIBRARY uring)

@@ -8,11 +8,8 @@
 namespace idlekv {
 
 std::unordered_map<DataType, char> dmp = {
-    {DataType::String, '+'},
-    {DataType::Error, '-'},
-    {DataType::Integers, ':'},
-    {DataType::BulkString, '$'},
-    {DataType::Arrays, '*'},
+    {DataType::String, '+'},     {DataType::Error, '-'},  {DataType::Integers, ':'},
+    {DataType::BulkString, '$'}, {DataType::Arrays, '*'},
 };
 
 auto SimpleString::make_reply(std::string_view data) -> std::string {

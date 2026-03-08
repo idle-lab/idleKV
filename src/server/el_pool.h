@@ -12,11 +12,9 @@
 #include <concepts>
 #include <cstddef>
 #include <future>
-#include <iostream>
 #include <latch>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -43,12 +41,12 @@ public:
         auto fut = task->get_future();
 
         asio::post(io_, [task]() { (*task)(); });
-        return std::optional<std::future<R>>(std::move(fut));
+        return std::future<R>(std::move(fut));
     }
 
     // dispatch a coroutine
     template <class RetType>
-    auto dispatch(asio::awaitable<RetType>&& aw) -> std::optional<std::future<RetType>> {
+    auto dispatch(asio::awaitable<RetType>&& aw) -> std::future<RetType> {
         return asio::co_spawn(io_, std::move(aw), asio::use_future);
     }
 
@@ -57,14 +55,14 @@ public:
         requires std::invocable<Fn, Args...>
     auto await_dispatch(Fn&& f, Args&&... args) {
         auto fut = dispatch(std::forward<Fn>(f), std::forward<Args>(args)...);
-        return fut->get();
+        return fut.get();
     }
 
     // wait for the coroutine to finish executing and return the result.
     template <class RetType>
     auto await_dispatch(asio::awaitable<RetType>&& aw) -> RetType {
         auto fut = dispatch(std::move(aw));
-        return fut->get();
+        return fut.get();
     }
 
     auto thread_id() -> std::thread::native_handle_type { return th_.native_handle(); }

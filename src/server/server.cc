@@ -13,6 +13,7 @@
 #include <asio/executor_work_guard.hpp>
 #include <asio/io_context.hpp>
 #include <asio/ip/tcp.hpp>
+#include <asio/this_coro.hpp>
 #include <asio/use_future.hpp>
 #include <climits>
 #include <cstddef>
@@ -24,20 +25,20 @@
 namespace idlekv {
 
 Server::Server(const Config& cfg) {
-    // : workers(cfg.worker_threads_ == 0 ? std::thread::hardware_concurrency()
-    //                                    : cfg.worker_threads_) {
     // 1. 初始化
     cfg_ = &cfg;
     elp_ = std::make_unique<EventLoopPool>();
-
+    elp_->run();
+    elp_->await_foreach(
+        [](size_t i, EventLoop* el) { ThreadState::init(i, el, el->thread_id()); });
     // 2. 检查/创建数据文件夹
 
     // 3. 恢复数据
 }
 
 auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
-    auto&                   io = ThreadState::tlocal()->io_context();
-    asio::ip::tcp::acceptor acceptor(io);
+    auto exec = co_await asio::this_coro::executor;
+    asio::ip::tcp::acceptor acceptor(exec);
 
     // open the acceptor with the option to reuse the address
     acceptor.open(h->endpoint().protocol());
@@ -96,9 +97,6 @@ auto Server::pick_up_conn_el(asio::ip::tcp::socket& sock) -> EventLoop* {
 
 void Server::listen_and_server() {
     LOG(info, "start server");
-    elp_->run();
-    elp_->await_foreach(
-        [](size_t i, EventLoop* el) { ThreadState::init(i, el->io_context(), el->thread_id()); });
 
     for (size_t i = 0; i < handlers_.size(); i++) {
         elp_->dispatch(do_accept(handlers_[i].get()));

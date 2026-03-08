@@ -5,8 +5,8 @@
 #include <asio/co_spawn.hpp>
 #include <asio/detached.hpp>
 #include <asio/io_context.hpp>
-#include <gtest/gtest.h>
 #include <cstring>
+#include <gtest/gtest.h>
 #include <memory>
 #include <optional>
 #include <string>
@@ -51,7 +51,7 @@ protected:
         reader_->set_data(data);
         reader_->reset();
 
-        asio::io_context                ctx;
+        asio::io_context                   ctx;
         std::optional<idlekv::ParserResut> result;
         asio::co_spawn(
             ctx,
@@ -73,7 +73,7 @@ protected:
         reader_->set_data(data);
         reader_->reset();
 
-        asio::io_context                 ctx;
+        asio::io_context                   ctx;
         std::optional<idlekv::ParserResut> result;
         asio::co_spawn(
             ctx,

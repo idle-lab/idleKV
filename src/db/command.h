@@ -1,7 +1,6 @@
 #pragma once
 
-#include "db/context.h"
-#include "redis/protocol/reply.h"
+#include "redis/connection.h"
 
 #include <cstdint>
 #include <string>
@@ -11,7 +10,7 @@
 namespace idlekv {
 
 // ExecFunc is interface for command executor
-using Exector = auto (*)(Context& ctx, const std::vector<std::string>& args) -> std::string;
+using Exector = auto (*)(Connection* ctx, const std::vector<std::string>& args) -> std::string;
 
 // PreFunc analyses command line when queued command to `multi`
 // returns related write keys and read keys
@@ -25,7 +24,9 @@ public:
         : name_(name), arity_(arity), first_key_(first_key), last_key_(last_key), exec_(exector),
           prepare_(prepare) {}
 
-    auto exec(Context& ctx, const std::vector<std::string>& args) const -> std::string { return exec_(ctx, args); }
+    auto exec(Connection* ctx, const std::vector<std::string>& args) const -> std::string {
+        return exec_(ctx, args);
+    }
 
     auto prepare(const std::vector<std::string>& args) const
         -> std::pair<std::vector<std::string>, std::vector<std::string>> {

@@ -28,6 +28,8 @@ public:
 
     void register_handler(std::unique_ptr<Handler> handler);
 
+    auto event_loop_pool() -> EventLoopPool* { return elp_.get(); }
+
     void stop();
 
 private:

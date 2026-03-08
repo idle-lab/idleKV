@@ -9,7 +9,7 @@
 const std::string SERVER_NAME  = "idlekv";
 const std::string DEFAULT_PORT = "4396";
 
-constexpr uint64_t B = 1;
+constexpr uint64_t B  = 1;
 constexpr uint64_t KB = 1024 * B;
 constexpr uint64_t MB = 1024 * KB;
 constexpr uint64_t GB = 1024 * MB;

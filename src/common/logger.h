@@ -3,12 +3,11 @@
 #include <cstdlib>
 #include <memory>
 #include <ostream>
-#include <sstream>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
+#include <sstream>
 #include <string>
 #include <string_view>
-#include <utility>
 
 namespace idlekv {
 
@@ -41,10 +40,10 @@ public:
         }
     }
 
-    CheckFailure(CheckFailure&&) noexcept = default;
-    CheckFailure(const CheckFailure&)     = delete;
+    CheckFailure(CheckFailure&&) noexcept                    = default;
+    CheckFailure(const CheckFailure&)                        = delete;
     auto operator=(CheckFailure&&) noexcept -> CheckFailure& = default;
-    auto operator=(const CheckFailure&) -> CheckFailure& = delete;
+    auto operator=(const CheckFailure&) -> CheckFailure&     = delete;
 
     ~CheckFailure() {
         if (!passed_) {
@@ -72,7 +71,7 @@ template <class L, class R, class Pred>
 inline auto make_check_cmp(L&& lhs, R&& rhs, const char* file, int line, std::string_view lhs_expr,
                            std::string_view rhs_expr, std::string_view op, Pred pred)
     -> CheckFailure {
-    bool ok = pred(lhs, rhs);
+    bool         ok = pred(lhs, rhs);
     CheckFailure check(ok, file, line, "");
     if (!ok) {
         check << lhs_expr << " " << op << " " << rhs_expr << " (lhs=" << check_to_string(lhs)
@@ -85,14 +84,13 @@ inline auto make_check_cmp(L&& lhs, R&& rhs, const char* file, int line, std::st
 
 } // namespace idlekv
 
-#define CHECK(condition)                                                                      \
+#define CHECK(condition)                                                                           \
     ::idlekv::detail::CheckFailure(static_cast<bool>(condition), __FILE__, __LINE__, #condition)
 
-#define IDLEKV_CHECK_OP(op, lhs, rhs)                                                         \
-    ::idlekv::detail::make_check_cmp((lhs), (rhs), __FILE__, __LINE__, #lhs, #rhs, #op,     \
-                                     [](const auto& idlekv_l, const auto& idlekv_r) {        \
-                                         return idlekv_l op idlekv_r;                         \
-                                     })
+#define IDLEKV_CHECK_OP(op, lhs, rhs)                                                              \
+    ::idlekv::detail::make_check_cmp(                                                              \
+        (lhs), (rhs), __FILE__, __LINE__, #lhs, #rhs, #op,                                         \
+        [](const auto& idlekv_l, const auto& idlekv_r) { return idlekv_l op idlekv_r; })
 
 #define CHECK_GT(lhs, rhs) IDLEKV_CHECK_OP(>, lhs, rhs)
 #define CHECK_LT(lhs, rhs) IDLEKV_CHECK_OP(<, lhs, rhs)

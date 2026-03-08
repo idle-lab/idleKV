@@ -2,8 +2,9 @@
 
 #include "common/config.h"
 #include "db/command.h"
-#include "db/context.h"
 #include "db/db.h"
+#include "db/shard.h"
+#include "redis/connection.h"
 
 #include <cstddef>
 #include <memory>
@@ -12,20 +13,15 @@
 
 namespace idlekv {
 
-// IdleEngine is a kv store engine with full capabilities including multiple database.
+// IdleEngine is idlekv store engine with full capabilities including multiple database.
 class IdleEngine {
 public:
     IdleEngine(const Config& cfg, mi_heap_t* heap) : heap_(heap) {
         init_command();
 
-        db_set_.resize(cfg.db_num_);
-
-        for (auto& db : db_set_) {
-            db = std::make_shared<DB>();
-        }
     }
 
-    auto exec(Context& ctx, const std::vector<std::string>& args) noexcept -> std::string ;
+    auto exec(Connection*, const std::vector<std::string>& args) noexcept -> std::string;
 
     // return the database at the specified index. If the index is out of bounds, return null
     auto select_db(size_t idx) -> std::shared_ptr<DB>;
@@ -41,8 +37,8 @@ private:
     mi_heap_t* heap_;
 
     // read-only
-    std::unordered_map<std::string, Cmd> cmd_map_;
-    std::vector<std::shared_ptr<DB>>     db_set_;
+    std::unordered_map<std::string, Cmd>    cmd_map_;
+    std::vector<std::unique_ptr<Shard>>     shard_set_;
 };
 
 auto init_systemcmd(IdleEngine*) -> void;

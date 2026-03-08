@@ -1,6 +1,7 @@
 #include "db/engine.h"
 
-#include "db/context.h"
+#include "common/logger.h"
+#include "redis/connection.h"
 #include "redis/protocol/error.h"
 
 #include <cstdint>
@@ -22,11 +23,13 @@ auto to_lower(std::string s) -> std::string {
     return s;
 }
 
-auto IdleEngine::exec(Context& ctx, const std::vector<std::string>& args) noexcept -> std::string {
+auto IdleEngine::exec(Connection* conn, const std::vector<std::string>& args) noexcept
+    -> std::string {
     auto cmd_name = to_lower(args[0]);
 
     auto cmd = get_cmd(cmd_name);
     if (cmd == nullptr) {
+        LOG(debug, "unk: {}", cmd_name);
         return UnknownCmdErr::make_reply(cmd_name);
     }
 
@@ -36,14 +39,7 @@ auto IdleEngine::exec(Context& ctx, const std::vector<std::string>& args) noexce
 
     // auto [ws, rs] = cmd->prepare(args);
 
-    return cmd->exec(ctx, args);
-}
-
-auto IdleEngine::select_db(size_t idx) -> std::shared_ptr<DB> {
-    if (idx >= db_set_.size()) {
-        return nullptr;
-    }
-    return db_set_[idx];
+    return cmd->exec(conn, args);
 }
 
 auto IdleEngine::register_cmd(const std::string& name, int32_t arity, int32_t first_key,

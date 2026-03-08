@@ -20,7 +20,7 @@ enum class DataType : char {
     Arrays     = '*'
 };
 extern std::unordered_map<DataType, char> dmp;
-extern const char* CRLF;
+extern const char*                        CRLF;
 
 namespace detail {
 
@@ -50,19 +50,19 @@ public:
 };
 
 template <class IntType>
-requires std::is_integral_v<IntType>
+    requires std::is_integral_v<IntType>
 class Integer : public Reply {
 public:
     Integer(uint64_t data) : data_(data) {}
 
-    template<class T>
+    template <class T>
         requires std::is_integral_v<T>
     static auto make_reply(T data) -> std::string {
         constexpr size_t kMaxDigits = std::numeric_limits<T>::digits10 + 3;
         std::string      reply;
         reply.resize(1 + kMaxDigits + 2);
 
-        reply[0] = static_cast<char>(DataType::Integers);
+        reply[0]    = static_cast<char>(DataType::Integers);
         auto* begin = reply.data() + 1;
         auto* end   = begin + kMaxDigits;
 
@@ -79,9 +79,7 @@ public:
 
     virtual auto type() const -> DataType override { return DataType::Integers; }
 
-    virtual auto to_bytes() const -> std::string override {
-        return make_reply(data_);
-    }
+    virtual auto to_bytes() const -> std::string override { return make_reply(data_); }
 
     virtual auto size() const -> size_t override { return 1 + detail::decimal_len(data_) + 2; }
 
@@ -101,9 +99,7 @@ public:
 
     virtual auto size() const -> size_t override { return 1 + data_.size() + 2; }
 
-    virtual auto to_bytes() const -> std::string override {
-        return make_reply(data_);
-    }
+    virtual auto to_bytes() const -> std::string override { return make_reply(data_); }
 
     virtual ~SimpleString() = default;
 
@@ -119,9 +115,7 @@ public:
 
     virtual auto type() const -> DataType override { return DataType::BulkString; }
 
-    virtual auto to_bytes() const -> std::string override {
-        return make_reply(data_, len_);
-    }
+    virtual auto to_bytes() const -> std::string override { return make_reply(data_, len_); }
 
     virtual auto size() const -> size_t override {
         // null bulk string: "$-1\r\n".

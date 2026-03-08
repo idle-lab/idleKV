@@ -8,7 +8,6 @@
 #include <asio/use_future.hpp>
 #include <atomic>
 #include <cassert>
-#include <iostream>
 #include <memory>
 #include <pthread.h>
 #include <sched.h>

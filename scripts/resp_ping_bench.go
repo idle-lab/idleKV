@@ -43,6 +43,7 @@ type args struct {
 	message        optionalString
 	ioTimeout      float64
 	reconnectDelay float64
+	errorLogLimit  int
 	noVerify       bool
 }
 
@@ -88,11 +89,46 @@ type benchmarkState struct {
 	mu        sync.RWMutex
 	start     time.Time
 	end       time.Time
+
+	errorLogLimit int64
+	errorLogCount atomic.Int64
+	errorLogMu    sync.Mutex
 }
 
 func newBenchmarkState() *benchmarkState {
 	return &benchmarkState{
 		stopCh: make(chan struct{}),
+	}
+}
+
+func (s *benchmarkState) setErrorLogLimit(limit int) {
+	if limit < 0 {
+		limit = 0
+	}
+	s.errorLogLimit = int64(limit)
+}
+
+func (s *benchmarkState) reportWorkerError(workerID int, stage string, err error) {
+	if err == nil {
+		return
+	}
+
+	limit := s.errorLogLimit
+	if limit <= 0 {
+		return
+	}
+
+	seq := s.errorLogCount.Add(1)
+	if seq > limit {
+		return
+	}
+
+	s.errorLogMu.Lock()
+	defer s.errorLogMu.Unlock()
+
+	fmt.Fprintf(os.Stderr, "[bench-error #%d] worker=%d stage=%s err=%v\n", seq, workerID, stage, err)
+	if seq == limit {
+		fmt.Fprintf(os.Stderr, "[bench-error] reached --error-log-limit=%d, suppressing further logs\n", limit)
 	}
 }
 
@@ -245,6 +281,7 @@ func worker(
 	for !state.stopped() {
 		conn, err := net.DialTimeout("tcp", addr, ioTimeout)
 		if err != nil {
+			state.reportWorkerError(idx, "dial", err)
 			if state.isMeasuring() {
 				state.stats.errors.Add(1)
 			}
@@ -265,6 +302,7 @@ func worker(
 			continue
 		}
 
+		state.reportWorkerError(idx, "run", runErr)
 		if state.isMeasuring() {
 			state.stats.errors.Add(1)
 		}
@@ -419,7 +457,7 @@ func parseArgs() (*args, error) {
 	fs := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 
 	fs.StringVar(&a.host, "host", "127.0.0.1", "Target host.")
-	fs.IntVar(&a.port, "port", 6379, "Target port.")
+	fs.IntVar(&a.port, "port", 4396, "Target port.")
 	fs.IntVar(&a.clients, "clients", 64, "Number of concurrent TCP clients.")
 	fs.IntVar(&a.clients, "c", 64, "Number of concurrent TCP clients.")
 	fs.IntVar(&a.pipeline, "pipeline", 32, "Number of in-flight PING per round trip per client.")
@@ -434,6 +472,7 @@ func parseArgs() (*args, error) {
 	fs.Var(&a.message, "message", "Optional payload for `PING <message>`.")
 	fs.Float64Var(&a.ioTimeout, "io-timeout", 5.0, "Socket read/write timeout in seconds.")
 	fs.Float64Var(&a.reconnectDelay, "reconnect-delay", 0.05, "Delay before reconnect after I/O error in seconds.")
+	fs.IntVar(&a.errorLogLimit, "error-log-limit", 20, "Print at most N worker error logs (0 disables).")
 	fs.BoolVar(&a.noVerify, "no-verify", false, "Do not verify server reply payload.")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
@@ -464,6 +503,9 @@ func parseArgs() (*args, error) {
 	if a.reconnectDelay < 0 {
 		return nil, errors.New("--reconnect-delay must be >= 0")
 	}
+	if a.errorLogLimit < 0 {
+		return nil, errors.New("--error-log-limit must be >= 0")
+	}
 
 	return a, nil
 }
@@ -492,6 +534,7 @@ func run(a *args) error {
 
 	verify := !a.noVerify
 	state := newBenchmarkState()
+	state.setErrorLogLimit(a.errorLogLimit)
 
 	fmt.Printf("Target=%s:%d  clients=%d  pipeline=%d  verify=%t\n",
 		a.host, a.port, a.clients, a.pipeline, verify)
