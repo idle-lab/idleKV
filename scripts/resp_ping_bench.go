@@ -461,7 +461,7 @@ func parseArgs() (*args, error) {
 	fs.IntVar(&a.clients, "clients", 64, "Number of concurrent TCP clients.")
 	fs.IntVar(&a.clients, "c", 64, "Number of concurrent TCP clients.")
 	fs.IntVar(&a.pipeline, "pipeline", 32, "Number of in-flight PING per round trip per client.")
-	fs.IntVar(&a.pipeline, "P", 64, "Number of in-flight PING per round trip per client.")
+	fs.IntVar(&a.pipeline, "P", 1, "Number of in-flight PING per round trip per client.")
 	fs.Float64Var(&a.duration, "duration", 10.0, "Benchmark duration in seconds.")
 	fs.Float64Var(&a.duration, "d", 20.0, "Benchmark duration in seconds.")
 	fs.Float64Var(&a.warmup, "warmup", 0.0, "Warmup time in seconds.")

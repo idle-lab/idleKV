@@ -31,8 +31,6 @@ public:
 private:
     EventLoop* el_;
 
-    std::vector<asio::ip::tcp::socket> clients_;
-
     mi_heap_t* data_heap_;
 
     std::thread::native_handle_type thread_id_;

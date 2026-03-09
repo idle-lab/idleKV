@@ -95,8 +95,6 @@ auto Connection::writev_impl(const std::vector<BufView>& bufs) noexcept
 }
 
 auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
-    asio::steady_timer async_done(ThreadState::tlocal()->event_loop()->io_context());
-
     for (;;) {
         auto res = co_await p_.parse_one();
         if (!res.ok()) {
@@ -132,18 +130,18 @@ auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
         }
 
         s_.set_mode(true);
-
         co_await s_.send(service_->exec(this, args));
         if (s_.get_error()) {
             break;
         }
-
-        if (res != ParserResut::HAS_MORE) {
-            co_await s_.flush();
-        }
     }
+}
 
-    co_await async_done.async_wait(asio::use_awaitable);
+auto Connection::flush() -> asio::awaitable<void> {
+    if (s_.get_error()) {
+        co_return ;
+    }
+    co_await s_.flush();
 }
 
 auto Connection::async_handle(asio::steady_timer& done) -> asio::awaitable<void> {

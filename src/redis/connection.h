@@ -41,6 +41,8 @@ public:
 
     auto async_handle(asio::steady_timer& done) -> asio::awaitable<void>;
 
+    auto flush() -> asio::awaitable<void>;
+
     auto reset(asio::ip::tcp::socket&& socket) {
         CHECK(socket_.has_value() == false) << "override a connection that is currently in use";
         socket_.emplace(std::move(socket));

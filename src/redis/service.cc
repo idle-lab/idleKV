@@ -17,16 +17,17 @@
 namespace idlekv {
 
 auto RedisService::handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> {
-    auto conn = conn_pool_.get();
+    auto& conn= conn_list_.emplace_front(conn_pool_.get());
+    auto it = conn_list_.begin();
     conn->reset(std::move(socket));
 
-    // LOG(debug, "connect a new client, {}:{}", conn->remote_endpoint().address().to_string(),
-    //     conn->remote_endpoint().port());
-
+    LOG(debug, "new conn");
+    
     co_await conn->handle_requests();
 
     conn->reset();
     conn_pool_.put(std::move(conn));
+    conn_list_.erase(it);
 }
 
 auto RedisService::exec(Connection* c, const std::vector<std::string>& args) noexcept -> std::string {
@@ -34,6 +35,7 @@ auto RedisService::exec(Connection* c, const std::vector<std::string>& args) noe
 }
 
 thread_local utils::Pool<RedisService::ConnectionPtr> RedisService::conn_pool_;
+thread_local std::list<RedisService::ConnectionPtr> RedisService::conn_list_;
 
 
 } // namespace idlekv

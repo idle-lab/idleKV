@@ -6,6 +6,7 @@
 #include <asio/asio.hpp>
 #include <asio/awaitable.hpp>
 #include <asiochan/asiochan.hpp>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -199,6 +200,7 @@ private:
 
 constexpr auto kMaxReplyFlushCount = 64;
 constexpr auto kMaxReplyFlushBytes = 32 * KB;
+constexpr auto kMaxReplyFlushInterval = std::chrono::microseconds(50);
 
 class Sender {
 public:
@@ -225,6 +227,7 @@ private:
     // hold the ownership of reply
     std::deque<std::string> batched_reply_;
     size_t                  batched_size_{0}, batched_count_{0};
+    std::chrono::steady_clock::time_point last_flushed_ = std::chrono::steady_clock::now();
 
     bool batched_{true};
 

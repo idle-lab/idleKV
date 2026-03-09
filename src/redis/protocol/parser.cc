@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstring>
 #include <ranges>
+#include <spdlog/spdlog.h>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -206,6 +207,7 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
 }
 
 auto Sender::send(std::string&& s) -> asio::awaitable<void> {
+    LOG(debug, "sender send");
     batched_count_++;
     batched_size_ += s.size();
     batched_reply_.emplace_back(std::move(s));
@@ -222,6 +224,10 @@ auto Sender::should_flush() -> bool {
 }
 
 auto Sender::flush() -> asio::awaitable<void> {
+    LOG(debug, "sender flush");
+    if (batched_reply_.empty()) {
+        co_return ;
+    }
     ec_ = co_await wr_->flush();
 
     batched_count_ = 0;
