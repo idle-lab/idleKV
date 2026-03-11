@@ -1,15 +1,14 @@
-#include "redis/protocol/parser.h"
+#include "redis/parser.h"
 
 #include "common/logger.h"
-#include "redis/protocol/error.h"
-#include "redis/protocol/reply.h"
+#include "redis/error.h"
 
 #include <algorithm>
 #include <asio/awaitable.hpp>
 #include <charconv>
+#include <climits>
 #include <cstddef>
 #include <cstring>
-#include <ranges>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <string_view>
@@ -19,7 +18,9 @@
 
 namespace idlekv {
 
-const char* CRLF = "\r\n";
+auto operator==(DataType dt, char prefix) -> bool {
+    return static_cast<char>(dt) == prefix;
+};
 
 namespace {
 // debug function
@@ -154,8 +155,8 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
     }
 
     auto& header = headerRes.value();
-    if (header[0] != static_cast<char>(DataType::Arrays)) [[unlikely]] {
-        co_return ParserResut(ParserResut::WRONG_TYPE_ERROR, WrongTypeErr::make_reply());
+    if (header[0] != DataType::Arrays) [[unlikely]] {
+        co_return ParserResut(ParserResut::WRONG_TYPE_ERROR, kWrongTypeErr);
     }
 
     int arrLen;
@@ -167,15 +168,15 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
 
     std::vector<std::string> args(arrLen);
 
-    for (auto i : std::views::iota(0, arrLen)) {
+    for (int i = 0; i < arrLen; ++i) {
         auto lineRes = co_await rd_->read_line();
         if (!lineRes.ok()) {
             co_return lineRes.err();
         }
 
         auto& line = lineRes.value();
-        if (line.size() < 4 || line[0] != static_cast<char>(DataType::BulkString)) [[unlikely]] {
-            co_return ParserResut(ParserResut::WRONG_TYPE_ERROR, WrongTypeErr::make_reply());
+        if (line.size() < 4 || line[0] != DataType::BulkString) [[unlikely]] {
+            co_return ParserResut(ParserResut::WRONG_TYPE_ERROR, kWrongTypeErr);
         }
 
         int strLen;
@@ -206,9 +207,37 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
                           std::move(args));
 }
 
+auto Sender::send_simple_string(std::string&& s) -> asio::awaitable<void> {
+    pieces_count_ += 3;
+    batched_size_ += s.size() + 3;
+    batched_reply_.emplace_back(std::move(s));
+
+    wr_->write(SIMPLE_STRING_PREFIX);
+    wr_->write(batched_reply_.back());
+    wr_->write(CRLF);
+
+
+    if (should_flush()) {
+        co_await flush();
+    }
+}
+
+auto Sender::send_error(std::string&& s) -> asio::awaitable<void> {
+    pieces_count_ += 3;
+    batched_size_ += s.size() + 3;
+    batched_reply_.emplace_back(std::move(s));
+
+    wr_->write(ERROR_PREFIX);
+    wr_->write(batched_reply_.back());
+    wr_->write(CRLF);
+
+    if (should_flush()) {
+        co_await flush();
+    }
+}
+
 auto Sender::send(std::string&& s) -> asio::awaitable<void> {
-    LOG(debug, "sender send");
-    batched_count_++;
+    pieces_count_++;
     batched_size_ += s.size();
     batched_reply_.emplace_back(std::move(s));
 
@@ -220,19 +249,24 @@ auto Sender::send(std::string&& s) -> asio::awaitable<void> {
 }
 
 auto Sender::should_flush() -> bool {
-    return !batched_ || batched_size_ >= kMaxReplyFlushBytes || batched_count_ >= kMaxReplyFlushCount;
+    return batched_size_ >= kMaxReplyFlushBytes || pieces_count_ >= kMaxReplyFlushCount;
 }
 
 auto Sender::flush() -> asio::awaitable<void> {
-    LOG(debug, "sender flush");
     if (batched_reply_.empty()) {
         co_return ;
     }
+    if (flushing_) {
+        co_return ;
+    }
+    
+    flushing_ = true;
     ec_ = co_await wr_->flush();
 
-    batched_count_ = 0;
+    pieces_count_ = 0;
     batched_size_  = 0;
     batched_reply_.clear();
+    flushing_ = false;
 }
 
 } // namespace idlekv

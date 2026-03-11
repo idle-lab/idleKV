@@ -72,6 +72,11 @@ auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
             continue;
         }
 
+        ec = socket.set_option(asio::ip::tcp::no_delay(true), ec);
+        if (ec) {
+            LOG(warn, "set TCP_NODELAY failed: {}", ec.message());
+        }
+
         pick_up_conn_el(socket)->dispatch(h->handle(std::move(socket)));
     }
 }
@@ -97,6 +102,12 @@ auto Server::pick_up_conn_el(asio::ip::tcp::socket& sock) -> EventLoop* {
 
 void Server::listen_and_server() {
     LOG(info, "start server");
+
+    elp_->await_foreach([this]([[maybe_unused]] size_t i, EventLoop* el) {
+        for (auto& handler : handlers_) {
+            handler->init(el);
+        }
+    });
 
     for (size_t i = 0; i < handlers_.size(); i++) {
         elp_->dispatch(do_accept(handlers_[i].get()));

@@ -49,6 +49,7 @@ else()
     target_compile_definitions(idlekv_core
         PUBLIC
             ASIO_DISABLE_IO_URING=1
+            ASIO_NO_EXCEPTIONS=1
     )
 endif()
 

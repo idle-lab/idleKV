@@ -18,10 +18,9 @@ class IdleEngine {
 public:
     IdleEngine(const Config& cfg, mi_heap_t* heap) : heap_(heap) {
         init_command();
-
     }
 
-    auto exec(Connection*, const std::vector<std::string>& args) noexcept -> std::string;
+    auto exec(Connection*, const std::vector<std::string>& args) noexcept -> ExecResult;
 
     // return the database at the specified index. If the index is out of bounds, return null
     auto select_db(size_t idx) -> std::shared_ptr<DB>;

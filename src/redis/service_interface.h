@@ -15,7 +15,7 @@ class Connection;
 
 class ServiceInterface {
 public: 
-    virtual auto exec(Connection*, const std::vector<std::string>&) noexcept -> std::string = 0;
+    virtual auto exec(Connection*, std::vector<std::string>&) noexcept -> asio::awaitable<void>  = 0;
 };
 
 

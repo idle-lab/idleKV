@@ -9,8 +9,26 @@
 
 namespace idlekv {
 
+class ExecResult {
+public:
+    enum Status {
+        OK,
+        ERR
+    };
+
+    ExecResult(Status s, std::string&& msg) : s_(s), msg_(std::move(msg)) {}
+
+    auto ok() const -> bool { return s_ == Status::OK; }
+    auto message() -> std::string& { return msg_; }
+
+private:
+    Status s_;
+    std::string msg_;
+};
+
+
 // ExecFunc is interface for command executor
-using Exector = auto (*)(Connection* ctx, const std::vector<std::string>& args) -> std::string;
+using Exector = auto (*)(Connection* ctx, const std::vector<std::string>& args) -> ExecResult;
 
 // PreFunc analyses command line when queued command to `multi`
 // returns related write keys and read keys
@@ -24,7 +42,7 @@ public:
         : name_(name), arity_(arity), first_key_(first_key), last_key_(last_key), exec_(exector),
           prepare_(prepare) {}
 
-    auto exec(Connection* ctx, const std::vector<std::string>& args) const -> std::string {
+    auto exec(Connection* ctx, const std::vector<std::string>& args) const -> ExecResult {
         return exec_(ctx, args);
     }
 

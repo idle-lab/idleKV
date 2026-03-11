@@ -1,5 +1,6 @@
 #pragma once
 
+#include "server/el_pool.h"
 #include <asio/asio.hpp>
 #include <asio/awaitable.hpp>
 #include <string>
@@ -11,6 +12,8 @@ public:
     Handler(asio::ip::tcp::endpoint ep) : ep_(ep) {}
 
     Handler(const std::string& ip, uint16_t port) : ep_(asio::ip::make_address(ip), port) {}
+
+    virtual auto init(EventLoop* el) -> void = 0;
 
     virtual auto handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> = 0;
 

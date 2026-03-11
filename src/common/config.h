@@ -1,7 +1,6 @@
 #pragma once
 
 #include <CLI11/CLI11.hpp>
-#include <cstddef>
 #include <cstdint>
 #include <spdlog/spdlog.h>
 #include <string>

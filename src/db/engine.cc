@@ -1,8 +1,7 @@
 #include "db/engine.h"
 
-#include "common/logger.h"
 #include "redis/connection.h"
-#include "redis/protocol/error.h"
+#include "redis/error.h"
 
 #include <cstdint>
 #include <tuple>
@@ -17,20 +16,12 @@ auto IdleEngine::init_command() -> void {
     init_list(this);
 }
 
-auto to_lower(std::string s) -> std::string {
-    std::transform(s.begin(), s.end(), s.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return s;
-}
-
 auto IdleEngine::exec(Connection* conn, const std::vector<std::string>& args) noexcept
-    -> std::string {
-    auto cmd_name = to_lower(args[0]);
+    -> ExecResult {
 
-    auto cmd = get_cmd(cmd_name);
+    auto cmd = get_cmd(args[0]);
     if (cmd == nullptr) {
-        LOG(debug, "unk: {}", cmd_name);
-        return UnknownCmdErr::make_reply(cmd_name);
+        return ExecResult(ExecResult::Status::ERR, fmt::format(kUnknownCmdErrFmt, args[0]));
     }
 
     // if (!cmd->verification(args)) {

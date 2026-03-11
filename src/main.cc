@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
         auto srv = std::make_shared<idlekv::Server>(cfg);
         auto eng = std::make_shared<idlekv::IdleEngine>(cfg, heap);
 
-        srv->register_handler(std::make_unique<idlekv::RedisService>(cfg, eng, srv->event_loop_pool()));
+        srv->register_handler(std::make_unique<idlekv::RedisService>(cfg, eng));
         // may be support rpc/http ?
 
         srv->listen_and_server();

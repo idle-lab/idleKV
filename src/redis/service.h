@@ -6,7 +6,6 @@
 #include "redis/service_interface.h"
 #include "server/el_pool.h"
 #include "server/handler.h"
-#include "server/server.h"
 #include "utils/pool/pool.h"
 
 #include <asio/awaitable.hpp>
@@ -17,7 +16,6 @@
 #include <list>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace idlekv {
@@ -27,41 +25,27 @@ namespace idlekv {
 class RedisService : public Handler, public ServiceInterface {
 public:
     using ConnectionPtr = std::unique_ptr<Connection>;
+    class ServiceTLState {
+    public:
+        auto conn_pool() -> utils::Pool<ConnectionPtr>& { return conn_pool_; }
+        auto conn_list() -> std::list<Connection*>& { return conn_list_; }
+    private:
+        utils::Pool<ConnectionPtr> conn_pool_;
+        std::list<Connection*> conn_list_;
+    };
 
-    RedisService(const Config& cfg, const std::shared_ptr<IdleEngine>& engine, EventLoopPool* elp)
-        : Handler(cfg.ip_, std::atoi(cfg.port_.c_str())), engine_(engine) {
-        elp->await_foreach([this](size_t, EventLoop* el) {
-            conn_pool_.set_pool_size(64);
-            conn_pool_.set_new([this]() -> ConnectionPtr {
-                return std::make_unique<Connection>(this);
-            });
+    RedisService(const Config& cfg, const std::shared_ptr<IdleEngine>& engine)
+        : Handler(cfg.ip_, std::atoi(cfg.port_.c_str())), engine_(engine) {}
 
-            el->dispatch([this]()-> asio::awaitable<void> {
-                auto exector = co_await asio::this_coro::executor;
-                asio::steady_timer timer(exector);
-                while (!stop_.load(std::memory_order_acquire)) {
-                    timer.expires_after(kMaxReplyFlushInterval);
-
-                    co_await timer.async_wait();
-
-                    for (auto& conn : conn_list_) {
-                        if (stop_.load(std::memory_order_acquire)) {
-                            co_return;
-                        }
-                        if (conn == nullptr || conn->closed()) {
-                            continue;
-                        }
-                        co_await conn->flush();
-                    }
-                }
-            }());
-        });
-
-    }
-
+    virtual auto init(EventLoop* el) -> void override;
     virtual auto handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> override;
+    virtual auto exec(Connection*, std::vector<std::string>& args) noexcept -> asio::awaitable<void>  override;
 
-    virtual auto exec(Connection*, const std::vector<std::string>& args) noexcept -> std::string override;
+    static auto tlocal() -> ServiceTLState* { return tl_; }
+
+    auto stopped() -> bool {
+        return stop_.load(std::memory_order_acquire);
+    }
 
     virtual void stop() override {
         stop_.store(true, std::memory_order_release);
@@ -78,8 +62,10 @@ private:
 
     std::atomic<bool> stop_{false};
 
-    static thread_local utils::Pool<ConnectionPtr> conn_pool_;
-    static thread_local std::list<ConnectionPtr> conn_list_;
+    static thread_local ServiceTLState* tl_;
 };
+
+
+
 
 } // namespace idlekv

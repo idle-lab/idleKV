@@ -7,6 +7,7 @@
 #include <asio/awaitable.hpp>
 #include <asiochan/asiochan.hpp>
 #include <chrono>
+#include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -22,6 +23,29 @@ namespace idlekv {
 constexpr size_t kDefaultReadBufferSize = 2048;
 constexpr size_t kMaxBufferSize         = 8192;
 using byte                              = char;
+
+constexpr const char* CRLF = "\r\n";
+constexpr const char* SIMPLE_STRING_PREFIX = "+";
+constexpr const char* ERROR_PREFIX         = "-";
+constexpr const char* INTEGER_PREFIX       = ":";
+constexpr const char* BULK_STRING_PREFIX   = "$";
+constexpr const char* ARRAY_PREFIX         = "*";
+
+enum class DataType : char {
+    String     = '+',
+    Error      = '-',
+    Integers   = ':',
+    BulkString = '$',
+    Arrays     = '*'
+};
+
+auto operator==(DataType dt, char prefix) -> bool;
+
+
+constexpr auto kMaxReplyFlushCount = IOV_MAX - 2;
+constexpr auto kMaxReplyFlushBytes = 32 * KB;
+constexpr auto kMaxReplyFlushInterval = std::chrono::microseconds(50);
+
 
 class BufView {
 public:
@@ -198,13 +222,16 @@ private:
     Reader* rd_;
 };
 
-constexpr auto kMaxReplyFlushCount = 64;
-constexpr auto kMaxReplyFlushBytes = 32 * KB;
-constexpr auto kMaxReplyFlushInterval = std::chrono::microseconds(50);
 
 class Sender {
 public:
     Sender(Writer* wr) : wr_(wr) { }
+
+    auto send_simple_string(std::string&&) -> asio::awaitable<void>;
+    auto send_ok() -> asio::awaitable<void> { return send_simple_string("OK"); }
+    auto send_pong() -> asio::awaitable<void> { return send_simple_string("PONG"); }
+
+    auto send_error(std::string&&) -> asio::awaitable<void>;
 
     auto send(std::string&&) -> asio::awaitable<void>;
 
@@ -214,11 +241,9 @@ public:
 
     auto get_error() -> std::error_code { return ec_; }
 
-    auto set_mode(bool batched) -> void { batched_ = batched; }
-
     auto clear() -> void {
         batched_reply_.clear();
-        batched_size_ = batched_count_ = 0;
+        batched_size_ = pieces_count_ = 0;
         ec_ = std::error_code{};
         wr_->clear();
     }
@@ -226,10 +251,10 @@ public:
 private:
     // hold the ownership of reply
     std::deque<std::string> batched_reply_;
-    size_t                  batched_size_{0}, batched_count_{0};
+    size_t                  batched_size_{0}, pieces_count_{0};
     std::chrono::steady_clock::time_point last_flushed_ = std::chrono::steady_clock::now();
 
-    bool batched_{true};
+    bool flushing_{false};
 
     std::error_code ec_;
 

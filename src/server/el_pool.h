@@ -4,6 +4,7 @@
 
 #include <asio/awaitable.hpp>
 #include <asio/co_spawn.hpp>
+#include <asio/detached.hpp>
 #include <asio/executor_work_guard.hpp>
 #include <asio/io_context.hpp>
 #include <asio/post.hpp>
@@ -46,8 +47,8 @@ public:
 
     // dispatch a coroutine
     template <class RetType>
-    auto dispatch(asio::awaitable<RetType>&& aw) -> std::future<RetType> {
-        return asio::co_spawn(io_, std::move(aw), asio::use_future);
+    auto dispatch(asio::awaitable<RetType>&& aw) -> void {
+        return asio::co_spawn(io_, std::move(aw), asio::detached);
     }
 
     // wait for the function to finish executing and return the result.
@@ -61,7 +62,7 @@ public:
     // wait for the coroutine to finish executing and return the result.
     template <class RetType>
     auto await_dispatch(asio::awaitable<RetType>&& aw) -> RetType {
-        auto fut = dispatch(std::move(aw));
+        auto fut = asio::co_spawn(io_, std::move(aw), asio::use_future);
         return fut.get();
     }
 
@@ -143,9 +144,9 @@ public:
 
     // dispatch a coroutine
     template <class RetType>
-    auto dispatch(asio::awaitable<RetType> aw) -> std::optional<std::future<RetType>> {
+    auto dispatch(asio::awaitable<RetType> aw) -> void {
         if (!is_running_.load(std::memory_order_acquire)) {
-            return std::nullopt;
+            return ;
         }
         return pick_up_el()->dispatch(std::move(aw));
     }

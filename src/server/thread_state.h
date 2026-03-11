@@ -27,6 +27,7 @@ public:
 
     auto data_heap() -> mi_heap_t* { return data_heap_; }
 
+    auto pool_index() -> size_t { return pool_index_; }
 
 private:
     EventLoop* el_;
