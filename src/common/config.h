@@ -13,6 +13,8 @@ constexpr uint64_t KB = 1024 * B;
 constexpr uint64_t MB = 1024 * KB;
 constexpr uint64_t GB = 1024 * MB;
 
+#define DISCARD_RESULT(expr) void(expr);
+
 namespace idlekv {
 
 class Config {

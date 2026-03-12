@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/asio_no_exceptions.h"
 #include "utils/cpu/basic.h"
 
 #include <asio/awaitable.hpp>
@@ -146,7 +147,7 @@ public:
     template <class RetType>
     auto dispatch(asio::awaitable<RetType> aw) -> void {
         if (!is_running_.load(std::memory_order_acquire)) {
-            return ;
+            return;
         }
         return pick_up_el()->dispatch(std::move(aw));
     }

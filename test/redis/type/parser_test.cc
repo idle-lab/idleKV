@@ -1,4 +1,4 @@
-#include "redis/protocol/parser.h"
+#include "redis/parser.h"
 
 #include <algorithm>
 #include <asio/asio.hpp>
@@ -8,7 +8,6 @@
 #include <cstring>
 #include <gtest/gtest.h>
 #include <memory>
-#include <optional>
 #include <string>
 #include <system_error>
 #include <vector>

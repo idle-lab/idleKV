@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "common/asio_no_exceptions.h"
 #include "common/config.h"
 #include "common/result.h"
 
@@ -24,7 +25,7 @@ constexpr size_t kDefaultReadBufferSize = 2048;
 constexpr size_t kMaxBufferSize         = 8192;
 using byte                              = char;
 
-constexpr const char* CRLF = "\r\n";
+constexpr const char* CRLF                 = "\r\n";
 constexpr const char* SIMPLE_STRING_PREFIX = "+";
 constexpr const char* ERROR_PREFIX         = "-";
 constexpr const char* INTEGER_PREFIX       = ":";
@@ -41,11 +42,8 @@ enum class DataType : char {
 
 auto operator==(DataType dt, char prefix) -> bool;
 
-
-constexpr auto kMaxReplyFlushCount = IOV_MAX - 2;
-constexpr auto kMaxReplyFlushBytes = 32 * KB;
-constexpr auto kMaxReplyFlushInterval = std::chrono::microseconds(50);
-
+constexpr auto kMaxReplyFlushCount    = IOV_MAX - 2;
+constexpr auto kMaxReplyFlushBytes    = 2 * KB;
 
 class BufView {
 public:
@@ -72,22 +70,30 @@ class IOBuf {
 public:
     IOBuf(size_t cap) { reserve(cap); }
 
+    auto defrag() -> void {
+        if (r_ == 0) {
+            return;
+        }
+
+        if (w_ > r_) {
+            memmove(buf_, buf_ + r_, w_ - r_);
+            w_ -= r_;
+            r_ = 0;
+        } else {
+            w_ = r_ = 0;
+        }
+    }
+
     auto write_view() -> BufView { return BufView{buf_ + w_, cap_ - w_}; }
-
     auto write_size() -> size_t { return cap_ - w_; }
-
     auto commit(size_t n) -> void { w_ += n; }
 
     auto read_view() -> BufView { return BufView{buf_ + r_, w_ - r_}; }
-
     auto buffered() const -> bool { return w_ - r_; }
-
     auto consume(size_t n) -> void { r_ += n; }
 
     auto capacity() const -> size_t { return cap_; }
-
     auto empty() const -> bool { return r_ == w_; }
-
     auto clear() -> void {
         r_ = 0;
         w_ = 0;
@@ -128,15 +134,15 @@ public:
     // return a single line with '\n'
     auto read_line() noexcept -> asio::awaitable<ResultT<std::string>>;
 
-    auto read_bytes(size_t len) noexcept -> asio::awaitable<ResultT<std::string>>;
+    auto read_line_view() noexcept -> asio::awaitable<ResultT<std::string_view>>;
+
+    auto read_bytes_to(byte* buf, size_t len) noexcept -> asio::awaitable<ResultT<std::monostate>>;
 
     auto fill() -> asio::awaitable<std::error_code>;
 
     auto has_more() -> bool;
 
-    auto claer() -> void {
-        buf_.clear();
-    }
+    auto claer() -> void { buf_.clear(); }
 
 protected:
     virtual auto read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
@@ -153,6 +159,7 @@ public:
     // auto write_pieces(Ts&&... pieces) -> asio::awaitable<void>;    // Copy pieces into buffer and
     // reference buffer auto write_ref(std::string_view s) -> asio::awaitable<void>;
 
+    // caller should ensure that s is valid until the next flush.
     auto write(std::string_view s) -> void;
 
     auto flush() -> asio::awaitable<std::error_code>;
@@ -165,7 +172,6 @@ public:
 protected:
     virtual auto write_impl(const byte* data, size_t size) noexcept
         -> asio::awaitable<ResultT<size_t>> = 0;
-
     virtual auto writev_impl(const std::vector<BufView>& bufs) noexcept
         -> asio::awaitable<ResultT<size_t>> = 0;
 
@@ -209,31 +215,29 @@ private:
 
 class Parser {
 public:
-    Parser(Reader* rd) : rd_(rd) {}
+    Parser(Reader* rd) : rd_(rd), buf_(1024) {}
 
     // parse a Redis command
     auto parse_one() noexcept -> asio::awaitable<ParserResut>;
 
-    auto clear() -> void {
-        rd_->claer();
-    }
+    auto clear() -> void { rd_->claer(); }
 
 private:
     Reader* rd_;
+    IOBuf  buf_;
 };
-
 
 class Sender {
 public:
-    Sender(Writer* wr) : wr_(wr) { }
+    Sender(Writer* wr) : wr_(wr) {
+        batched_reply_.resize(kMaxReplyFlushCount);
+    }
 
-    auto send_simple_string(std::string&&) -> asio::awaitable<void>;
-    auto send_ok() -> asio::awaitable<void> { return send_simple_string("OK"); }
-    auto send_pong() -> asio::awaitable<void> { return send_simple_string("PONG"); }
+    auto send_simple_string(std::string_view s) -> asio::awaitable<void>;
+    auto send_ok() -> asio::awaitable<void>;
+    auto send_pong() -> asio::awaitable<void>;
 
-    auto send_error(std::string&&) -> asio::awaitable<void>;
-
-    auto send(std::string&&) -> asio::awaitable<void>;
+    auto send_error(std::string_view s) -> asio::awaitable<void>;
 
     auto flush() -> asio::awaitable<void>;
 
@@ -242,19 +246,16 @@ public:
     auto get_error() -> std::error_code { return ec_; }
 
     auto clear() -> void {
-        batched_reply_.clear();
-        batched_size_ = pieces_count_ = 0;
-        ec_ = std::error_code{};
+        batched_size_ = batched_count_ = 0;
+        ec_                           = std::error_code{};
         wr_->clear();
     }
 
 private:
     // hold the ownership of reply
-    std::deque<std::string> batched_reply_;
-    size_t                  batched_size_{0}, pieces_count_{0};
+    std::vector<std::string>              batched_reply_;
+    size_t                                batched_size_{0}, batched_count_{0};
     std::chrono::steady_clock::time_point last_flushed_ = std::chrono::steady_clock::now();
-
-    bool flushing_{false};
 
     std::error_code ec_;
 

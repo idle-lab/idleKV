@@ -16,9 +16,7 @@ namespace idlekv {
 // IdleEngine is idlekv store engine with full capabilities including multiple database.
 class IdleEngine {
 public:
-    IdleEngine(const Config& cfg, mi_heap_t* heap) : heap_(heap) {
-        init_command();
-    }
+    IdleEngine(const Config& cfg, mi_heap_t* heap) : heap_(heap) { init_command(); }
 
     auto exec(Connection*, const std::vector<std::string>& args) noexcept -> ExecResult;
 
@@ -36,8 +34,8 @@ private:
     mi_heap_t* heap_;
 
     // read-only
-    std::unordered_map<std::string, Cmd>    cmd_map_;
-    std::vector<std::unique_ptr<Shard>>     shard_set_;
+    std::unordered_map<std::string, Cmd> cmd_map_;
+    std::vector<std::unique_ptr<Shard>>  shard_set_;
 };
 
 auto init_systemcmd(IdleEngine*) -> void;

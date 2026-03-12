@@ -18,10 +18,9 @@ auto IdleEngine::init_command() -> void {
 
 auto IdleEngine::exec(Connection* conn, const std::vector<std::string>& args) noexcept
     -> ExecResult {
-
     auto cmd = get_cmd(args[0]);
     if (cmd == nullptr) {
-        return ExecResult(ExecResult::Status::ERR, fmt::format(kUnknownCmdErrFmt, args[0]));
+        return ExecResult(ExecResult::ERR, fmt::format(kUnknownCmdErrFmt, args[0]));
     }
 
     // if (!cmd->verification(args)) {

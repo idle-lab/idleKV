@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common/asio_no_exceptions.h"
+
 #include <asio/asio.hpp>
 #include <asiochan/asiochan.hpp>
 #include <chrono>

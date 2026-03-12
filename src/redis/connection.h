@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common/asio_no_exceptions.h"
+#include "common/config.h"
 #include "common/logger.h"
 #include "redis/parser.h"
 #include "redis/service_interface.h"
@@ -22,8 +24,7 @@ namespace idlekv {
 class Connection : public Reader, public Writer {
 public:
     explicit Connection(ServiceInterface* service)
-        : Reader(kDefaultReadBufferSize), Writer(256), p_(this),
-          s_(this), service_(service) {}
+        : Reader(kDefaultReadBufferSize), Writer(256), p_(this), s_(this), service_(service) {}
 
     virtual auto read_impl(byte* buf, size_t size) noexcept
         -> asio::awaitable<ResultT<size_t>> override;
@@ -39,39 +40,28 @@ public:
 
     auto flush() -> asio::awaitable<void>;
 
-    auto reset(asio::ip::tcp::socket&& socket) {
-        CHECK(socket_.has_value() == false) << "override a connection that is currently in use";
-        socket_.emplace(std::move(socket));
-        p_.clear();
-        s_.clear();
-        ec_ = std::error_code{};
-    }
-
-    auto reset() {
-        if (socket_.has_value()) {
-            if (socket_->is_open()) {
-                socket_->close();
-            }
-            socket_.reset();
-        }
-    }
+    auto reset(asio::ip::tcp::socket&& socket) -> void;
+    auto reset() -> void;
 
     auto sender() -> Sender& { return s_; }
-
     auto remote_endpoint() const -> asio::ip::tcp::endpoint {
-        return socket_->remote_endpoint(); 
+        if (!socket_.has_value()) {
+            return {};
+        }
+
+        std::error_code ec;
+        auto            ep = socket_->remote_endpoint(ec);
+        return ec ? asio::ip::tcp::endpoint{} : ep;
     }
 
-    auto closed() const -> bool {
-        return ec_|| !(socket_.has_value() && socket_->is_open());
-    }
+    auto closed() const -> bool { return ec_ || !(socket_.has_value() && socket_->is_open()); }
 
 private:
     // fill reads a new chunk into the buffer.
     auto fill() noexcept -> asio::awaitable<std::error_code>;
 
     std::optional<asio::ip::tcp::socket> socket_;
-    std::error_code ec_;
+    std::error_code                      ec_;
 
     Parser p_;
     Sender s_;

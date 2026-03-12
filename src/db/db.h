@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/asio_no_exceptions.h"
 #include "db/storage/kvstore.h"
 #include "db/storage/result.h"
 

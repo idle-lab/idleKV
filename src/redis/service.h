@@ -29,9 +29,10 @@ public:
     public:
         auto conn_pool() -> utils::Pool<ConnectionPtr>& { return conn_pool_; }
         auto conn_list() -> std::list<Connection*>& { return conn_list_; }
+
     private:
         utils::Pool<ConnectionPtr> conn_pool_;
-        std::list<Connection*> conn_list_;
+        std::list<Connection*>     conn_list_;
     };
 
     RedisService(const Config& cfg, const std::shared_ptr<IdleEngine>& engine)
@@ -39,17 +40,14 @@ public:
 
     virtual auto init(EventLoop* el) -> void override;
     virtual auto handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> override;
-    virtual auto exec(Connection*, std::vector<std::string>& args) noexcept -> asio::awaitable<void>  override;
+    virtual auto exec(Connection*, std::vector<std::string>& args) noexcept
+        -> asio::awaitable<void> override;
 
     static auto tlocal() -> ServiceTLState* { return tl_; }
 
-    auto stopped() -> bool {
-        return stop_.load(std::memory_order_acquire);
-    }
+    auto stopped() -> bool { return stop_.load(std::memory_order_acquire); }
 
-    virtual void stop() override {
-        stop_.store(true, std::memory_order_release);
-    }
+    virtual void stop() override { stop_.store(true, std::memory_order_release); }
 
     virtual std::string name() override { return "Redis"; }
 
@@ -64,8 +62,5 @@ private:
 
     static thread_local ServiceTLState* tl_;
 };
-
-
-
 
 } // namespace idlekv

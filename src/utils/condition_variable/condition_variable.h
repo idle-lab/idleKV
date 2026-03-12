@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common/asio_no_exceptions.h"
+
 #include <asio/awaitable.hpp>
 #include <asio/dispatch.hpp>
 #include <asio/io_context.hpp>

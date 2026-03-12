@@ -1,3 +1,4 @@
+#include <asio/as_tuple.hpp>
 #include <common/logger.h>
 #include <utils/timer/timer.h>
 
@@ -22,8 +23,10 @@ auto set_timeout(std::chrono::steady_clock::duration dur) -> asiochan::read_chan
     asio::co_spawn(
         timer_context(),
         [=]() mutable -> asio::awaitable<void> {
-            co_await timer->async_wait(asio::use_awaitable);
-            co_await timeout.write();
+            auto [ec] = co_await timer->async_wait(asio::as_tuple(asio::use_awaitable));
+            if (!ec) {
+                co_await timeout.write();
+            }
         },
         asio::detached);
 

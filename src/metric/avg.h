@@ -27,16 +27,18 @@ public:
         Scope(const Scope&)                    = delete;
         auto operator=(const Scope&) -> Scope& = delete;
 
-        Scope(Scope&& other) noexcept : avg_(other.avg_), start_(other.start_) { other.avg_ = nullptr; }
+        Scope(Scope&& other) noexcept : avg_(other.avg_), start_(other.start_) {
+            other.avg_ = nullptr;
+        }
 
         auto operator=(Scope&& other) noexcept -> Scope& {
             if (this == &other) {
                 return *this;
             }
             finish();
-            avg_        = other.avg_;
-            start_      = other.start_;
-            other.avg_  = nullptr;
+            avg_       = other.avg_;
+            start_     = other.start_;
+            other.avg_ = nullptr;
             return *this;
         }
 
@@ -55,13 +57,9 @@ public:
         clock::time_point start_;
     };
 
-    explicit Avg(std::string name,
-                 clock::duration report_interval = std::chrono::seconds(1),
-                 spdlog::level::level_enum level = spdlog::level::info,
-                 bool report_empty = false)
-        : name_(std::move(name)),
-          report_interval_(report_interval),
-          level_(level),
+    explicit Avg(std::string name, clock::duration report_interval = std::chrono::seconds(1),
+                 spdlog::level::level_enum level = spdlog::level::info, bool report_empty = false)
+        : name_(std::move(name)), report_interval_(report_interval), level_(level),
           report_empty_(report_empty),
           reporter_([this](std::stop_token stop_token) { report_loop(stop_token); }) {}
 
@@ -160,40 +158,31 @@ private:
 
             if (has_bytes) {
                 double seconds = std::chrono::duration<double>(report_interval_).count();
-                double window_rate = seconds <= 0.0 ? 0.0 : static_cast<double>(window_bytes) / seconds;
+                double window_rate =
+                    seconds <= 0.0 ? 0.0 : static_cast<double>(window_bytes) / seconds;
 
                 spdlog::log(level_,
                             "[avg:{}] window_avg={} window_count={} total_avg={} total_count={} "
                             "window_rate={} window_bytes={} total_bytes={}",
-                            name_,
-                            format_duration(window_avg_ns),
-                            window_count,
-                            format_duration(total_avg_ns),
-                            total_count,
-                            format_rate(window_rate),
+                            name_, format_duration(window_avg_ns), window_count,
+                            format_duration(total_avg_ns), total_count, format_rate(window_rate),
                             format_bytes(static_cast<double>(window_bytes)),
                             format_bytes(static_cast<double>(total_bytes)));
                 return;
             }
 
             spdlog::log(level_,
-                        "[avg:{}] window_avg={} window_count={} total_avg={} total_count={}",
-                        name_,
-                        format_duration(window_avg_ns),
-                        window_count,
-                        format_duration(total_avg_ns),
+                        "[avg:{}] window_avg={} window_count={} total_avg={} total_count={}", name_,
+                        format_duration(window_avg_ns), window_count, format_duration(total_avg_ns),
                         total_count);
             return;
         }
 
-        double seconds = std::chrono::duration<double>(report_interval_).count();
+        double seconds     = std::chrono::duration<double>(report_interval_).count();
         double window_rate = seconds <= 0.0 ? 0.0 : static_cast<double>(window_bytes) / seconds;
 
-        spdlog::log(level_,
-                    "[avg:{}] window_rate={} window_bytes={} total_bytes={}",
-                    name_,
-                    format_rate(window_rate),
-                    format_bytes(static_cast<double>(window_bytes)),
+        spdlog::log(level_, "[avg:{}] window_rate={} window_bytes={} total_bytes={}", name_,
+                    format_rate(window_rate), format_bytes(static_cast<double>(window_bytes)),
                     format_bytes(static_cast<double>(total_bytes)));
     }
 
@@ -260,6 +249,5 @@ private:
     std::condition_variable cv_;
     std::jthread            reporter_;
 };
-
 
 } // namespace idlekv

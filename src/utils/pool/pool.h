@@ -19,10 +19,10 @@ public:
     explicit Pool(size_t pool_size = 0, NewFunc new_func = {})
         : pool_size_(pool_size), new_func_(std::move(new_func)) {}
 
-    Pool(const Pool&) = delete;
+    Pool(const Pool&)                    = delete;
     auto operator=(const Pool&) -> Pool& = delete;
 
-    Pool(Pool&&) = delete;
+    Pool(Pool&&)                    = delete;
     auto operator=(Pool&&) -> Pool& = delete;
 
     auto get() -> T {
@@ -54,17 +54,11 @@ public:
         free_list_.emplace_back(std::forward<U>(obj));
     }
 
-    auto clear() -> void {
-        free_list_.clear();
-    }
+    auto clear() -> void { free_list_.clear(); }
 
-    auto size() const -> size_t {
-        return free_list_.size();
-    }
+    auto size() const -> size_t { return free_list_.size(); }
 
-    auto set_new(NewFunc new_func) -> void {
-        new_func_ = std::move(new_func);
-    }
+    auto set_new(NewFunc new_func) -> void { new_func_ = std::move(new_func); }
 
     auto set_pool_size(size_t pool_size) -> void {
         pool_size_ = pool_size;
@@ -72,14 +66,15 @@ public:
             return;
         }
         if (free_list_.size() > pool_size_) {
-            free_list_.erase(free_list_.begin(), free_list_.end() - static_cast<std::ptrdiff_t>(pool_size_));
+            free_list_.erase(free_list_.begin(),
+                             free_list_.end() - static_cast<std::ptrdiff_t>(pool_size_));
         }
     }
 
 private:
     std::vector<T> free_list_;
 
-    size_t pool_size_;
+    size_t  pool_size_;
     NewFunc new_func_;
 };
 

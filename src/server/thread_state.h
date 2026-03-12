@@ -1,6 +1,8 @@
 #pragma once
 
+#include "common/asio_no_exceptions.h"
 #include "server/el_pool.h"
+
 #include <asio/awaitable.hpp>
 #include <asio/co_spawn.hpp>
 #include <asio/detached.hpp>
@@ -18,8 +20,8 @@ class ThreadState {
 public:
     ThreadState() = default;
 
-    static auto init(size_t pool_index, EventLoop* el,
-                     std::thread::native_handle_type thread_id) -> void;
+    static auto init(size_t pool_index, EventLoop* el, std::thread::native_handle_type thread_id)
+        -> void;
 
     static auto tlocal() -> ThreadState* { return state_; }
 

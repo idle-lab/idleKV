@@ -11,10 +11,7 @@ namespace idlekv {
 
 class ExecResult {
 public:
-    enum Status {
-        OK,
-        ERR
-    };
+    enum Status { OK, ERR };
 
     ExecResult(Status s, std::string&& msg) : s_(s), msg_(std::move(msg)) {}
 
@@ -22,10 +19,9 @@ public:
     auto message() -> std::string& { return msg_; }
 
 private:
-    Status s_;
+    Status      s_;
     std::string msg_;
 };
-
 
 // ExecFunc is interface for command executor
 using Exector = auto (*)(Connection* ctx, const std::vector<std::string>& args) -> ExecResult;

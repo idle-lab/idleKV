@@ -7,12 +7,12 @@
 
 namespace idlekv {
 
-constexpr const char* kSyntaxErr = "Err syntax error";
-constexpr const char* kWrongTypeErr = "Err wrong type error";
-constexpr const char* kProtocolErrFmt = "Err protocol error: '{}'";
-constexpr const char* kArgNumErrFmt = "ERR wrong number of arguments for '{}' command";
+constexpr const char* kSyntaxErr        = "Err syntax error";
+constexpr const char* kWrongTypeErr     = "Err wrong type error";
+constexpr const char* kProtocolErrFmt   = "Err protocol error: '{}'";
+constexpr const char* kArgNumErrFmt     = "ERR wrong number of arguments for '{}' command";
 constexpr const char* kUnknownCmdErrFmt = "Err unknown command '{}'";
-constexpr const char* kStandardErr = "Err standard error";
+constexpr const char* kStandardErr      = "Err standard error";
 
 // class Err {
 // public:
@@ -43,7 +43,8 @@ constexpr const char* kStandardErr = "Err standard error";
 //     virtual auto to_bytes() const -> std::string override { return make_reply(); }
 
 //     virtual auto size() const -> size_t override {
-//         return sizeof("-WRONGTYPE Operation against a key holding the wrong kind of value\r\n") - 1;
+//         return sizeof("-WRONGTYPE Operation against a key holding the wrong kind of value\r\n") -
+//         1;
 //     }
 // };
 

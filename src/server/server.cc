@@ -29,37 +29,58 @@ Server::Server(const Config& cfg) {
     cfg_ = &cfg;
     elp_ = std::make_unique<EventLoopPool>();
     elp_->run();
-    elp_->await_foreach(
-        [](size_t i, EventLoop* el) { ThreadState::init(i, el, el->thread_id()); });
+    elp_->await_foreach([](size_t i, EventLoop* el) { ThreadState::init(i, el, el->thread_id()); });
     // 2. 检查/创建数据文件夹
 
     // 3. 恢复数据
 }
 
 auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
-    auto exec = co_await asio::this_coro::executor;
+    auto                    exec = co_await asio::this_coro::executor;
     asio::ip::tcp::acceptor acceptor(exec);
+    std::error_code         ec;
 
     // open the acceptor with the option to reuse the address
-    acceptor.open(h->endpoint().protocol());
-    acceptor.set_option(asio::ip::tcp::acceptor::reuse_address(true));
-    acceptor.bind(h->endpoint());
-    acceptor.listen();
+    DISCARD_RESULT(acceptor.open(h->endpoint().protocol(), ec));
+    if (ec) {
+        LOG(error, "acceptor open failed: {}", ec.message());
+        co_return;
+    }
+
+    DISCARD_RESULT(acceptor.set_option(asio::ip::tcp::acceptor::reuse_address(true), ec));
+    if (ec) {
+        LOG(error, "acceptor set_option failed: {}", ec.message());
+        co_return;
+    }
+
+    DISCARD_RESULT(acceptor.bind(h->endpoint(), ec));
+    if (ec) {
+        LOG(error, "acceptor bind failed: {}", ec.message());
+        co_return;
+    }
+
+    DISCARD_RESULT(acceptor.listen(asio::socket_base::max_listen_connections, ec));
+    if (ec) {
+        LOG(error, "acceptor listen failed: {}", ec.message());
+        co_return;
+    }
 
     LOG(info, "start handler {}, listen on {}:{}", h->name(), h->endpoint().address().to_string(),
         h->endpoint().port());
 
     for (;;) {
-        auto [ec, socket] = co_await acceptor.async_accept(asio::as_tuple(asio::use_awaitable));
+        auto [accept_ec, socket] =
+            co_await acceptor.async_accept(asio::as_tuple(asio::use_awaitable));
 
-        if (ec) {
+        if (accept_ec) {
             // 被主动关闭
-            if (ec == asio::error::operation_aborted || ec == asio::error::bad_descriptor) {
+            if (accept_ec == asio::error::operation_aborted ||
+                accept_ec == asio::error::bad_descriptor) {
                 co_return; // 退出协程
             }
 
             // fd 耗尽
-            if (ec == asio::error::no_descriptors) {
+            if (accept_ec == asio::error::no_descriptors) {
                 LOG(warn, "FD limit reached");
 
                 co_await set_timeout(std::chrono::seconds(1)).read();
@@ -67,12 +88,12 @@ auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
             }
 
             // 临时错误（握手中断等）
-            LOG(warn, "accept error:" + ec.message());
+            LOG(warn, "accept error:" + accept_ec.message());
 
             continue;
         }
 
-        ec = socket.set_option(asio::ip::tcp::no_delay(true), ec);
+        DISCARD_RESULT(socket.set_option(asio::ip::tcp::no_delay(true), ec));
         if (ec) {
             LOG(warn, "set TCP_NODELAY failed: {}", ec.message());
         }

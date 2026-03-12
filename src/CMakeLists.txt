@@ -23,9 +23,10 @@ target_link_libraries(idlekv_core
 target_compile_definitions(idlekv_core
     PUBLIC
         ASIOCHAN_USE_STANDALONE_ASIO=ON
+        ASIO_NO_EXCEPTIONS=1
 )
 
-option(ENABLE_ASIO_IO_URING "Enable Asio io_uring backend" OFF)
+option(ENABLE_ASIO_IO_URING "Enable Asio io_uring backend" ON)
 
 if (ENABLE_ASIO_IO_URING)
     find_library(LIBURING_LIBRARY uring)
@@ -49,7 +50,6 @@ else()
     target_compile_definitions(idlekv_core
         PUBLIC
             ASIO_DISABLE_IO_URING=1
-            ASIO_NO_EXCEPTIONS=1
     )
 endif()
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/asio_no_exceptions.h"
 #include "common/config.h"
 #include "server/el_pool.h"
 #include "server/handler.h"

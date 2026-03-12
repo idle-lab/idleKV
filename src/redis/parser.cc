@@ -14,17 +14,17 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace idlekv {
 
-auto operator==(DataType dt, char prefix) -> bool {
-    return static_cast<char>(dt) == prefix;
-};
+auto operator==(DataType dt, char prefix) -> bool { return static_cast<char>(dt) == prefix; };
 
 namespace {
+
 // debug function
-std::string escape_string(std::string_view s) {
+[[maybe_unused]] std::string escape_string(std::string_view s) {
     std::string out;
     out.reserve(s.size() * 2);
 
@@ -87,17 +87,39 @@ auto Reader::read_line() noexcept -> asio::awaitable<ResultT<std::string>> {
     }
 }
 
-auto Reader::read_bytes(size_t len) noexcept -> asio::awaitable<ResultT<std::string>> {
-    std::string data;
+auto Reader::read_line_view() noexcept -> asio::awaitable<ResultT<std::string_view>> {
+    for (;;) {
+        auto rv  = buf_.read_view();
+        auto pos = std::find(rv.begin(), rv.end(), '\n');
+        if (pos == rv.end()) {
+            CHECK(rv.size() < buf_.capacity()) << "line length exceeds buffer size";
+            buf_.defrag();
+            auto ec = co_await fill();
+            if (ec) {
+                co_return ec;
+            }
+            continue;
+        }
+
+        std::string_view line(rv.data(), pos - rv.data() + 1);
+        buf_.consume(pos + 1 - rv.data());
+        co_return line;
+    }
+}
+
+
+auto Reader::read_bytes_to(byte* buf, size_t len) noexcept -> asio::awaitable<ResultT<std::monostate>> {
+    size_t offset = 0;
 
     for (;;) {
         auto rv = buf_.read_view();
         if (rv.size() >= len) {
-            data.append(rv.data(), len);
+            std::memcpy(buf + offset, rv.data(), len);
             buf_.consume(len);
-            co_return data;
+            co_return std::monostate{};
         } else {
-            data.append(rv.data(), rv.size());
+            std::memcpy(buf + offset, rv.data(), rv.size());
+            offset += rv.size();
             len -= rv.size();
 
             buf_.clear();
@@ -109,13 +131,14 @@ auto Reader::read_bytes(size_t len) noexcept -> asio::awaitable<ResultT<std::str
     }
 }
 
+
+
 auto Reader::fill() -> asio::awaitable<std::error_code> {
     auto wv  = buf_.write_view();
     auto res = co_await read_impl(wv.data(), wv.size());
     if (!res.ok()) {
         co_return res.err();
     }
-
     buf_.commit(res.value());
     co_return std::error_code{};
 }
@@ -149,19 +172,18 @@ auto Writer::flush() -> asio::awaitable<std::error_code> {
 }
 
 auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
-    auto headerRes = co_await rd_->read_line();
+    auto headerRes = co_await rd_->read_line_view();
     if (!headerRes.ok()) {
         co_return headerRes.err();
     }
-
+    
     auto& header = headerRes.value();
     if (header[0] != DataType::Arrays) [[unlikely]] {
         co_return ParserResut(ParserResut::WRONG_TYPE_ERROR, kWrongTypeErr);
     }
-
     int arrLen;
     auto [ptr, err] =
-        std::from_chars(header.c_str() + 1, header.c_str() + header.size() - 2, arrLen);
+        std::from_chars(header.data() + 1, header.data() + header.size() - 2, arrLen);
     if (err != std::errc()) [[unlikely]] {
         co_return std::make_error_code(err);
     }
@@ -169,7 +191,7 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
     std::vector<std::string> args(arrLen);
 
     for (int i = 0; i < arrLen; ++i) {
-        auto lineRes = co_await rd_->read_line();
+        auto lineRes = co_await rd_->read_line_view();
         if (!lineRes.ok()) {
             co_return lineRes.err();
         }
@@ -181,7 +203,7 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
 
         int strLen;
         auto [ptr, err] = std::from_chars(
-            line.c_str() + 1, line.c_str() + line.size() - 2 /* exclude CRLF */, strLen);
+            line.data() + 1, line.data() + line.size() - 2 /* exclude CRLF */, strLen);
         if (err != std::errc()) [[unlikely]] {
             co_return std::make_error_code(err);
         }
@@ -191,57 +213,72 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
             continue;
         }
 
-        auto bytesRes = co_await rd_->read_bytes(strLen + 2 /* include CRLF */);
+        args[i].resize(strLen + 2);
+
+        auto bytesRes = co_await rd_->read_bytes_to(args[i].data(), strLen + 2 /* include CRLF */);
         if (!bytesRes.ok()) {
             co_return bytesRes.err();
         }
 
-        args[i] = std::move(bytesRes.value());
-
-        // pop CRLF
-        args[i].pop_back();
-        args[i].pop_back();
+        // pop the trailing CRLF
+        args[i].resize(strLen);
     }
 
     co_return ParserResut(rd_->has_more() ? ParserResut::HAS_MORE : ParserResut::OK,
                           std::move(args));
 }
 
-auto Sender::send_simple_string(std::string&& s) -> asio::awaitable<void> {
-    pieces_count_ += 3;
+auto build_simple_string_on(byte* buf, std::string_view s) -> size_t {
+    size_t total_len = s.size() + 3; // prefix + CRLF
+    std::memcpy(buf, SIMPLE_STRING_PREFIX, 1);
+    std::memcpy(buf + 1, s.data(), s.size());
+    std::memcpy(buf + 1 + s.size(), CRLF, 2);
+    return total_len;
+}
+
+auto build_error_on(byte* buf, std::string_view s) -> size_t {
+    size_t total_len = s.size() + 3; // prefix + CRLF
+    std::memcpy(buf, ERROR_PREFIX, 1);
+    std::memcpy(buf + 1, s.data(), s.size());
+    std::memcpy(buf + 1 + s.size(), CRLF, 2);
+    return total_len;
+}
+
+auto Sender::send_simple_string(std::string_view s) -> asio::awaitable<void> {
+    batched_reply_[batched_count_].resize(s.size() + 3);
+    build_simple_string_on(batched_reply_[batched_count_].data(), s);
+    wr_->write(batched_reply_[batched_count_]);
+    batched_count_ += 1;
     batched_size_ += s.size() + 3;
-    batched_reply_.emplace_back(std::move(s));
-
-    wr_->write(SIMPLE_STRING_PREFIX);
-    wr_->write(batched_reply_.back());
-    wr_->write(CRLF);
-
 
     if (should_flush()) {
         co_await flush();
     }
 }
 
-auto Sender::send_error(std::string&& s) -> asio::awaitable<void> {
-    pieces_count_ += 3;
-    batched_size_ += s.size() + 3;
-    batched_reply_.emplace_back(std::move(s));
-
-    wr_->write(ERROR_PREFIX);
-    wr_->write(batched_reply_.back());
-    wr_->write(CRLF);
-
+auto Sender::send_ok() -> asio::awaitable<void> {
+    wr_->write("+OK\r\n");
+    batched_size_ += 5;
     if (should_flush()) {
         co_await flush();
     }
 }
 
-auto Sender::send(std::string&& s) -> asio::awaitable<void> {
-    pieces_count_++;
-    batched_size_ += s.size();
-    batched_reply_.emplace_back(std::move(s));
+auto Sender::send_pong() -> asio::awaitable<void> {
+    wr_->write("+PONG\r\n");
+    batched_size_ += 7;
+    if (should_flush()) {
+        co_await flush();
+    }
+}
 
-    wr_->write(batched_reply_.back());
+auto Sender::send_error(std::string_view s) -> asio::awaitable<void> {
+    batched_reply_[batched_count_].resize(s.size() + 3);
+    build_error_on(batched_reply_[batched_count_].data(), s);
+    wr_->write(batched_reply_[batched_count_]);
+
+    batched_count_ += 1;
+    batched_size_ += s.size() + 3;
 
     if (should_flush()) {
         co_await flush();
@@ -249,24 +286,18 @@ auto Sender::send(std::string&& s) -> asio::awaitable<void> {
 }
 
 auto Sender::should_flush() -> bool {
-    return batched_size_ >= kMaxReplyFlushBytes || pieces_count_ >= kMaxReplyFlushCount;
+    return batched_size_ >= kMaxReplyFlushBytes || batched_count_ >= kMaxReplyFlushCount;
 }
 
 auto Sender::flush() -> asio::awaitable<void> {
-    if (batched_reply_.empty()) {
-        co_return ;
+    if (batched_size_ == 0) {
+        co_return;
     }
-    if (flushing_) {
-        co_return ;
-    }
-    
-    flushing_ = true;
-    ec_ = co_await wr_->flush();
 
-    pieces_count_ = 0;
-    batched_size_  = 0;
-    batched_reply_.clear();
-    flushing_ = false;
+    ec_       = co_await wr_->flush();
+
+    batched_count_ = 0;
+    batched_size_ = 0;
 }
 
 } // namespace idlekv

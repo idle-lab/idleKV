@@ -458,8 +458,8 @@ func parseArgs() (*args, error) {
 
 	fs.StringVar(&a.host, "host", "127.0.0.1", "Target host.")
 	fs.IntVar(&a.port, "port", 4396, "Target port.")
-	fs.IntVar(&a.clients, "clients", 64, "Number of concurrent TCP clients.")
-	fs.IntVar(&a.clients, "c", 64, "Number of concurrent TCP clients.")
+	fs.IntVar(&a.clients, "clients", 100, "Number of concurrent TCP clients.")
+	fs.IntVar(&a.clients, "c", 100, "Number of concurrent TCP clients.")
 	fs.IntVar(&a.pipeline, "pipeline", 32, "Number of in-flight PING per round trip per client.")
 	fs.IntVar(&a.pipeline, "P", 1, "Number of in-flight PING per round trip per client.")
 	fs.Float64Var(&a.duration, "duration", 10.0, "Benchmark duration in seconds.")
