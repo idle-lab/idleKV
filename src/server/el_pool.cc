@@ -17,15 +17,18 @@
 namespace idlekv {
 
 auto EventLoop::run() -> void {
+    // start the io loop on its dedicated worker thread.
     th_ = std::jthread([this]() mutable { io_.run(); });
 }
 
 auto EventLoop::stop() -> void {
+    // release the work guard first so io_.run() can exit cleanly.
     io_.stop();
     wg_.reset();
 }
 
 auto EventLoopPool::run() -> void {
+    // create and start all worker event loops before marking the pool ready.
     setup_els();
 
     is_running_.store(true, std::memory_order_release);
@@ -41,6 +44,7 @@ auto EventLoopPool::stop() -> void {
 }
 
 auto EventLoopPool::pick_up_el() -> EventLoop* {
+    // use a simple round-robin cursor to spread connections across loops.
     auto idx = next_el_.load(std::memory_order_relaxed);
 
     auto el = els_[idx++].get();
@@ -54,6 +58,7 @@ auto EventLoopPool::pick_up_el() -> EventLoop* {
 }
 
 auto EventLoopPool::setup_els() -> void {
+    // build a relative-to-absolute cpu map from the current online cpu set.
     auto     online_cpus     = utils::get_online_cpus();
     unsigned num_online_cpus = CPU_COUNT(&online_cpus);
 
@@ -76,6 +81,7 @@ auto EventLoopPool::setup_els() -> void {
     els_.resize(pool_size_);
 
     for (unsigned i = 0; i < pool_size_; ++i) {
+        // pin each event loop thread to a cpu to keep scheduling predictable.
         int      rel_indx = i % num_online_cpus;
         unsigned abs_cpu  = rel_to_abs_cpu[rel_indx];
         els_[i]           = std::make_unique<EventLoop>(abs_cpu);

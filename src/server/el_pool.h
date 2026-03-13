@@ -24,6 +24,9 @@
 #include <vector>
 namespace idlekv {
 
+constexpr auto kMaxBusyCpuTime = std::chrono::milliseconds(100);
+
+// manages a single io_context thread and runs submitted tasks on its bound cpu.
 class EventLoop {
 public:
     EventLoop(unsigned cpu) : io_(1), wg_(asio::make_work_guard(io_)), cpu_(cpu) {}
@@ -82,6 +85,7 @@ private:
     std::jthread th_;
 };
 
+// owns all event loops and distributes work across worker threads.
 class EventLoopPool {
 public:
     template <class RetType>
@@ -155,7 +159,7 @@ public:
     auto pick_up_el() -> EventLoop*;
 
     auto stop() -> void;
-
+    auto pool_size() -> size_t { return pool_size_; }
     auto at(size_t i) -> EventLoop* { return els_[i].get(); }
 
     auto map_cpu_to_threads(size_t cpu) -> std::vector<unsigned>& { return cpu_threads_[cpu]; }

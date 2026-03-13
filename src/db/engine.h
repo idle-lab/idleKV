@@ -5,10 +5,12 @@
 #include "db/db.h"
 #include "db/shard.h"
 #include "redis/connection.h"
+#include "server/el_pool.h"
 
 #include <cstddef>
 #include <memory>
 #include <mimalloc.h>
+#include <unordered_map>
 #include <vector>
 
 namespace idlekv {
@@ -16,27 +18,28 @@ namespace idlekv {
 // IdleEngine is idlekv store engine with full capabilities including multiple database.
 class IdleEngine {
 public:
-    IdleEngine(const Config& cfg, mi_heap_t* heap) : heap_(heap) { init_command(); }
+    IdleEngine(const Config& cfg);
 
-    auto exec(Connection*, const std::vector<std::string>& args) noexcept -> ExecResult;
+    auto init(EventLoopPool* elp) -> void;
+    auto calculate_shard_id(std::string_view key) -> ShardId;
+    auto exec(Connection*, const std::vector<std::string>& args) noexcept -> asio::awaitable<void>;
 
-    // return the database at the specified index. If the index is out of bounds, return null
-    auto select_db(size_t idx) -> std::shared_ptr<DB>;
-
+    auto db_num() const -> size_t { return db_num_; }
     auto get_cmd(const std::string& name) -> Cmd*;
-
     auto register_cmd(const std::string& name, int32_t arity, int32_t first_key, int32_t last_key,
                       Exector exector, Prepare prepare) -> void;
 
 private:
     auto init_command() -> void;
 
-    mi_heap_t* heap_;
-
+    size_t db_num_;
     // read-only
     std::unordered_map<std::string, Cmd> cmd_map_;
     std::vector<std::unique_ptr<Shard>>  shard_set_;
+    size_t shard_num_;
 };
+
+extern std::unique_ptr<IdleEngine> engine;
 
 auto init_systemcmd(IdleEngine*) -> void;
 auto init_strings(IdleEngine*) -> void;

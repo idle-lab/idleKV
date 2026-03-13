@@ -1,7 +1,10 @@
 #pragma once
 
+#include "db/db.h"
+#include "db/result.h"
 #include "redis/connection.h"
 
+#include <asio/awaitable.hpp>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -9,22 +12,23 @@
 
 namespace idlekv {
 
-class ExecResult {
+
+class CmdContext {
 public:
-    enum Status { OK, ERR };
+    CmdContext(Connection* conn, DB* db) : conn_(conn), db_(db) {}
 
-    ExecResult(Status s, std::string&& msg) : s_(s), msg_(std::move(msg)) {}
+    auto connection() -> Connection* { return conn_; }
 
-    auto ok() const -> bool { return s_ == Status::OK; }
-    auto message() -> std::string& { return msg_; }
+    auto db() -> DB* { return db_; }
 
 private:
-    Status      s_;
-    std::string msg_;
+    Connection* conn_;
+
+    DB* db_ = nullptr;
 };
 
 // ExecFunc is interface for command executor
-using Exector = auto (*)(Connection* ctx, const std::vector<std::string>& args) -> ExecResult;
+using Exector = auto (*)(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult;
 
 // PreFunc analyses command line when queued command to `multi`
 // returns related write keys and read keys
@@ -38,7 +42,7 @@ public:
         : name_(name), arity_(arity), first_key_(first_key), last_key_(last_key), exec_(exector),
           prepare_(prepare) {}
 
-    auto exec(Connection* ctx, const std::vector<std::string>& args) const -> ExecResult {
+    auto exec(CmdContext* ctx, const std::vector<std::string>& args) const -> ExecResult {
         return exec_(ctx, args);
     }
 
@@ -58,8 +62,9 @@ public:
     }
 
     auto name() const -> std::string { return name_; }
-
     auto arity() const -> int32_t { return arity_; }
+    auto first_key() const -> int32_t { return first_key_; }
+    auto last_key() const -> int32_t { return last_key_; }
 
 private:
     // name in lowercase letters
@@ -79,5 +84,7 @@ private:
     // prepare returns related keys command
     Prepare prepare_;
 };
+
+
 
 } // namespace idlekv

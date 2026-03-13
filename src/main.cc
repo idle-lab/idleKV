@@ -22,6 +22,8 @@ std::string banner() {
 )";
 }
 
+using namespace idlekv;
+
 int main(int argc, char** argv) {
     try {
         idlekv::Config cfg;
@@ -34,12 +36,12 @@ int main(int argc, char** argv) {
 
         spdlog::set_default_logger(idlekv::make_default_logger());
 
-        auto heap = mi_heap_new();
-
         auto srv = std::make_shared<idlekv::Server>(cfg);
-        auto eng = std::make_shared<idlekv::IdleEngine>(cfg, heap);
 
-        srv->register_handler(std::make_unique<idlekv::RedisService>(cfg, eng));
+        engine = std::make_unique<idlekv::IdleEngine>(cfg);
+        engine->init(srv->event_loop_pool());
+
+        srv->register_handler(std::make_unique<idlekv::RedisService>(cfg));
         // may be support rpc/http ?
 
         srv->listen_and_server();

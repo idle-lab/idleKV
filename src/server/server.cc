@@ -25,14 +25,14 @@
 namespace idlekv {
 
 Server::Server(const Config& cfg) {
-    // 1. 初始化
+    // initialize the event loop pool and thread-local state for each worker.
     cfg_ = &cfg;
     elp_ = std::make_unique<EventLoopPool>();
     elp_->run();
     elp_->await_foreach([](size_t i, EventLoop* el) { ThreadState::init(i, el, el->thread_id()); });
-    // 2. 检查/创建数据文件夹
+    // check or create the data directory.
 
-    // 3. 恢复数据
+    // recover persisted data.
 }
 
 auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
@@ -40,7 +40,7 @@ auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
     asio::ip::tcp::acceptor acceptor(exec);
     std::error_code         ec;
 
-    // open the acceptor with the option to reuse the address
+    // open and prepare the listening socket for this handler.
     DISCARD_RESULT(acceptor.open(h->endpoint().protocol(), ec));
     if (ec) {
         LOG(error, "acceptor open failed: {}", ec.message());
@@ -69,17 +69,18 @@ auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
         h->endpoint().port());
 
     for (;;) {
+        // accept connections continuously and hand them off to worker loops.
         auto [accept_ec, socket] =
             co_await acceptor.async_accept(asio::as_tuple(asio::use_awaitable));
 
         if (accept_ec) {
-            // 被主动关闭
+            // exit when the acceptor is intentionally stopped.
             if (accept_ec == asio::error::operation_aborted ||
                 accept_ec == asio::error::bad_descriptor) {
                 co_return; // 退出协程
             }
 
-            // fd 耗尽
+            // back off briefly when file descriptors are exhausted.
             if (accept_ec == asio::error::no_descriptors) {
                 LOG(warn, "FD limit reached");
 
@@ -87,7 +88,7 @@ auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
                 continue;
             }
 
-            // 临时错误（握手中断等）
+            // keep serving on transient accept errors.
             LOG(warn, "accept error:" + accept_ec.message());
 
             continue;
@@ -118,12 +119,14 @@ auto Server::pick_up_conn_el(asio::ip::tcp::socket& sock) -> EventLoop* {
     //     }
     // }
 
+    // fall back to round-robin selection when no cpu hint is available.
     return res_id == UINT_MAX ? elp_->pick_up_el() : elp_->at(res_id);
 }
 
 void Server::listen_and_server() {
     LOG(info, "start server");
 
+    // initialize every handler on each event loop before accepting traffic.
     elp_->await_foreach([this]([[maybe_unused]] size_t i, EventLoop* el) {
         for (auto& handler : handlers_) {
             handler->init(el);
@@ -133,6 +136,8 @@ void Server::listen_and_server() {
     for (size_t i = 0; i < handlers_.size(); i++) {
         elp_->dispatch(do_accept(handlers_[i].get()));
     }
+
+    // keep a small signal loop on the main thread for graceful shutdown.
     asio::io_context          signals_handler;
     asio::executor_work_guard wg = asio::make_work_guard(signals_handler);
     asio::signal_set          signals(signals_handler, SIGINT, SIGTERM, SIGABRT);
@@ -151,10 +156,12 @@ void Server::register_handler(std::unique_ptr<Handler> handler) {
 }
 
 void Server::stop() {
+    // stop handlers first so they stop producing new work.
     for (auto& handler : handlers_) {
         handler->stop();
     }
 
+    // then stop all worker loops.
     elp_->stop();
     LOG(info, "server stopped");
 }

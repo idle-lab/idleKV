@@ -7,9 +7,9 @@
 namespace idlekv {
 
 // TODO: support jemalloc/tcmalloc?
-class XAlloctor : public std::pmr::memory_resource {
+class XAllocator : public std::pmr::memory_resource {
 public:
-    explicit XAlloctor(mi_heap_t* heap) : heap_(heap) {}
+    explicit XAllocator(mi_heap_t* heap) : heap_(heap) {}
 
     auto heap() -> mi_heap_t* { return heap_; }
 

@@ -12,10 +12,10 @@
 #include <mimalloc.h>
 #include <sched.h>
 #include <thread>
-#include <vector>
 
 namespace idlekv {
 
+// stores per-thread runtime state such as allocator heap and bound event loop.
 class ThreadState {
 public:
     ThreadState() = default;

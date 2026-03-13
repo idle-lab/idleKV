@@ -45,7 +45,7 @@ public:
 
     std::string config_file_path;
 
-    uint8_t db_num_{0};
+    uint8_t db_num_{16};
 
 private:
     CLI::App opts_;

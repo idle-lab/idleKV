@@ -2,7 +2,7 @@
 
 namespace idlekv {
 
-void* XAlloctor::do_allocate(size_t size, size_t align) {
+void* XAllocator::do_allocate(size_t size, size_t align) {
     void* res = mi_heap_malloc_aligned(heap_, size, align);
 
     if (!res)
@@ -15,7 +15,7 @@ void* XAlloctor::do_allocate(size_t size, size_t align) {
     return res;
 }
 
-void XAlloctor::do_deallocate(void* ptr, size_t size, size_t align) {
+void XAllocator::do_deallocate(void* ptr, size_t size, size_t align) {
     size_t usable = mi_usable_size(ptr);
 
     used_ -= usable;

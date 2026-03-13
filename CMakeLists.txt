@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.17)
 project(idlekv)
 
 option(ENABLE_TEST "是否编译单元测试" ON)
+option(ENABLE_BENCHMARK "是否编译基准测试" ON)
 
 include(cmake/utils.cmake)
 
@@ -29,6 +30,9 @@ find_package(Threads REQUIRED)
 
 add_subdirectory(third_part)
 add_subdirectory(src)
+if (ENABLE_BENCHMARK)
+    add_subdirectory(benchmark)
+endif()
 if (ENABLE_TEST)
     add_subdirectory(test)
 endif()

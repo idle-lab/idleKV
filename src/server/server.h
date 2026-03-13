@@ -15,8 +15,7 @@ namespace idlekv {
 
 using asio::awaitable;
 
-// Provide infrastructure such as network I/O and execution context, without involving business
-// logic.
+// coordinates listeners, event loops, and request handlers for the server process.
 class Server {
 public:
     Server(const Config& cfg);

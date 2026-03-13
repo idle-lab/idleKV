@@ -1,6 +1,6 @@
 enable_testing()
 
-file(GLOB_RECURSE TEST_SOURCES "${PROJECT_SOURCE_DIR}/test/*/*test.cc")
+file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/test/*/*test.cc")
 
 add_executable(unit_test ${TEST_SOURCES})
 

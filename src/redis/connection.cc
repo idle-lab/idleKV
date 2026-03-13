@@ -2,17 +2,18 @@
 
 #include "common/logger.h"
 #include "common/result.h"
-#include "metric/avg.h"
+#include "db/engine.h"
 #include "redis/error.h"
 #include "redis/parser.h"
+#include "server/thread_state.h"
 
 #include <asio/as_tuple.hpp>
 #include <asio/awaitable.hpp>
 #include <asio/steady_timer.hpp>
 #include <asio/use_awaitable.hpp>
-#include <chrono>
 #include <cstddef>
 #include <spdlog/spdlog.h>
+#include <string_view>
 #include <system_error>
 
 namespace idlekv {
@@ -67,9 +68,6 @@ auto reply_parse_error(Sender& sender, const ParserResut& res) -> asio::awaitabl
 
 } // namespace
 
-Avg read_avg("read", std::chrono::seconds(2));
-Avg write_avg("write", std::chrono::seconds(2));
-
 auto Connection::read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> {
     if (closed()) {
         co_return ResultT<size_t>(asio::error::not_connected);
@@ -87,9 +85,8 @@ auto Connection::write_impl(const byte* data, size_t size) noexcept
     if (closed()) {
         co_return ResultT<size_t>(asio::error::not_connected);
     }
-    auto [ec, n] =
-        co_await asio::async_write(*socket_, asio::buffer(data, size),
-                                   asio::as_tuple(asio::use_awaitable));
+    auto [ec, n] = co_await asio::async_write(*socket_, asio::buffer(data, size),
+                                              asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_ = ec;
     }
@@ -144,7 +141,6 @@ auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
             }
             break;
         }
-
         co_await service_->exec(this, args);
 
         if (s_.get_error()) {
@@ -173,6 +169,7 @@ auto Connection::reset(asio::ip::tcp::socket&& socket) -> void {
     p_.clear();
     s_.clear();
     ec_ = std::error_code{};
+    db_index_ = 0;
 }
 
 auto Connection::reset() -> void {
@@ -187,6 +184,7 @@ auto Connection::reset() -> void {
         }
         socket_.reset();
     }
+    db_index_ = 0;
 }
 
 } // namespace idlekv

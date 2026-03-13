@@ -12,7 +12,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <deque>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -42,8 +41,8 @@ enum class DataType : char {
 
 auto operator==(DataType dt, char prefix) -> bool;
 
-constexpr auto kMaxReplyFlushCount    = IOV_MAX - 2;
-constexpr auto kMaxReplyFlushBytes    = 2 * KB;
+constexpr auto kMaxReplyFlushCount = IOV_MAX - 2;
+constexpr auto kMaxReplyFlushBytes = 2 * KB;
 
 class BufView {
 public:
@@ -224,18 +223,19 @@ public:
 
 private:
     Reader* rd_;
-    IOBuf  buf_;
+    IOBuf   buf_;
 };
 
 class Sender {
 public:
-    Sender(Writer* wr) : wr_(wr) {
-        batched_reply_.resize(kMaxReplyFlushCount);
-    }
+    Sender(Writer* wr) : wr_(wr) { batched_reply_.resize(kMaxReplyFlushCount); }
 
     auto send_simple_string(std::string_view s) -> asio::awaitable<void>;
     auto send_ok() -> asio::awaitable<void>;
     auto send_pong() -> asio::awaitable<void>;
+    auto send_bulk_string(std::string_view s) -> asio::awaitable<void>;
+    auto send_null_bulk_string() -> asio::awaitable<void>;
+    auto send_integer(int64_t value) -> asio::awaitable<void>;
 
     auto send_error(std::string_view s) -> asio::awaitable<void>;
 
@@ -247,7 +247,7 @@ public:
 
     auto clear() -> void {
         batched_size_ = batched_count_ = 0;
-        ec_                           = std::error_code{};
+        ec_                            = std::error_code{};
         wr_->clear();
     }
 

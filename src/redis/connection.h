@@ -5,6 +5,7 @@
 #include "common/logger.h"
 #include "redis/parser.h"
 #include "redis/service_interface.h"
+#include "server/el_pool.h"
 
 #include <asio/as_tuple.hpp>
 #include <asio/asio.hpp>
@@ -20,6 +21,9 @@
 #include <vector>
 
 namespace idlekv {
+
+class DB;
+class IdleEngine;
 
 class Connection : public Reader, public Writer {
 public:
@@ -44,6 +48,11 @@ public:
     auto reset() -> void;
 
     auto sender() -> Sender& { return s_; }
+
+    auto db_index() const -> size_t { return db_index_; }
+
+    void set_db_index(size_t db_index) { db_index_ = db_index; }
+
     auto remote_endpoint() const -> asio::ip::tcp::endpoint {
         if (!socket_.has_value()) {
             return {};
@@ -67,6 +76,8 @@ private:
     Sender s_;
 
     ServiceInterface* service_;
+    EventLoop* el_;
+    size_t            db_index_ = 0;
 };
 
 } // namespace idlekv

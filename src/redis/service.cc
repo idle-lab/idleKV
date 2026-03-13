@@ -1,6 +1,8 @@
 #include "redis/service.h"
 
 #include "common/logger.h"
+#include "db/command.h"
+#include "db/engine.h"
 #include "server/thread_state.h"
 
 #include <asio/as_tuple.hpp>
@@ -21,9 +23,8 @@ namespace idlekv {
 auto RedisService::init([[maybe_unused]] EventLoop* el) -> void {
     tl_ = new ServiceTLState();
     tl_->conn_pool().set_pool_size(64);
-    tl_->conn_pool().set_new([this]() -> ConnectionPtr {
-        return std::make_unique<Connection>(this);
-    });
+    tl_->conn_pool().set_new(
+        [this]() -> ConnectionPtr { return std::make_unique<Connection>(this); });
 }
 
 auto RedisService::handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> {
@@ -34,7 +35,6 @@ auto RedisService::handle(asio::ip::tcp::socket socket) -> asio::awaitable<void>
     // get a connection from the pool and put it to the front of the list.
     auto conn = conn_pool.get();
     conn->reset(std::move(socket));
-
     conn_list.emplace_front(conn.get());
     auto it = conn_list.begin();
 
@@ -55,20 +55,18 @@ auto RedisService::exec(Connection* c, std::vector<std::string>& args) noexcept
     if (args[0] == "ping") {
         switch (args.size()) {
         case 1:
-            return sender.send_pong();
+            co_await  sender.send_pong();
+            co_return;
         case 2:
-            return sender.send_simple_string(args[1]);
+            co_await sender.send_simple_string(args[1]);
+            co_return;
         default:
-            return sender.send_error("ERR wrong number of arguments for 'ping' command");
+            co_await sender.send_error("ERR wrong number of arguments for 'ping' command");
+            co_return;
         }
     }
 
-    auto res = engine_->exec(c, args);
-    if (res.ok()) {
-        return sender.send_simple_string(std::move(res.message()));
-    } else {
-        return sender.send_error(std::move(res.message()));
-    }
+    co_await engine->exec(c, args);
 }
 
 thread_local RedisService::ServiceTLState* RedisService::tl_ = nullptr;

@@ -35,8 +35,8 @@ public:
         std::list<Connection*>     conn_list_;
     };
 
-    RedisService(const Config& cfg, const std::shared_ptr<IdleEngine>& engine)
-        : Handler(cfg.ip_, std::atoi(cfg.port_.c_str())), engine_(engine) {}
+    RedisService(const Config& cfg)
+        : Handler(cfg.ip_, std::atoi(cfg.port_.c_str())) {}
 
     virtual auto init(EventLoop* el) -> void override;
     virtual auto handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> override;
@@ -55,8 +55,6 @@ public:
 
 private:
     std::vector<std::unique_ptr<Connection>> conns_;
-
-    std::shared_ptr<IdleEngine> engine_;
 
     std::atomic<bool> stop_{false};
 
