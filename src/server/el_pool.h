@@ -33,6 +33,14 @@ public:
 
     auto run() -> void;
 
+    template <class Fn, class... Args>
+        requires std::invocable<Fn, Args...>
+    auto post(Fn&& f, Args&&... args) -> void {
+        asio::post(io_, [fn = std::forward<Fn>(f), ... args = std::forward<Args>(args)]() mutable {
+            std::invoke(fn, args...);
+        });
+    }
+
     // dispatch a function
     template <class Fn, class... Args>
         requires std::invocable<Fn, Args...>

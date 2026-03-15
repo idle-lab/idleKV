@@ -1,9 +1,6 @@
 #include "redis/service.h"
 
-#include "common/logger.h"
-#include "db/command.h"
-#include "db/engine.h"
-#include "server/thread_state.h"
+#include "redis/connection.h"
 
 #include <asio/as_tuple.hpp>
 #include <asio/asio/error.hpp>
@@ -15,20 +12,20 @@
 #include <asio/use_awaitable.hpp>
 #include <asiochan/asiochan.hpp>
 #include <asiochan/select.hpp>
-#include <memory>
 #include <spdlog/fmt/fmt.h>
 
 namespace idlekv {
 
-auto RedisService::init([[maybe_unused]] EventLoop* el) -> void {
+
+auto RedisService::init(EventLoop* el) -> void {
     tl_ = new ServiceTLState();
-    tl_->conn_pool().set_pool_size(64);
-    tl_->conn_pool().set_new(
-        [this]() -> ConnectionPtr { return std::make_unique<Connection>(this); });
+    tl_->conn_pool().set_pool_size(ServiceTLState::kConnPoolSize);
+    tl_->conn_pool().set_new([el]() -> ConnectionPtr {
+        return std::make_unique<Connection>(el->io_context().get_executor());;
+    });
 }
 
 auto RedisService::handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> {
-    auto  el        = co_await asio::this_coro::executor;
     auto& conn_list = tlocal()->conn_list();
     auto& conn_pool = tlocal()->conn_pool();
 
@@ -38,35 +35,14 @@ auto RedisService::handle(asio::ip::tcp::socket socket) -> asio::awaitable<void>
     conn_list.emplace_front(conn.get());
     auto it = conn_list.begin();
 
+    asio::co_spawn(conn->get_executor(), conn->handle_send(), asio::detached);
+
     co_await conn->handle_requests();
 
     conn_list.erase(it);
 
     conn->reset();
     conn_pool.put(std::move(conn));
-}
-
-auto RedisService::exec(Connection* c, std::vector<std::string>& args) noexcept
-    -> asio::awaitable<void> {
-    auto& sender = c->sender();
-
-    std::transform(args[0].begin(), args[0].end(), args[0].begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if (args[0] == "ping") {
-        switch (args.size()) {
-        case 1:
-            co_await  sender.send_pong();
-            co_return;
-        case 2:
-            co_await sender.send_simple_string(args[1]);
-            co_return;
-        default:
-            co_await sender.send_error("ERR wrong number of arguments for 'ping' command");
-            co_return;
-        }
-    }
-
-    co_await engine->exec(c, args);
 }
 
 thread_local RedisService::ServiceTLState* RedisService::tl_ = nullptr;

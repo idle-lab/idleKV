@@ -4,8 +4,8 @@
 
 #include <algorithm>
 #include <asio/any_io_executor.hpp>
-#include <asio/async_result.hpp>
 #include <asio/associated_executor.hpp>
+#include <asio/async_result.hpp>
 #include <asio/awaitable.hpp>
 #include <asio/dispatch.hpp>
 #include <asio/use_awaitable.hpp>
@@ -80,10 +80,9 @@ public:
             [this, item = T(std::forward<U>(value))](auto handler) mutable {
                 using Handler = decltype(handler);
 
-                auto waiter = std::shared_ptr<PushWaiterBase>(
-                    std::make_shared<PushWaiter<Handler>>(
-                        asio::get_associated_executor(handler, asio::system_executor()),
-                        std::move(handler), std::move(item)));
+                auto waiter = std::shared_ptr<PushWaiterBase>(std::make_shared<PushWaiter<Handler>>(
+                    asio::get_associated_executor(handler, asio::system_executor()),
+                    std::move(handler), std::move(item)));
 
                 std::shared_ptr<PopWaiterBase> pop_waiter;
                 std::optional<T>               ready_value;
@@ -151,10 +150,9 @@ public:
             [this](auto handler) mutable {
                 using Handler = decltype(handler);
 
-                auto waiter = std::shared_ptr<PopWaiterBase>(
-                    std::make_shared<PopWaiter<Handler>>(
-                        asio::get_associated_executor(handler, asio::system_executor()),
-                        std::move(handler)));
+                auto waiter = std::shared_ptr<PopWaiterBase>(std::make_shared<PopWaiter<Handler>>(
+                    asio::get_associated_executor(handler, asio::system_executor()),
+                    std::move(handler)));
 
                 std::shared_ptr<PushWaiterBase> push_waiter;
                 std::optional<T>                value;
@@ -302,7 +300,7 @@ private:
     }
 
     static auto complete_pop(const std::shared_ptr<PopWaiterBase>& waiter,
-                             std::optional<T> value) noexcept -> void {
+                             std::optional<T>                      value) noexcept -> void {
         if (!waiter) {
             return;
         }
@@ -312,8 +310,8 @@ private:
         });
     }
 
-    static auto complete_push(const std::shared_ptr<PushWaiterBase>& waiter,
-                              bool accepted) noexcept -> void {
+    static auto complete_push(const std::shared_ptr<PushWaiterBase>& waiter, bool accepted) noexcept
+        -> void {
         if (!waiter) {
             return;
         }

@@ -22,12 +22,13 @@ public:
 
     auto init(EventLoopPool* elp) -> void;
     auto calculate_shard_id(std::string_view key) -> ShardId;
-    auto exec(Connection*, const std::vector<std::string>& args) noexcept -> asio::awaitable<void>;
+    auto dispatch_cmd(Connection*, const std::vector<std::string>& args) noexcept -> void;
 
     auto db_num() const -> size_t { return db_num_; }
     auto get_cmd(const std::string& name) -> Cmd*;
     auto register_cmd(const std::string& name, int32_t arity, int32_t first_key, int32_t last_key,
-                      Exector exector, Prepare prepare) -> void;
+                      Exector exector, Prepare prepare,
+                      CmdFlags flags = CmdFlags::None) -> void;
 
 private:
     auto init_command() -> void;
@@ -36,7 +37,7 @@ private:
     // read-only
     std::unordered_map<std::string, Cmd> cmd_map_;
     std::vector<std::unique_ptr<Shard>>  shard_set_;
-    size_t shard_num_;
+    size_t                               shard_num_;
 };
 
 extern std::unique_ptr<IdleEngine> engine;

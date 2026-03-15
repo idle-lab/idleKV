@@ -17,7 +17,7 @@ namespace idlekv {
 // DB stores data and execute user's commands
 class DB {
 public:
-    using StoreType = KvStore<DummyImpl<std::string, DataEntity>>;
+    using StoreType = KvStore<DummyImpl<std::string, std::shared_ptr<DataEntity>>>;
 
     explicit DB(std::pmr::memory_resource* mr);
 
@@ -25,7 +25,7 @@ public:
 
     auto set(std::string key, DataEntity value) -> Result<bool>;
 
-    auto get(const std::string& key) -> Result<std::optional<DataEntity>>;
+    auto get(const std::string& key) -> Result<std::shared_ptr<DataEntity>>;
 
     auto del(const std::string& key) -> Result<bool>;
 

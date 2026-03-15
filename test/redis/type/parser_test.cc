@@ -39,6 +39,66 @@ private:
     size_t      pos_ = 0;
 };
 
+class MockWriter : public Writer {
+public:
+    explicit MockWriter(size_t cap) : Writer(cap) {}
+
+    template <typename... Ts>
+    auto write_pieces_sync(Ts&&... pieces) -> std::error_code {
+        asio::io_context               ctx;
+        std::optional<std::error_code> ec;
+        asio::co_spawn(
+            ctx,
+            [this, &ec, ... pieces = std::forward<Ts>(pieces)]() mutable -> asio::awaitable<void> {
+                ec = co_await write_pieces(pieces...);
+                co_return;
+            },
+            asio::detached);
+        ctx.run();
+        return ec.value_or(std::make_error_code(std::errc::io_error));
+    }
+
+    auto flush_to_string() -> std::error_code {
+        asio::io_context                ctx;
+        std::optional<std::error_code>  ec;
+        asio::co_spawn(
+            ctx,
+            [&]() -> asio::awaitable<void> {
+                ec = co_await flush();
+                co_return;
+            },
+            asio::detached);
+        ctx.run();
+        return ec.value_or(std::make_error_code(std::errc::io_error));
+    }
+
+    auto output() const -> const std::string& { return output_; }
+    auto flush_calls() const -> size_t { return flush_calls_; }
+
+private:
+    auto write_impl(const byte* data, size_t size) noexcept
+        -> asio::awaitable<ResultT<size_t>> override {
+        flush_calls_ += 1;
+        output_.append(data, size);
+        co_return ResultT<size_t>(std::error_code{}, size);
+    }
+
+    auto writev_impl(const std::vector<BufView>& bufs) noexcept
+        -> asio::awaitable<ResultT<size_t>> override {
+        flush_calls_ += 1;
+        size_t total = 0;
+        for (const auto& buf : bufs) {
+            output_.append(buf.data(), buf.size());
+            total += buf.size();
+        }
+
+        co_return ResultT<size_t>(std::error_code{}, total);
+    }
+
+    std::string output_;
+    size_t      flush_calls_{0};
+};
+
 class ParserTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -276,6 +336,79 @@ TEST_F(ParserTest, ParseZaddCommand) {
     EXPECT_EQ(result[1], "myzset1");
     EXPECT_EQ(result[2], "100");
     EXPECT_EQ(result[3], "member");
+}
+
+TEST(WriterTest, WritePiecesPreservesOrderWithExternalViews) {
+    MockWriter  writer(8);
+    std::string prefix = "prefix:";
+    std::string suffix = ":suffix";
+
+    writer.write(prefix);
+    EXPECT_EQ(writer.write_pieces_sync("value=", 42, "\r\n"), std::error_code{});
+    writer.write(suffix);
+
+    EXPECT_EQ(writer.flush_to_string(), std::error_code{});
+    EXPECT_EQ(writer.output(), "prefix:value=42\r\n:suffix");
+}
+
+TEST(WriterTest, WritePiecesKeepsInternalViewsValidAfterReserve) {
+    MockWriter  writer(4);
+    std::string middle = "|";
+    std::string tail   = "|tail";
+
+    EXPECT_EQ(writer.write_pieces_sync("ab"), std::error_code{});
+    writer.write(middle);
+    EXPECT_EQ(writer.write_pieces_sync("0123456789"), std::error_code{});
+    writer.write(tail);
+
+    EXPECT_EQ(writer.flush_to_string(), std::error_code{});
+    EXPECT_EQ(writer.output(), "ab|0123456789|tail");
+    EXPECT_EQ(writer.flush_calls(), 2u);
+}
+
+TEST(WriterTest, WritePiecesRejectsTooLargeBuffer) {
+    MockWriter  writer(8);
+    std::string payload(kMaxBufferSize + 1, 'a');
+
+    EXPECT_EQ(writer.write_pieces_sync(std::string_view(payload)),
+              std::make_error_code(std::errc::no_buffer_space));
+}
+
+TEST(SenderTest, SendSimpleStringUsesWritePieces) {
+    MockWriter writer(8);
+    Sender     sender(&writer);
+
+    asio::io_context ctx;
+    asio::co_spawn(
+        ctx,
+        [&]() -> asio::awaitable<void> {
+            co_await sender.send_simple_string("hello");
+            co_await sender.flush();
+            co_return;
+        },
+        asio::detached);
+    ctx.run();
+
+    EXPECT_EQ(writer.output(), "+hello\r\n");
+}
+
+TEST(SenderTest, SendBulkStringUsesInlineHeaderAndExternalBody) {
+    MockWriter  writer(4);
+    Sender      sender(&writer);
+    std::string payload = "value";
+
+    asio::io_context ctx;
+    asio::co_spawn(
+        ctx,
+        [&]() -> asio::awaitable<void> {
+            co_await sender.send_bulk_string(payload);
+            co_await sender.flush();
+            co_return;
+        },
+        asio::detached);
+    ctx.run();
+
+    EXPECT_EQ(writer.output(), "$5\r\nvalue\r\n");
 }
 
 TEST_F(ParserTest, ParseCommandWithSpaces) {

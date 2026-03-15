@@ -1,135 +1,68 @@
 #pragma once
 
 #include "common/asio_no_exceptions.h"
+#include "common/logger.h"
 
+#include <asio/any_io_executor.hpp>
+#include <asio/as_tuple.hpp>
 #include <asio/awaitable.hpp>
 #include <asio/dispatch.hpp>
+#include <asio/error.hpp>
 #include <asio/io_context.hpp>
 #include <asio/steady_timer.hpp>
 #include <asio/use_awaitable.hpp>
+#include <chrono>
 namespace idlekv {
 
 namespace utils {
 
+constexpr auto kMaxTimePoint = std::chrono::steady_clock::time_point::max();
+
+// a reusable coroutine-level condition variable.
+// only can use in signal-thread, signal io_context environment.
 class ConditionVariable {
-private:
-    struct waiter {
-        waiter*                 prev = nullptr;
-        waiter*                 next = nullptr;
-        std::coroutine_handle<> handle;
-        bool                    queued = false;
-    };
-
 public:
-    explicit ConditionVariable(asio::any_io_executor ex) : executor_(ex) {}
-
-    ConditionVariable(const ConditionVariable&)            = delete;
-    ConditionVariable& operator=(const ConditionVariable&) = delete;
-
-    class awaiter {
-    public:
-        awaiter(ConditionVariable& cv) : cv_(cv) {}
-
-        bool await_ready() noexcept { return false; }
-
-        bool await_suspend(std::coroutine_handle<> h) noexcept {
-            node_.handle = h;
-            cv_.enqueue(&node_);
-            return true;
-        }
-
-        void await_resume() noexcept {}
-
-        ~awaiter() {
-            if (node_.queued) {
-                cv_.remove(&node_);
-            }
-        }
-
-    private:
-        ConditionVariable& cv_;
-        waiter             node_;
-    };
-
-    awaiter async_wait() noexcept { return awaiter(*this); }
-
-    void notify_one() {
-        waiter* w = dequeue();
-        if (!w)
-            return;
-
-        auto h = w->handle;
-
-        asio::dispatch(executor_, [h]() mutable { h.resume(); });
+    ConditionVariable(const asio::any_io_executor& exector) : timer_(exector) {
+        timer_.expires_at(kMaxTimePoint);
     }
 
-    void notify_all() {
-        waiter* w = head_;
-        head_ = tail_ = nullptr;
-
-        while (w) {
-            waiter* next = w->next;
-            w->queued    = false;
-
-            auto h = w->handle;
-
-            asio::dispatch(executor_, [h]() mutable { h.resume(); });
-
-            w = next;
-        }
+    auto notify() -> void { 
+        timer_.cancel(); 
+        timer_.expires_at(kMaxTimePoint);
     }
 
+    auto async_wait() -> asio::awaitable<void> {
+        auto [ec] = co_await timer_.async_wait(asio::as_tuple(asio::use_awaitable));
+        CHECK_EQ(ec, asio::error::operation_aborted);
+    }
+    auto get_executor() -> const asio::any_io_executor& { return timer_.get_executor(); }
+
+    ~ConditionVariable() {}
 private:
-    void enqueue(waiter* w) noexcept {
-        w->queued = true;
-        w->next   = nullptr;
-        w->prev   = tail_;
+    asio::steady_timer timer_;
+};
 
-        if (tail_)
-            tail_->next = w;
-        else
-            head_ = w;
-
-        tail_ = w;
+// a non-reusable coroutine-level condition variable.
+// only can use in signal-thread, signal io_context environment.
+class DisposableConditionVariable {
+public:
+    DisposableConditionVariable(const asio::any_io_executor& exector) : timer_(exector) {
+        timer_.expires_at(kMaxTimePoint);
     }
 
-    waiter* dequeue() noexcept {
-        waiter* w = head_;
-        if (!w)
-            return nullptr;
-
-        head_ = w->next;
-
-        if (head_)
-            head_->prev = nullptr;
-        else
-            tail_ = nullptr;
-
-        w->queued = false;
-        return w;
+    auto notify() -> void { 
+        timer_.cancel(); 
     }
 
-    void remove(waiter* w) noexcept {
-        if (!w->queued)
-            return;
-
-        if (w->prev)
-            w->prev->next = w->next;
-        else
-            head_ = w->next;
-
-        if (w->next)
-            w->next->prev = w->prev;
-        else
-            tail_ = w->prev;
-
-        w->queued = false;
+    auto async_wait() -> asio::awaitable<void> {
+        auto [ec] = co_await timer_.async_wait(asio::as_tuple(asio::use_awaitable));
+        CHECK_EQ(ec, asio::error::operation_aborted);
     }
+    auto get_executor() -> const asio::any_io_executor& { return timer_.get_executor(); }
 
+    ~DisposableConditionVariable() {}
 private:
-    asio::any_io_executor executor_;
-    waiter*               head_ = nullptr;
-    waiter*               tail_ = nullptr;
+    asio::steady_timer timer_;
 };
 
 } // namespace utils

@@ -2,26 +2,33 @@
 
 #include "common/asio_no_exceptions.h"
 #include "common/config.h"
+#include "common/logger.h"
 #include "common/result.h"
 
 #include <asio/asio.hpp>
 #include <asio/awaitable.hpp>
 #include <asiochan/asiochan.hpp>
+#include <charconv>
 #include <chrono>
 #include <climits>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace idlekv {
 
 constexpr size_t kDefaultReadBufferSize = 2048;
-constexpr size_t kMaxBufferSize         = 8192;
+constexpr size_t kDefaultWriteBufferSize = 2048;
+constexpr size_t kMaxReplyFlushCount    = IOV_MAX - 2;
+constexpr size_t kMaxReplyFlushBytes    = 5 * KB;
 using byte                              = char;
 
 constexpr const char* CRLF                 = "\r\n";
@@ -41,8 +48,7 @@ enum class DataType : char {
 
 auto operator==(DataType dt, char prefix) -> bool;
 
-constexpr auto kMaxReplyFlushCount = IOV_MAX - 2;
-constexpr auto kMaxReplyFlushBytes = 2 * KB;
+
 
 class BufView {
 public:
@@ -68,6 +74,19 @@ private:
 class IOBuf {
 public:
     IOBuf(size_t cap) { reserve(cap); }
+    IOBuf(const IOBuf&)                    = delete;
+    auto operator=(const IOBuf&) -> IOBuf& = delete;
+
+    IOBuf(IOBuf&& other) noexcept { move_from(std::move(other)); }
+    auto operator=(IOBuf&& other) noexcept -> IOBuf& {
+        if (this != &other) {
+            release_owned_buffer();
+            move_from(std::move(other));
+        }
+        return *this;
+    }
+
+    ~IOBuf() { release_owned_buffer(); }
 
     auto defrag() -> void {
         if (r_ == 0) {
@@ -84,11 +103,11 @@ public:
     }
 
     auto write_view() -> BufView { return BufView{buf_ + w_, cap_ - w_}; }
-    auto write_size() -> size_t { return cap_ - w_; }
+    auto write_size() const -> size_t { return cap_ - w_; }
     auto commit(size_t n) -> void { w_ += n; }
 
     auto read_view() -> BufView { return BufView{buf_ + r_, w_ - r_}; }
-    auto buffered() const -> bool { return w_ - r_; }
+    auto buffered() const -> size_t { return w_ - r_; }
     auto consume(size_t n) -> void { r_ += n; }
 
     auto capacity() const -> size_t { return cap_; }
@@ -98,8 +117,11 @@ public:
         w_ = 0;
     }
 
+    auto data() -> byte* { return buf_; }
+    auto data() const -> const byte* { return buf_; }
+
     auto reserve(size_t sz) -> void {
-        if (sz < cap_)
+        if (sz <= cap_)
             return;
 
         sz       = std::bit_ceil(sz);
@@ -115,11 +137,30 @@ public:
             ::operator delete[](buf_, std::align_val_t{alignment_});
         }
 
-        buf_ = nb;
-        cap_ = sz;
+        buf_         = nb;
+        cap_         = sz;
     }
 
 private:
+    auto release_owned_buffer() -> void {
+        if (buf_) {
+            ::operator delete[](buf_, std::align_val_t{alignment_});
+        }
+
+        buf_         = nullptr;
+        cap_         = 0;
+        r_           = 0;
+        w_           = 0;
+    }
+
+    auto move_from(IOBuf&& other) -> void {
+        cap_         = std::exchange(other.cap_, 0);
+        buf_         = std::exchange(other.buf_, nullptr);
+        alignment_   = other.alignment_;
+        r_           = std::exchange(other.r_, 0);
+        w_           = std::exchange(other.w_, 0);
+    }
+
     size_t cap_{0};
     byte*  buf_{nullptr};
     size_t alignment_{8};
@@ -132,17 +173,14 @@ public:
 
     // return a single line with '\n'
     auto read_line() noexcept -> asio::awaitable<ResultT<std::string>>;
-
     auto read_line_view() noexcept -> asio::awaitable<ResultT<std::string_view>>;
-
     auto read_bytes_to(byte* buf, size_t len) noexcept -> asio::awaitable<ResultT<std::monostate>>;
 
     auto fill() -> asio::awaitable<std::error_code>;
-
     auto has_more() -> bool;
-
     auto claer() -> void { buf_.clear(); }
 
+    virtual ~Reader() = default;
 protected:
     virtual auto read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
 
@@ -154,20 +192,22 @@ class Writer {
 public:
     Writer(size_t cap) : buf_(cap) {}
 
-    // template <typename... Ts>
-    // auto write_pieces(Ts&&... pieces) -> asio::awaitable<void>;    // Copy pieces into buffer and
-    // reference buffer auto write_ref(std::string_view s) -> asio::awaitable<void>;
+    // Copy small pieces into the internal buffer and append a single owned
+    // slice to vecs_. When the current buffer cannot fit the whole packet,
+    // this coroutine flushes pending output before growing the buffer.
+    template <typename... Ts>
+    auto write_pieces(Ts&&... pieces) -> asio::awaitable<std::error_code>;
 
     // caller should ensure that s is valid until the next flush.
-    auto write(std::string_view s) -> void;
+    auto write(std::string_view s) -> asio::awaitable<std::error_code>;
 
+    // Flush all queued slices, including both owned buffer slices and
+    // externally referenced views added via write().
     auto flush() -> asio::awaitable<std::error_code>;
 
-    auto clear() -> void {
-        buf_.clear();
-        vecs_.clear();
-    }
+    auto clear() -> void { reset_write_state(); }
 
+    virtual ~Writer() = default;
 protected:
     virtual auto write_impl(const byte* data, size_t size) noexcept
         -> asio::awaitable<ResultT<size_t>> = 0;
@@ -175,11 +215,94 @@ protected:
         -> asio::awaitable<ResultT<size_t>> = 0;
 
 private:
-    auto reserve_buf(size_t expected_buffer_cap) -> void;
+    auto reset_write_state() -> void;
+    // Grow the owned buffer on demand. The new capacity is at least 2x the
+    // current one, but never exceeds kMaxBufferSize.
+    // auto reserve_buf(size_t required_piece_size) -> std::error_code;
+    auto write_piece_size(std::string_view piece) const -> size_t;
 
-    IOBuf                buf_;
+    template <typename T>
+        requires(std::integral<std::remove_cvref_t<T>> &&
+                 !std::same_as<std::remove_cvref_t<T>, bool>)
+    auto write_piece_size(T value) const -> size_t;
+
+    auto write_piece(byte*& out, std::string_view piece) -> void;
+
+    template <typename T>
+        requires(std::integral<std::remove_cvref_t<T>> &&
+                 !std::same_as<std::remove_cvref_t<T>, bool>)
+    auto write_piece(byte*& out, T value) -> void;
+
+    IOBuf buf_;
     std::vector<BufView> vecs_;
+    size_t queued_size_{0};
+    std::chrono::high_resolution_clock::time_point last_ = std::chrono::high_resolution_clock::now();
 };
+
+template <typename... Ts>
+auto Writer::write_pieces(Ts&&... pieces) -> asio::awaitable<std::error_code> {
+    const size_t total_size =
+        (size_t{0} + ... + write_piece_size(std::forward<Ts>(pieces)));
+
+    if (total_size == 0) {
+        co_return std::error_code{};
+    }
+
+    CHECK_LT(total_size, kDefaultWriteBufferSize);
+
+    if (buf_.write_size() < total_size || queued_size_ + total_size >= kMaxReplyFlushBytes) {
+        auto ec = co_await flush();
+        if (ec) {
+            co_return ec;
+        }
+    }
+
+    const size_t offset = buf_.buffered();
+    byte* begin = buf_.data() + offset;
+    byte* out   = begin;
+    (write_piece(out, std::forward<Ts>(pieces)), ...);
+
+    queued_size_ += total_size;
+    buf_.commit(total_size);
+    vecs_.emplace_back(begin, total_size);
+    co_return std::error_code{};
+}
+
+inline auto Writer::write_piece_size(std::string_view piece) const -> size_t { return piece.size(); }
+
+template <typename T>
+    requires(std::integral<std::remove_cvref_t<T>> &&
+             !std::same_as<std::remove_cvref_t<T>, bool>)
+auto Writer::write_piece_size(T value) const -> size_t {
+    using Value = std::remove_cvref_t<T>;
+
+    char tmp[std::numeric_limits<Value>::digits10 + 3];
+    auto [ptr, ec] = std::to_chars(tmp, tmp + sizeof(tmp), value);
+    (void)ec;
+    return static_cast<size_t>(ptr - tmp);
+}
+
+inline auto Writer::write_piece(byte*& out, std::string_view piece) -> void {
+    if (!piece.empty()) {
+        std::memcpy(out, piece.data(), piece.size());
+        out += piece.size();
+    }
+}
+
+template <typename T>
+    requires(std::integral<std::remove_cvref_t<T>> &&
+             !std::same_as<std::remove_cvref_t<T>, bool>)
+auto Writer::write_piece(byte*& out, T value) -> void {
+    using Value = std::remove_cvref_t<T>;
+
+    char tmp[std::numeric_limits<Value>::digits10 + 3];
+    auto [ptr, ec] = std::to_chars(tmp, tmp + sizeof(tmp), value);
+    (void)ec;
+
+    const size_t size = static_cast<size_t>(ptr - tmp);
+    std::memcpy(out, tmp, size);
+    out += size;
+}
 
 class ParserResut {
 public:
@@ -228,7 +351,7 @@ private:
 
 class Sender {
 public:
-    Sender(Writer* wr) : wr_(wr) { batched_reply_.resize(kMaxReplyFlushCount); }
+    Sender(Writer* wr) : wr_(wr) {}
 
     auto send_simple_string(std::string_view s) -> asio::awaitable<void>;
     auto send_ok() -> asio::awaitable<void>;
@@ -236,27 +359,18 @@ public:
     auto send_bulk_string(std::string_view s) -> asio::awaitable<void>;
     auto send_null_bulk_string() -> asio::awaitable<void>;
     auto send_integer(int64_t value) -> asio::awaitable<void>;
-
     auto send_error(std::string_view s) -> asio::awaitable<void>;
 
     auto flush() -> asio::awaitable<void>;
 
-    auto should_flush() -> bool;
-
-    auto get_error() -> std::error_code { return ec_; }
+    auto get_error() const -> std::error_code { return ec_; }
 
     auto clear() -> void {
-        batched_size_ = batched_count_ = 0;
         ec_                            = std::error_code{};
         wr_->clear();
     }
 
 private:
-    // hold the ownership of reply
-    std::vector<std::string>              batched_reply_;
-    size_t                                batched_size_{0}, batched_count_{0};
-    std::chrono::steady_clock::time_point last_flushed_ = std::chrono::steady_clock::now();
-
     std::error_code ec_;
 
     Writer* wr_;

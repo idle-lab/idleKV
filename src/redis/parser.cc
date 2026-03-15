@@ -1,15 +1,18 @@
 #include "redis/parser.h"
 
 #include "common/logger.h"
+#include "common/result.h"
+#include "metric/avg.h"
 #include "redis/error.h"
 
 #include <algorithm>
 #include <asio/awaitable.hpp>
 #include <charconv>
+#include <chrono>
 #include <climits>
 #include <cstddef>
-#include <cstring>
 #include <cstdint>
+#include <cstring>
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -62,6 +65,18 @@ namespace {
     }
 
     return out;
+}
+
+template <typename T>
+    requires(std::integral<std::remove_cvref_t<T>> &&
+             !std::same_as<std::remove_cvref_t<T>, bool>)
+auto decimal_size(T value) -> size_t {
+    using Value = std::remove_cvref_t<T>;
+
+    char tmp[std::numeric_limits<Value>::digits10 + 3];
+    auto [ptr, ec] = std::to_chars(tmp, tmp + sizeof(tmp), value);
+    (void)ec;
+    return static_cast<size_t>(ptr - tmp);
 }
 
 } // namespace
@@ -145,19 +160,56 @@ auto Reader::fill() -> asio::awaitable<std::error_code> {
 
 auto Reader::has_more() -> bool { return buf_.buffered() > 0; }
 
-auto Writer::write(std::string_view s) -> void { vecs_.emplace_back(s.data(), s.size()); }
+// auto Writer::reserve_buf(size_t required_piece_size) -> std::error_code {
+//     if (required_piece_size <= buf_.capacity()) {
+//         return std::error_code{};
+//     }
 
-auto Writer::reserve_buf(size_t expected_buffer_cap) -> void {
-    CHECK_LE(expected_buffer_cap, kMaxBufferSize);
-    auto cap = std::bit_ceil(expected_buffer_cap);
+//     const size_t doubled_capacity = buf_.capacity() == 0 ? required_piece_size : buf_.capacity() * 2;
+//     const size_t next_capacity =
+//         std::min(kDefaultWriteBufferSize, std::max(required_piece_size, doubled_capacity));
+//     if (next_capacity < required_piece_size) {
+//         return std::make_error_code(std::errc::no_buffer_space);
+//     }
 
-    if (cap > kMaxBufferSize) {
-        cap = expected_buffer_cap;
+//     buf_.reserve(next_capacity);
+//     return std::error_code{};
+// }
+
+auto Writer::reset_write_state() -> void {
+    buf_.clear();
+    vecs_.clear();
+    queued_size_ = 0;
+}
+
+auto Writer::write(std::string_view s) -> asio::awaitable<std::error_code> {
+    if (buf_.write_size() < s.size() || queued_size_ + s.size() >= kMaxReplyFlushBytes) {
+        auto ec = co_await flush();
+        if (ec) {
+            co_return ec;
+        }
     }
 
-    if (cap > buf_.capacity()) {
-        buf_.reserve(cap);
+    if (buf_.write_size() < s.size()) {
+        buf_.reserve(buf_.buffered() + s.size());
     }
+
+    const size_t offset = buf_.buffered();
+    byte*        begin  = buf_.data() + offset;
+    std::memcpy(begin, s.data(), s.size());
+
+    queued_size_ += s.size();
+    buf_.commit(s.size());
+    vecs_.emplace_back(begin, s.size());
+
+    if (vecs_.size() >= kMaxReplyFlushCount || queued_size_ >= kMaxReplyFlushBytes) {
+        auto ec = co_await flush();
+        if (ec) {
+            co_return ec;
+        }
+    }
+
+    co_return std::error_code{};
 }
 
 auto Writer::flush() -> asio::awaitable<std::error_code> {
@@ -165,9 +217,11 @@ auto Writer::flush() -> asio::awaitable<std::error_code> {
         co_return std::error_code{};
     }
 
+    // vecs_ preserves the original enqueue order, so a single writev keeps
+    // mixed owned/external pieces in the same packet order they were queued.
     auto res = co_await writev_impl(vecs_);
 
-    vecs_.clear();
+    reset_write_state();
     co_return res.err();
 }
 
@@ -225,120 +279,38 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
                           std::move(args));
 }
 
-auto build_simple_string_on(byte* buf, std::string_view s) -> size_t {
-    size_t total_len = s.size() + 3; // prefix + CRLF
-    std::memcpy(buf, SIMPLE_STRING_PREFIX, 1);
-    std::memcpy(buf + 1, s.data(), s.size());
-    std::memcpy(buf + 1 + s.size(), CRLF, 2);
-    return total_len;
-}
-
-auto build_error_on(byte* buf, std::string_view s) -> size_t {
-    size_t total_len = s.size() + 3; // prefix + CRLF
-    std::memcpy(buf, ERROR_PREFIX, 1);
-    std::memcpy(buf + 1, s.data(), s.size());
-    std::memcpy(buf + 1 + s.size(), CRLF, 2);
-    return total_len;
-}
-
-auto build_bulk_string(std::string_view s) -> std::string {
-    return fmt::format("${}\r\n{}\r\n", s.size(), s);
-}
-
-auto build_integer(int64_t value) -> std::string { return fmt::format(":{}\r\n", value); }
-
 auto Sender::send_simple_string(std::string_view s) -> asio::awaitable<void> {
-    batched_reply_[batched_count_].resize(s.size() + 3);
-    build_simple_string_on(batched_reply_[batched_count_].data(), s);
-    wr_->write(batched_reply_[batched_count_]);
-
-    batched_size_ += s.size() + 3;
-    batched_count_ += 1;
-
-    if (should_flush()) {
-        co_await flush();
-    }
+    ec_ = co_await wr_->write_pieces(SIMPLE_STRING_PREFIX, s, CRLF);
 }
 
 auto Sender::send_ok() -> asio::awaitable<void> {
-    wr_->write("+OK\r\n");
-    batched_size_ += 5;
-    batched_count_ += 1;
-
-    if (should_flush()) {
-        co_await flush();
-    }
+    ec_ = co_await wr_->write_pieces("+OK\r\n");
 }
 
 auto Sender::send_pong() -> asio::awaitable<void> {
-    wr_->write("+PONG\r\n");
-    batched_size_ += 7;
-    batched_count_ += 1;
-
-    if (should_flush()) {
-        co_await flush();
-    }
+    ec_ = co_await wr_->write_pieces("+PONG\r\n");
 }
 
 auto Sender::send_bulk_string(std::string_view s) -> asio::awaitable<void> {
-    batched_reply_[batched_count_] = build_bulk_string(s);
-    wr_->write(batched_reply_[batched_count_]);
-
-    batched_size_ += batched_reply_[batched_count_].size();
-    batched_count_ += 1;
-
-    if (should_flush()) {
-        co_await flush();
-    }
+    ec_ = co_await wr_->write_pieces(BULK_STRING_PREFIX, s.size(), CRLF);
+    ec_ = co_await wr_->write(s);
+    ec_ = co_await wr_->write(CRLF);
 }
 
 auto Sender::send_null_bulk_string() -> asio::awaitable<void> {
-    wr_->write("$-1\r\n");
-    batched_size_ += 5;
-    
-    if (should_flush()) {
-        co_await flush();
-    }
+    ec_ = co_await wr_->write_pieces("$-1\r\n");
 }
 
 auto Sender::send_integer(int64_t value) -> asio::awaitable<void> {
-    batched_reply_[batched_count_] = build_integer(value);
-    wr_->write(batched_reply_[batched_count_]);
-
-    batched_size_ += batched_reply_[batched_count_].size();
-    batched_count_ += 1;
-
-    if (should_flush()) {
-        co_await flush();
-    }
+    ec_ = co_await wr_->write_pieces(INTEGER_PREFIX, value, CRLF);
 }
 
 auto Sender::send_error(std::string_view s) -> asio::awaitable<void> {
-    batched_reply_[batched_count_].resize(s.size() + 3);
-    build_error_on(batched_reply_[batched_count_].data(), s);
-    wr_->write(batched_reply_[batched_count_]);
-
-    batched_size_ += s.size() + 3;
-    batched_count_ += 1;
-
-    if (should_flush()) {
-        co_await flush();
-    }
-}
-
-auto Sender::should_flush() -> bool {
-    return batched_size_ >= kMaxReplyFlushBytes || batched_count_ >= kMaxReplyFlushCount;
+    ec_ = co_await wr_->write_pieces(ERROR_PREFIX, s, CRLF);
 }
 
 auto Sender::flush() -> asio::awaitable<void> {
-    if (batched_size_ == 0) {
-        co_return;
-    }
-
     ec_ = co_await wr_->flush();
-
-    batched_count_ = 0;
-    batched_size_  = 0;
 }
 
 } // namespace idlekv

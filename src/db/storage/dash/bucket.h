@@ -32,17 +32,14 @@ public:
 
     static constexpr size_t kSlotCount = SlotCount;
 
-    Bucket()                                = default;
-    Bucket(const Bucket&)                   = delete;
+    Bucket()                                 = default;
+    Bucket(const Bucket&)                    = delete;
     auto operator=(const Bucket&) -> Bucket& = delete;
 
-    auto read_snapshot() const -> uint64_t {
-        return version_.load(std::memory_order_acquire);
-    }
+    auto read_snapshot() const -> uint64_t { return version_.load(std::memory_order_acquire); }
 
     auto validate_read(uint64_t snapshot) const -> bool {
-        return !(snapshot & 1U) &&
-               version_.load(std::memory_order_acquire) == snapshot;
+        return !(snapshot & 1U) && version_.load(std::memory_order_acquire) == snapshot;
     }
 
     auto snapshot_slots() const -> std::array<RecordPtr, SlotCount> {
@@ -97,12 +94,10 @@ public:
         }
     }
 
-    void unlock() {
-        version_.fetch_add(1, std::memory_order_release);
-    }
+    void unlock() { version_.fetch_add(1, std::memory_order_release); }
 
 private:
-    mutable std::atomic<uint64_t>           version_{0};
+    mutable std::atomic<uint64_t>            version_{0};
     mutable std::array<RecordPtr, SlotCount> slots_{};
 };
 

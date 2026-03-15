@@ -126,27 +126,30 @@ public:
 
 private:
     struct RetiredNode {
-        uint64_t      retire_epoch = 0;
-        void*         ptr          = nullptr;
-        void (*deleter)(void*)     = nullptr;
+        uint64_t retire_epoch  = 0;
+        void*    ptr           = nullptr;
+        void (*deleter)(void*) = nullptr;
     };
 
     using ThreadEpoch = Guard::ThreadEpoch;
 
     auto get_or_register_slot() const -> ThreadEpoch* {
-        thread_local std::unordered_map<const EpochManager*, ThreadEpoch*> tls_slots;
+        thread_local std::unordered_map<const EpochManager*, std::weak_ptr<ThreadEpoch>> tls_slots;
 
         if (auto it = tls_slots.find(this); it != tls_slots.end()) {
-            return it->second;
+            if (auto slot = it->second.lock()) {
+                return slot.get();
+            }
+            tls_slots.erase(it);
         }
 
-        auto slot = std::make_unique<ThreadEpoch>();
-        auto* raw = slot.get();
+        auto  slot = std::make_shared<ThreadEpoch>();
+        auto* raw  = slot.get();
         {
             std::lock_guard<std::mutex> lk(registration_mu_);
-            registrations_.push_back(std::move(slot));
+            registrations_.push_back(slot);
         }
-        tls_slots.emplace(this, raw);
+        tls_slots[this] = slot;
         return raw;
     }
 
@@ -158,18 +161,17 @@ private:
                 if (!registration->active.load(std::memory_order_acquire)) {
                     continue;
                 }
-                min_epoch = std::min(min_epoch,
-                                     registration->epoch.load(std::memory_order_acquire));
+                min_epoch =
+                    std::min(min_epoch, registration->epoch.load(std::memory_order_acquire));
             }
         }
 
         std::vector<RetiredNode> reclaimable;
         {
             std::lock_guard<std::mutex> lk(retired_mu_);
-            auto keep_begin =
-                std::stable_partition(retired_.begin(), retired_.end(), [min_epoch](const auto& node) {
-                    return node.retire_epoch >= min_epoch;
-                });
+            auto                        keep_begin = std::stable_partition(
+                retired_.begin(), retired_.end(),
+                [min_epoch](const auto& node) { return node.retire_epoch >= min_epoch; });
             reclaimable.assign(keep_begin, retired_.end());
             retired_.erase(keep_begin, retired_.end());
         }
@@ -188,11 +190,11 @@ private:
         reclaim();
     }
 
-    mutable std::atomic<uint64_t>                    global_epoch_{1};
-    mutable std::mutex                               registration_mu_;
-    mutable std::vector<std::unique_ptr<ThreadEpoch>> registrations_;
-    mutable std::mutex                               retired_mu_;
-    mutable std::vector<RetiredNode>                 retired_;
+    mutable std::atomic<uint64_t>                     global_epoch_{1};
+    mutable std::mutex                                registration_mu_;
+    mutable std::vector<std::shared_ptr<ThreadEpoch>> registrations_;
+    mutable std::mutex                                retired_mu_;
+    mutable std::vector<RetiredNode>                  retired_;
 };
 
 } // namespace idlekv::dash::detail
@@ -234,10 +236,9 @@ public:
 
     explicit DashEH(const Options& options = Options{}, Hash hash = Hash{},
                     KeyEqual eq = KeyEqual{})
-        : hash_(std::move(hash)),
-          eq_(std::move(eq)),
+        : hash_(std::move(hash)), eq_(std::move(eq)),
           merge_threshold_(normalize_merge_threshold(options.merge_threshold)) {
-        auto* dir = new Directory;
+        auto* dir         = new Directory;
         dir->global_depth = options.initial_global_depth;
         dir->segments.resize(size_t{1} << dir->global_depth);
         for (auto& segment : dir->segments) {
@@ -266,7 +267,7 @@ public:
         while (true) {
             auto guard = epoch_.pin();
             (void)guard;
-            auto* dir  = directory_.load(std::memory_order_acquire);
+            auto*        dir           = directory_.load(std::memory_order_acquire);
             const size_t segment_index = directory_index(hash, dir->global_depth);
             auto*        segment       = dir->segments[segment_index];
 
@@ -292,7 +293,7 @@ public:
         while (true) {
             auto guard = epoch_.pin();
             (void)guard;
-            auto* dir  = directory_.load(std::memory_order_acquire);
+            auto*        dir           = directory_.load(std::memory_order_acquire);
             const size_t segment_index = directory_index(hash, dir->global_depth);
             auto*        segment       = dir->segments[segment_index];
 
@@ -311,17 +312,24 @@ public:
     }
 
     auto find(const Key& key) const -> std::optional<Value> {
-        const uint64_t hash = hash_(key);
+        const uint64_t hash  = hash_(key);
         auto           guard = epoch_.pin();
         (void)guard;
-        auto*          dir   = directory_.load(std::memory_order_acquire);
-        const size_t   segment_index = directory_index(hash, dir->global_depth);
+        auto*        dir           = directory_.load(std::memory_order_acquire);
+        const size_t segment_index = directory_index(hash, dir->global_depth);
         return dir->segments[segment_index]->find(key, hash, eq_);
     }
 
-    auto contains(const Key& key) const -> bool {
-        return find(key).has_value();
+    auto find_record(const Key& key) const -> std::shared_ptr<const RecordType> {
+        const uint64_t hash  = hash_(key);
+        auto           guard = epoch_.pin();
+        (void)guard;
+        auto*        dir           = directory_.load(std::memory_order_acquire);
+        const size_t segment_index = directory_index(hash, dir->global_depth);
+        return dir->segments[segment_index]->find_record(key, hash, eq_);
     }
+
+    auto contains(const Key& key) const -> bool { return find(key).has_value(); }
 
     auto size() const -> size_t { return size_.load(std::memory_order_acquire); }
 
@@ -340,7 +348,7 @@ public:
     auto unique_segments() const -> size_t {
         auto guard = epoch_.pin();
         (void)guard;
-        auto* dir  = directory_.load(std::memory_order_acquire);
+        auto* dir = directory_.load(std::memory_order_acquire);
         if (!dir) {
             return 0;
         }
@@ -358,13 +366,13 @@ public:
     }
 
     auto debug_locate(const Key& key) const -> std::optional<DebugPosition> {
-        const uint64_t hash = hash_(key);
+        const uint64_t hash  = hash_(key);
         auto           guard = epoch_.pin();
         (void)guard;
-        auto*          dir   = directory_.load(std::memory_order_acquire);
-        const size_t   segment_index = directory_index(hash, dir->global_depth);
-        auto*          segment       = dir->segments[segment_index];
-        auto           location      = segment->locate(key, hash, eq_);
+        auto*        dir           = directory_.load(std::memory_order_acquire);
+        const size_t segment_index = directory_index(hash, dir->global_depth);
+        auto*        segment       = dir->segments[segment_index];
+        auto         location      = segment->locate(key, hash, eq_);
         if (!location) {
             return std::nullopt;
         }
@@ -381,7 +389,7 @@ public:
 
 private:
     struct Directory {
-        size_t                   global_depth = 0;
+        size_t                    global_depth = 0;
         std::vector<SegmentType*> segments;
     };
 
@@ -413,8 +421,8 @@ private:
     static auto shrink_directory_if_possible(Directory& dir) -> size_t {
         size_t shrink_steps = 0;
         while (dir.global_depth > 0) {
-            const size_t half = size_t{1} << (dir.global_depth - 1);
-            bool can_shrink = true;
+            const size_t half       = size_t{1} << (dir.global_depth - 1);
+            bool         can_shrink = true;
             for (size_t i = 0; i < half; ++i) {
                 if (dir.segments[i] != dir.segments[i + half]) {
                     can_shrink = false;
@@ -442,7 +450,7 @@ private:
 
     void maybe_split(Directory* observed_dir, size_t segment_index, SegmentType* segment) {
         std::lock_guard<std::mutex> lk(structure_mu_);
-        auto* current = directory_.load(std::memory_order_acquire);
+        auto*                       current = directory_.load(std::memory_order_acquire);
         if (current != observed_dir || current->segments[segment_index] != segment) {
             return;
         }
@@ -451,7 +459,7 @@ private:
         }
 
         bool retire_old_segment = false;
-        auto unfreeze = detail::make_scope_exit([&] {
+        auto unfreeze           = detail::make_scope_exit([&] {
             if (!retire_old_segment) {
                 segment->unfreeze();
             }
@@ -474,8 +482,8 @@ private:
         size_t expanded_seg_index = segment_index;
         bool   grew_directory     = false;
         if (segment->local_depth() == new_depth) {
-            new_segments       = grow_directory(new_segments);
-            new_depth         += 1;
+            new_segments = grow_directory(new_segments);
+            new_depth += 1;
             expanded_seg_index = segment_index * 2;
             grew_directory     = true;
         }
@@ -496,9 +504,9 @@ private:
             }
         }
 
-        auto* left  = new SegmentType(segment->local_depth() + 1);
-        auto* right = new SegmentType(segment->local_depth() + 1);
-        auto cleanup_new_segments = detail::make_scope_exit([&] {
+        auto* left                 = new SegmentType(segment->local_depth() + 1);
+        auto* right                = new SegmentType(segment->local_depth() + 1);
+        auto  cleanup_new_segments = detail::make_scope_exit([&] {
             delete left;
             delete right;
         });
@@ -508,7 +516,8 @@ private:
             return;
         }
 
-        auto* new_dir = new Directory{.global_depth = new_depth, .segments = std::move(new_segments)};
+        auto* new_dir =
+            new Directory{.global_depth = new_depth, .segments = std::move(new_segments)};
         for (size_t i = start; i < start + half; ++i) {
             new_dir->segments[i] = left;
         }
@@ -534,7 +543,7 @@ private:
         }
 
         std::lock_guard<std::mutex> lk(structure_mu_);
-        auto* current = directory_.load(std::memory_order_acquire);
+        auto*                       current = directory_.load(std::memory_order_acquire);
         if (current != observed_dir || current->segments[segment_index] != segment) {
             return;
         }
@@ -542,8 +551,8 @@ private:
             return;
         }
 
-        const size_t chunk = size_t{1} << (current->global_depth - segment->local_depth());
-        const size_t start = segment_index & ~(chunk - 1);
+        const size_t chunk       = size_t{1} << (current->global_depth - segment->local_depth());
+        const size_t start       = segment_index & ~(chunk - 1);
         const size_t buddy_start = start ^ chunk;
         auto*        buddy       = current->segments[buddy_start];
         if (buddy == segment || buddy->local_depth() != segment->local_depth()) {
@@ -559,7 +568,7 @@ private:
         }
 
         bool retire_old_segments = false;
-        auto unfreeze_segment = detail::make_scope_exit([&] {
+        auto unfreeze_segment    = detail::make_scope_exit([&] {
             if (!retire_old_segments) {
                 segment->unfreeze();
             }
@@ -585,13 +594,12 @@ private:
             return;
         }
 
-        auto records = segment->snapshot_records_locked();
+        auto records       = segment->snapshot_records_locked();
         auto buddy_records = buddy->snapshot_records_locked();
         records.insert(records.end(), buddy_records.begin(), buddy_records.end());
 
-        auto* merged = new SegmentType(segment->local_depth() - 1);
-        auto cleanup_merged =
-            detail::make_scope_exit([&] { delete merged; });
+        auto* merged         = new SegmentType(segment->local_depth() - 1);
+        auto  cleanup_merged = detail::make_scope_exit([&] { delete merged; });
         (void)cleanup_merged;
 
         if (!merged->rebuild_from(records, eq_)) {
@@ -620,17 +628,17 @@ private:
         }
     }
 
-    Hash                                  hash_;
-    KeyEqual                              eq_;
-    double                                merge_threshold_;
-    detail::EpochManager                  epoch_;
-    mutable std::atomic<Directory*>       directory_{nullptr};
-    std::atomic<size_t>                   size_{0};
-    mutable std::mutex                    structure_mu_;
-    std::atomic<uint64_t>                 split_count_{0};
-    std::atomic<uint64_t>                 merge_count_{0};
-    std::atomic<uint64_t>                 directory_growth_count_{0};
-    std::atomic<uint64_t>                 directory_shrink_count_{0};
+    Hash                            hash_;
+    KeyEqual                        eq_;
+    double                          merge_threshold_;
+    detail::EpochManager            epoch_;
+    mutable std::atomic<Directory*> directory_{nullptr};
+    std::atomic<size_t>             size_{0};
+    mutable std::mutex              structure_mu_;
+    std::atomic<uint64_t>           split_count_{0};
+    std::atomic<uint64_t>           merge_count_{0};
+    std::atomic<uint64_t>           directory_growth_count_{0};
+    std::atomic<uint64_t>           directory_shrink_count_{0};
 };
 
 } // namespace idlekv::dash

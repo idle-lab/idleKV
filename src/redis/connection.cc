@@ -3,17 +3,17 @@
 #include "common/logger.h"
 #include "common/result.h"
 #include "db/engine.h"
+#include "metric/request_stage.h"
 #include "redis/error.h"
 #include "redis/parser.h"
-#include "server/thread_state.h"
 
 #include <asio/as_tuple.hpp>
 #include <asio/awaitable.hpp>
 #include <asio/steady_timer.hpp>
 #include <asio/use_awaitable.hpp>
 #include <cstddef>
+#include <deque>
 #include <spdlog/spdlog.h>
-#include <string_view>
 #include <system_error>
 
 namespace idlekv {
@@ -76,6 +76,9 @@ auto Connection::read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<R
                                                      asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_ = ec;
+        if (!is_connection_closed_error(ec) && !is_transient_io_error(ec)) {
+            LOG(warn, "read failed: {}", ec.message());
+        }
     }
     co_return ResultT{ec, size_t(n)};
 }
@@ -89,6 +92,9 @@ auto Connection::write_impl(const byte* data, size_t size) noexcept
                                               asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_ = ec;
+        if (!is_connection_closed_error(ec) && !is_transient_io_error(ec)) {
+            LOG(warn, "write failed: {}", ec.message());
+        }
     }
     co_return ResultT{ec, size_t(n)};
 }
@@ -102,13 +108,19 @@ auto Connection::writev_impl(const std::vector<BufView>& bufs) noexcept
     auto [ec, n] = co_await asio::async_write(*socket_, bufs, asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_ = ec;
+        if (!is_connection_closed_error(ec) && !is_transient_io_error(ec)) {
+            LOG(warn, "writev failed: {}", ec.message());
+        }
     }
     co_return ResultT{ec, size_t(n)};
 }
 
 auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
     for (;;) {
+        const auto parse_start = RequestStageMetrics::clock::now();
         auto res = co_await p_.parse_one();
+        RequestStageMetrics::instance().observe_cmd_parse(RequestStageMetrics::clock::now() -
+                                                         parse_start);
         if (!res.ok()) {
             if (res == ParserResut::STD_ERROR) {
                 if (is_connection_closed_error(res.error_code())) {
@@ -141,19 +153,87 @@ auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
             }
             break;
         }
-        co_await service_->exec(this, args);
+        std::transform(args[0].begin(), args[0].end(), args[0].begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        
+        engine->dispatch_cmd(this, args);
+    }
+}
 
-        if (s_.get_error()) {
-            break;
-        }
+auto Connection::handle_send() noexcept -> asio::awaitable<void> {
+    const auto generation = send_generation_.load(std::memory_order_acquire);
+    auto is_active = [this, generation]() {
+        return generation == send_generation_.load(std::memory_order_acquire) && !closed();
+    };
 
-        if (res != ParserResut::HAS_MORE) {
-            co_await s_.flush();
-            if (s_.get_error()) {
-                break;
+    while (is_active()) {
+        while (sending_queue_.empty()) {
+            co_await sq_cv_.async_wait();
+            if (!is_active()) {
+                co_return;
             }
         }
+
+        while (!sending_queue_.empty()) {
+            if (!is_active()) {
+                co_return;
+            }
+
+            auto promise = std::move(sending_queue_.front());
+            sending_queue_.pop();
+
+            co_await promise->async_wait();
+            if (!is_active()) {
+                co_return;
+            }
+            if (promise->has_stage_tracking()) {
+                RequestStageMetrics::instance().observe_queue_to_send(
+                    PromiseResult::clock::now() - promise->send_ready_at());
+            }
+
+            auto& res = promise->result();
+            switch (res.type()) {
+            case ExecResult::kPong:
+                co_await sender().send_pong();
+                break;
+            case ExecResult::kOk:
+                co_await sender().send_ok();
+                break;
+            case ExecResult::kSimpleString:
+                co_await sender().send_simple_string(res.string());
+                break;
+            case ExecResult::kBulkString:
+                co_await sender().send_bulk_string(res.string());
+                break;
+            case ExecResult::kNull:
+                co_await sender().send_null_bulk_string();
+                break;
+            case ExecResult::kInteger:
+                co_await sender().send_integer(res.integer());
+                break;
+            case ExecResult::kError:
+                co_await sender().send_error(res.string());
+                break;
+            }
+
+            if (s_.get_error()) {
+                co_return ;
+            }
+        }
+
+        const auto flush_start = PromiseResult::clock::now();
+        co_await s_.flush();
+        RequestStageMetrics::instance().observe_flush_time(PromiseResult::clock::now() -
+                                                           flush_start);
+        if (!is_active() || s_.get_error()) {
+            co_return;
+        }
     }
+}
+
+auto Connection::enqueue_result(std::shared_ptr<PromiseResult> promise) -> void {
+    sending_queue_.emplace(std::move(promise));
+    sq_cv_.notify();
 }
 
 auto Connection::flush() -> asio::awaitable<void> {
@@ -166,13 +246,18 @@ auto Connection::flush() -> asio::awaitable<void> {
 auto Connection::reset(asio::ip::tcp::socket&& socket) -> void {
     CHECK(socket_.has_value() == false) << "override a connection that is currently in use";
     socket_.emplace(std::move(socket));
+    clear_pending_results();
     p_.clear();
     s_.clear();
-    ec_ = std::error_code{};
+    ec_       = std::error_code{};
     db_index_ = 0;
 }
 
 auto Connection::reset() -> void {
+    send_generation_.fetch_add(1, std::memory_order_acq_rel);
+    clear_pending_results();
+    sq_cv_.notify();
+
     if (socket_.has_value()) {
         if (socket_->is_open()) {
             std::error_code ignored_ec;
@@ -184,6 +269,9 @@ auto Connection::reset() -> void {
         }
         socket_.reset();
     }
+    p_.clear();
+    s_.clear();
+    ec_ = std::error_code{};
     db_index_ = 0;
 }
 

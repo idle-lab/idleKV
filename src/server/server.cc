@@ -1,5 +1,6 @@
 #include "server/server.h"
 
+#include "common/config.h"
 #include "common/logger.h"
 #include "server/el_pool.h"
 #include "server/handler.h"
@@ -21,12 +22,28 @@
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 namespace idlekv {
+
+namespace {
+
+auto log_io_backend_status() -> void {
+#if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
+    LOG(info, "I/O backend: io_uring enabled");
+#elif defined(ASIO_HAS_IO_URING)
+    LOG(info, "I/O backend: io_uring available but not the default backend");
+#else
+    LOG(info, "I/O backend: io_uring disabled, using reactor backend");
+#endif
+}
+
+} // namespace
 
 Server::Server(const Config& cfg) {
     // initialize the event loop pool and thread-local state for each worker.
     cfg_ = &cfg;
+    log_io_backend_status();
     elp_ = std::make_unique<EventLoopPool>();
     elp_->run();
     elp_->await_foreach([](size_t i, EventLoop* el) { ThreadState::init(i, el, el->thread_id()); });
@@ -99,7 +116,27 @@ auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
             LOG(warn, "set TCP_NODELAY failed: {}", ec.message());
         }
 
-        pick_up_conn_el(socket)->dispatch(h->handle(std::move(socket)));
+        auto* target_el = pick_up_conn_el(socket);
+        if (&socket.get_executor().context() != &target_el->io_context()) {
+            auto native_socket = socket.release(ec);
+            if (ec) {
+                LOG(warn, "release accepted socket failed: {}", ec.message());
+                continue;
+            }
+
+            asio::ip::tcp::socket rebound_socket(target_el->io_context());
+            DISCARD_RESULT(rebound_socket.assign(h->endpoint().protocol(), native_socket, ec));
+            if (ec) {
+                LOG(warn, "rebind accepted socket failed: {}", ec.message());
+                ::close(native_socket);
+                continue;
+            }
+
+            target_el->dispatch(h->handle(std::move(rebound_socket)));
+            continue;
+        }
+
+        target_el->dispatch(h->handle(std::move(socket)));
     }
 }
 

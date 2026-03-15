@@ -45,8 +45,8 @@ public:
     };
 
     struct InsertResult {
-        InsertStatus             status = InsertStatus::kRetry;
-        std::optional<Location>  location;
+        InsertStatus            status = InsertStatus::kRetry;
+        std::optional<Location> location;
     };
 
     struct EraseResult {
@@ -56,12 +56,10 @@ public:
 
     explicit Segment(size_t local_depth) : local_depth_(local_depth) {}
 
-    Segment(const Segment&)                        = delete;
-    auto operator=(const Segment&) -> Segment&    = delete;
+    Segment(const Segment&)                    = delete;
+    auto operator=(const Segment&) -> Segment& = delete;
 
-    static constexpr auto capacity() -> size_t {
-        return kBucketCount * kSlotsPerBucket;
-    }
+    static constexpr auto capacity() -> size_t { return kBucketCount * kSlotsPerBucket; }
 
     auto local_depth() const -> size_t { return local_depth_; }
 
@@ -103,6 +101,11 @@ public:
     }
 
     template <class Eq>
+    auto find_record(const Key& key, uint64_t hash, const Eq& eq) const -> RecordPtr {
+        return lookup(key, hash, eq).record;
+    }
+
+    template <class Eq>
     auto locate(const Key& key, uint64_t hash, const Eq& eq) const -> std::optional<Location> {
         return lookup(key, hash, eq).location;
     }
@@ -116,7 +119,7 @@ public:
 
     template <class Eq>
     auto erase(const Key& key, uint64_t hash, const Eq& eq) -> EraseResult {
-        const size_t home = home_bucket(hash);
+        const size_t  home = home_bucket(hash);
         BucketLockSet locks(this, erase_lock_indices(home));
         (void)locks;
         if (frozen()) {
@@ -187,8 +190,8 @@ private:
         }
 
     private:
-        Segment*             owner_;
-        std::vector<size_t>  indices_;
+        Segment*            owner_;
+        std::vector<size_t> indices_;
     };
 
     static auto next_bucket(size_t bucket) -> size_t {
@@ -199,13 +202,9 @@ private:
         return bucket == 0 ? kRegularBucketCount - 1 : bucket - 1;
     }
 
-    static auto stash_bucket(size_t stash_pos) -> size_t {
-        return kRegularBucketCount + stash_pos;
-    }
+    static auto stash_bucket(size_t stash_pos) -> size_t { return kRegularBucketCount + stash_pos; }
 
-    static auto home_bucket(uint64_t hash) -> size_t {
-        return (hash >> 8U) % kRegularBucketCount;
-    }
+    static auto home_bucket(uint64_t hash) -> size_t { return (hash >> 8U) % kRegularBucketCount; }
 
     auto insert_lock_indices(size_t home) const -> std::vector<size_t> {
         const size_t neighbor = next_bucket(home);
@@ -348,7 +347,8 @@ private:
         return buckets_[bucket_index].first_empty_slot();
     }
 
-    auto place_record_locked(size_t bucket_index, const RecordPtr& record) -> std::optional<Location> {
+    auto place_record_locked(size_t bucket_index, const RecordPtr& record)
+        -> std::optional<Location> {
         const int slot = first_empty_slot_locked(bucket_index);
         if (slot < 0) {
             return std::nullopt;
@@ -404,10 +404,9 @@ private:
         const size_t neighbor = next_bucket(home);
 
         while (first_empty_slot_locked(home) >= 0) {
-            if (!move_first_locked(neighbor, home,
-                                   [home](const RecordType& record) {
-                                       return record.home_bucket == home;
-                                   })) {
+            if (!move_first_locked(neighbor, home, [home](const RecordType& record) {
+                    return record.home_bucket == home;
+                })) {
                 break;
             }
         }
@@ -464,7 +463,8 @@ private:
         }
 
         if constexpr (CheckDuplicate) {
-            if (auto duplicate = find_duplicate_locked(home, record.key, record.hash, eq); duplicate) {
+            if (auto duplicate = find_duplicate_locked(home, record.key, record.hash, eq);
+                duplicate) {
                 return {.status = InsertStatus::kDuplicate, .location = duplicate};
             }
         }
@@ -478,10 +478,9 @@ private:
             }
         }
 
-        if (move_first_locked(neighbor, next2,
-                              [neighbor](const RecordType& candidate) {
-                                  return candidate.home_bucket == neighbor;
-                              })) {
+        if (move_first_locked(neighbor, next2, [neighbor](const RecordType& candidate) {
+                return candidate.home_bucket == neighbor;
+            })) {
             auto location = place_record_locked(neighbor, owned);
             if (location) {
                 size_.fetch_add(1, std::memory_order_acq_rel);
@@ -489,10 +488,9 @@ private:
             }
         }
 
-        if (move_first_locked(home, previous,
-                              [previous](const RecordType& candidate) {
-                                  return candidate.home_bucket == previous;
-                              })) {
+        if (move_first_locked(home, previous, [previous](const RecordType& candidate) {
+                return candidate.home_bucket == previous;
+            })) {
             auto location = place_record_locked(home, owned);
             if (location) {
                 size_.fetch_add(1, std::memory_order_acq_rel);
@@ -513,9 +511,9 @@ private:
     }
 
     std::array<BucketType, kBucketCount> buckets_{};
-    const size_t                          local_depth_;
-    std::atomic<size_t>                   size_{0};
-    std::atomic<bool>                     frozen_{false};
+    const size_t                         local_depth_;
+    std::atomic<size_t>                  size_{0};
+    std::atomic<bool>                    frozen_{false};
 };
 
 } // namespace idlekv::dash::detail

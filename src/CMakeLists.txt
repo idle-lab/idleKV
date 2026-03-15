@@ -43,6 +43,7 @@ if (ENABLE_ASIO_IO_URING)
         PUBLIC
             ASIO_HAS_IO_URING=1
             ASIO_DISABLE_EPOLL=1
+            ASIO_HAS_IO_URING_AS_DEFAULT=1
     )
 
     target_link_libraries(idlekv_core

@@ -40,9 +40,8 @@ auto MakeKey(int id, uint64_t prefix, size_t prefix_len, size_t home_bucket, uin
 }
 
 template <size_t RegularBuckets = 4, size_t StashBuckets = 1, size_t SlotsPerBucket = 1>
-using TestDash =
-    idlekv::dash::DashEH<FixedKey, int, FixedHash, FixedEq, RegularBuckets, StashBuckets,
-                         SlotsPerBucket>;
+using TestDash = idlekv::dash::DashEH<FixedKey, int, FixedHash, FixedEq, RegularBuckets,
+                                      StashBuckets, SlotsPerBucket>;
 
 TEST(DashEHTest, BasicInsertFindErase) {
     TestDash<4, 1, 2> table({.initial_global_depth = 0, .merge_threshold = 0.8});
@@ -142,7 +141,7 @@ TEST(DashEHTest, DisplacementMovesOwnedNeighborEntryForward) {
     ASSERT_TRUE(table.insert(neighbor_owner, 20));
     ASSERT_TRUE(table.insert(displaced_in, 30));
 
-    auto moved_pos   = table.debug_locate(neighbor_owner);
+    auto moved_pos    = table.debug_locate(neighbor_owner);
     auto inserted_pos = table.debug_locate(displaced_in);
     ASSERT_TRUE(moved_pos.has_value());
     ASSERT_TRUE(inserted_pos.has_value());

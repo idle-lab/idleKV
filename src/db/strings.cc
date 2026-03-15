@@ -1,6 +1,5 @@
 #include "db/command.h"
 #include "db/engine.h"
-
 #include "db/result.h"
 #include "db/storage/kvstore.h"
 #include "redis/connection.h"
@@ -49,7 +48,7 @@ auto get(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
     }
 
     const auto& value = res.get();
-    if (!value.has_value()) {
+    if (!value) {
         return ExecResult::null();
     }
 

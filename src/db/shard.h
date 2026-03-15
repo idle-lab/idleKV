@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/config.h"
 #include "common/logger.h"
 #include "db/db.h"
 #include "db/task_queue.h"
@@ -11,15 +12,17 @@
 #include <memory>
 #include <mimalloc.h>
 #include <queue>
+#include <string>
 
 namespace idlekv {
 
-using ShardId = uint16_t;
-constexpr ShardId kInvalidShardId = std::numeric_limits<ShardId>::max(); 
+using ShardId                     = uint16_t;
+constexpr ShardId kInvalidShardId = std::numeric_limits<ShardId>::max();
 
 class Shard {
 public:
-    Shard(mi_heap_t* heap, ShardId id, size_t db_num) : mr_(heap), id_(id) {
+    Shard(mi_heap_t* heap, ShardId id, size_t db_num)
+        : mr_(heap), tq_(std::string("shard-") + std::to_string(id)), id_(id) {
         for (size_t i = 0; i < db_num; ++i) {
             db_slice_.emplace_back(std::make_shared<DB>(&mr_));
         }
@@ -30,12 +33,10 @@ public:
     Shard(const Shard&)                    = delete;
     auto operator=(const Shard&) -> Shard& = delete;
 
-    template<class Fn>
+    template <class Fn>
         requires std::invocable<Fn>
     auto dispatch(Fn&& task) -> void {
-        tq_.add([this, task = std::move(task)]() -> asio::awaitable<void> {
-            return task();
-        });
+        tq_.add(std::move(task));
     }
 
     auto id() const -> ShardId { return id_; }
@@ -46,7 +47,7 @@ public:
 
 private:
     std::vector<std::shared_ptr<DB>> db_slice_;
-    XAllocator mr_;
+    XAllocator                       mr_;
 
     TaskQueue tq_;
 

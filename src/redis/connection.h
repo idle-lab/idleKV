@@ -1,22 +1,26 @@
 #pragma once
 
 #include "common/asio_no_exceptions.h"
-#include "common/config.h"
-#include "common/logger.h"
+#include "db/result.h"
 #include "redis/parser.h"
-#include "redis/service_interface.h"
 #include "server/el_pool.h"
+#include "utils/condition_variable/condition_variable.h"
 
+#include <asio/any_io_executor.hpp>
 #include <asio/as_tuple.hpp>
 #include <asio/asio.hpp>
 #include <asio/asio/awaitable.hpp>
 #include <asio/error.hpp>
+#include <asio/io_context.hpp>
 #include <asio/registered_buffer.hpp>
 #include <asio/use_awaitable.hpp>
 #include <cassert>
+#include <atomic>
 #include <cstddef>
 #include <cstring>
+#include <memory>
 #include <optional>
+#include <queue>
 #include <system_error>
 #include <vector>
 
@@ -27,8 +31,8 @@ class IdleEngine;
 
 class Connection : public Reader, public Writer {
 public:
-    explicit Connection(ServiceInterface* service)
-        : Reader(kDefaultReadBufferSize), Writer(256), p_(this), s_(this), service_(service) {}
+    explicit Connection(const asio::any_io_executor& exector)
+        : Reader(kDefaultReadBufferSize), Writer(kDefaultWriteBufferSize), p_(this), s_(this), sq_cv_(exector) {}
 
     virtual auto read_impl(byte* buf, size_t size) noexcept
         -> asio::awaitable<ResultT<size_t>> override;
@@ -39,8 +43,8 @@ public:
         -> asio::awaitable<ResultT<size_t>> override;
 
     auto handle_requests() noexcept -> asio::awaitable<void>;
-
-    auto async_handle(asio::steady_timer& done) -> asio::awaitable<void>;
+    auto handle_send() noexcept -> asio::awaitable<void>;
+    auto enqueue_result(std::shared_ptr<PromiseResult> promise) -> void;
 
     auto flush() -> asio::awaitable<void>;
 
@@ -50,7 +54,8 @@ public:
     auto sender() -> Sender& { return s_; }
 
     auto db_index() const -> size_t { return db_index_; }
-
+    auto socket() -> asio::ip::tcp::socket& { return *socket_; }
+    auto get_executor() -> const asio::any_io_executor& { return socket_->get_executor(); }
     void set_db_index(size_t db_index) { db_index_ = db_index; }
 
     auto remote_endpoint() const -> asio::ip::tcp::endpoint {
@@ -63,20 +68,25 @@ public:
         return ec ? asio::ip::tcp::endpoint{} : ep;
     }
 
-    auto closed() const -> bool { return ec_ || !(socket_.has_value() && socket_->is_open()); }
-
+    auto closed() const -> bool { return ec_ || !(socket_.has_value() && socket_->is_open()) || s_.get_error(); }
 private:
-    // fill reads a new chunk into the buffer.
-    auto fill() noexcept -> asio::awaitable<std::error_code>;
+    auto clear_pending_results() -> void {
+        while (!sending_queue_.empty()) {
+            sending_queue_.pop();
+        }
+    }
 
-    std::optional<asio::ip::tcp::socket> socket_;
-    std::error_code                      ec_;
+    std::optional<asio::ip::tcp::socket>           socket_;
+    std::error_code                                ec_;
 
     Parser p_;
     Sender s_;
 
-    ServiceInterface* service_;
-    EventLoop* el_;
+    std::queue<std::shared_ptr<PromiseResult>> sending_queue_;
+    utils::ConditionVariable sq_cv_;
+    std::atomic<uint64_t>    send_generation_{0};
+
+    EventLoop*        el_;
     size_t            db_index_ = 0;
 };
 

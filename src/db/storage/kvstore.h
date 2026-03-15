@@ -46,10 +46,9 @@ private:
 
 template <class Impl>
 class KvStore {
-    using ItType      = typename Impl::ItType;
-    using ConstItType = typename Impl::ConstItType;
-
 public:
+    using ValueType  = typename Impl::ValueType;
+
     KvStore(std::pmr::memory_resource* mr) : data_(mr), mr_(mr) {}
 
     template <class U, class V>
@@ -58,7 +57,7 @@ public:
     }
 
     template <class U>
-    auto get(U&& key) -> Result<ConstItType> {
+    auto get(U&& key) -> Result<ValueType> {
         return data_.get_impl(key);
     }
 
@@ -75,37 +74,34 @@ private:
     std::pmr::memory_resource* mr_;
 };
 
-template <class KeyType, class ValueType>
+template <class K, class V>
 class DummyImpl {
 public:
+    using KeyType = K;
+    using ValueType = V;
     using MapType =
-        std::unordered_map<KeyType, ValueType, std::hash<KeyType>, std::equal_to<KeyType>,
-                           std::pmr::polymorphic_allocator<std::pair<const KeyType, ValueType>>>;
-    using ConstItType = std::optional<ValueType>;
-    using ItType      = ValueType;
-
+        std::unordered_map<KeyType, ValueType, std::hash<KeyType>, std::equal_to<KeyType>, 
+                            std::pmr::polymorphic_allocator<std::pair<const KeyType, ValueType>>>;
+    
     DummyImpl(std::pmr::memory_resource* mr_) : data_(mr_) {}
 
-    template <class U, class V>
-    auto set_impl(U&& key, V&& value) -> Result<bool> {
-        std::lock_guard<std::mutex> lk(mu_);
-        data_.insert_or_assign(KeyType(std::forward<U>(key)), ValueType(std::forward<V>(value)));
+    template <class X, class Y>
+    auto set_impl(X&& key, Y&& value) -> Result<bool> {
+        data_.insert_or_assign(KeyType(std::forward<X>(key)), ValueType(std::forward<Y>(value)));
         return {OpStatus::OK, true};
     }
 
-    template <class U>
-    auto get_impl(U&& key) -> Result<ConstItType> {
-        std::lock_guard<std::mutex> lk(mu_);
+    template <class X>
+    auto get_impl(X&& key) -> Result<ValueType> {
         auto it = data_.find(key);
         if (it == data_.end()) {
-            return {OpStatus::OK, std::optional<ValueType>{}};
+            return {OpStatus::OK, ValueType{}};
         }
-        return {OpStatus::OK, std::optional<ValueType>{it->second}};
+        return {OpStatus::OK, it->second};
     }
 
-    template <class U>
-    auto del_impl(U&& key) -> Result<bool> {
-        std::lock_guard<std::mutex> lk(mu_);
+    template <class X>
+    auto del_impl(X&& key) -> Result<bool> {
         return {OpStatus::OK, data_.erase(key) != 0};
     }
 
@@ -119,9 +115,7 @@ template <class KeyType, class ValueType, class Hash = std::hash<KeyType>,
           class KeyEqual = std::equal_to<KeyType>>
 class DashImpl {
 public:
-    using TableType    = dash::DashEH<KeyType, ValueType, Hash, KeyEqual>;
-    using ConstItType  = std::optional<ValueType>;
-    using ItType       = ValueType;
+    using TableType   = dash::DashEH<KeyType, ValueType, Hash, KeyEqual>;
 
     explicit DashImpl(std::pmr::memory_resource* mr) : mr_(mr) {}
 
@@ -143,8 +137,14 @@ public:
     }
 
     template <class U>
-    auto get_impl(U&& key) -> Result<ConstItType> {
-        return {OpStatus::OK, data_.find(KeyType(std::forward<U>(key)))};
+    auto get_impl(U&& key) -> Result<ValueType> {
+        auto record = data_.find_record(KeyType(std::forward<U>(key)));
+        if (!record) {
+            return {OpStatus::OK, ValueType{}};
+        }
+
+        return {OpStatus::OK,
+                ConstValueRef(&record->value, std::static_pointer_cast<const void>(record))};
     }
 
     template <class U>

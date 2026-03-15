@@ -98,6 +98,16 @@ public:
     }
 
     auto count() const -> uint64_t { return total_count_.load(std::memory_order_relaxed); }
+    auto total_bytes() const -> uint64_t { return total_bytes_.load(std::memory_order_relaxed); }
+    auto average_bytes() const -> double {
+        auto count = total_count_.load(std::memory_order_relaxed);
+        if (count == 0) {
+            return 0.0;
+        }
+
+        auto total_bytes = total_bytes_.load(std::memory_order_relaxed);
+        return static_cast<double>(total_bytes) / count;
+    }
 
     auto report_now() -> void { report_once(); }
 
@@ -157,15 +167,22 @@ private:
                 total_count == 0 ? 0.0 : static_cast<double>(total_ns) / total_count;
 
             if (has_bytes) {
+                double window_avg_bytes =
+                    window_count == 0 ? 0.0 : static_cast<double>(window_bytes) / window_count;
+                double total_avg_bytes =
+                    total_count == 0 ? 0.0 : static_cast<double>(total_bytes) / total_count;
                 double seconds = std::chrono::duration<double>(report_interval_).count();
                 double window_rate =
                     seconds <= 0.0 ? 0.0 : static_cast<double>(window_bytes) / seconds;
 
                 spdlog::log(level_,
                             "[avg:{}] window_avg={} window_count={} total_avg={} total_count={} "
-                            "window_rate={} window_bytes={} total_bytes={}",
+                            "window_avg_bytes={} total_avg_bytes={} window_rate={} "
+                            "window_bytes={} total_bytes={}",
                             name_, format_duration(window_avg_ns), window_count,
-                            format_duration(total_avg_ns), total_count, format_rate(window_rate),
+                            format_duration(total_avg_ns), total_count,
+                            format_bytes(window_avg_bytes), format_bytes(total_avg_bytes),
+                            format_rate(window_rate),
                             format_bytes(static_cast<double>(window_bytes)),
                             format_bytes(static_cast<double>(total_bytes)));
                 return;
