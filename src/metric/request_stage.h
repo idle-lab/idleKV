@@ -124,7 +124,7 @@ private:
 
     auto report_once() -> void {
         report_stage(cmd_parse_);
-        report_stage(queue_to_shard_);
+        // report_stage(queue_to_shard_);
         report_stage(exec_on_shard_);
         report_stage(queue_to_send_);
         report_stage(flush_time_);

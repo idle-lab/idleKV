@@ -13,6 +13,7 @@
 #include <mimalloc.h>
 #include <queue>
 #include <string>
+#include <utility>
 
 namespace idlekv {
 
@@ -36,7 +37,7 @@ public:
     template <class Fn>
         requires std::invocable<Fn>
     auto dispatch(Fn&& task) -> void {
-        tq_.add(std::move(task));
+        tq_.add(std::forward<Fn>(task));
     }
 
     auto id() const -> ShardId { return id_; }
@@ -45,6 +46,7 @@ public:
         return db_slice_[index];
     }
 
+    ~Shard() { tq_.close(); }
 private:
     std::vector<std::shared_ptr<DB>> db_slice_;
     XAllocator                       mr_;

@@ -147,4 +147,45 @@ TEST(TaskQueueTest, CloseDrainsQueuedTasksAndRejectsNewOnes) {
     EXPECT_EQ(executed.load(std::memory_order_relaxed), 2);
 }
 
+TEST(TaskQueueTest, RetriesWhenRingBufferIsTemporarilyFull) {
+    constexpr int queued_while_blocked = (1 << 10) + 128;
+
+    TaskQueue          queue("task-queue-full");
+    std::atomic<int>   executed{0};
+    std::promise<void> first_started;
+    auto               first_started_future = first_started.get_future();
+    std::promise<void> release_first;
+    auto               release_first_future = release_first.get_future().share();
+    std::promise<void> producer_done;
+    auto               producer_done_future = producer_done.get_future();
+
+    queue.start();
+    queue.add([&] {
+        executed.fetch_add(1, std::memory_order_relaxed);
+        first_started.set_value();
+        release_first_future.wait();
+    });
+
+    ASSERT_EQ(first_started_future.wait_for(1s), std::future_status::ready);
+
+    std::thread producer([&] {
+        for (int i = 0; i < queued_while_blocked; ++i) {
+            queue.add([&] { executed.fetch_add(1, std::memory_order_relaxed); });
+        }
+        producer_done.set_value();
+    });
+
+    EXPECT_EQ(producer_done_future.wait_for(50ms), std::future_status::timeout);
+
+    release_first.set_value();
+    producer.join();
+
+    ASSERT_TRUE(wait_until([&] {
+        return executed.load(std::memory_order_acquire) == queued_while_blocked + 1;
+    }, 5s));
+
+    queue.close();
+    EXPECT_EQ(executed.load(std::memory_order_relaxed), queued_while_blocked + 1);
+}
+
 } // namespace

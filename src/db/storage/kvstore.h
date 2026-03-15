@@ -4,16 +4,16 @@
 #include "db/storage/result.h"
 #include "result.h"
 
+#include <array>
+#include <cstddef>
 #include <functional>
-#include <memory>
 #include <memory_resource>
 #include <mutex>
 #include <optional>
 #include <string>
-#include <string_view>
-#include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <xxhash.h>
 
 namespace idlekv {
 
@@ -74,55 +74,90 @@ private:
     std::pmr::memory_resource* mr_;
 };
 
-template <class K, class V>
+template <class Key, class Value>
 class DummyImpl {
 public:
-    using KeyType = K;
-    using ValueType = V;
+    using KeyType = Key;
+    using ValueType = Value;
+
+    template<size_t ShardNum>
+    class ShardHash {
+    public:
     using MapType =
         std::unordered_map<KeyType, ValueType, std::hash<KeyType>, std::equal_to<KeyType>, 
                             std::pmr::polymorphic_allocator<std::pair<const KeyType, ValueType>>>;
+    explicit ShardHash([[maybe_unused]] std::pmr::memory_resource* mr_) {}
     
+    template <class U, class V>
+    auto insert(U&& key, V&& value) -> void {
+        auto shard_id = hash(key) % ShardNum;
+        {
+            std::lock_guard<std::mutex> lg(locks_[shard_id]);
+            shards_[shard_id].emplace(std::forward<U>(key), std::forward<V>(value));
+        }
+    }
+
+    template <class U>
+    auto find(U&& key) -> std::optional<ValueType> {
+        auto shard_id = hash(key) % ShardNum;
+        {
+            std::lock_guard<std::mutex> lg(locks_[shard_id]);
+            auto it = shards_[shard_id].find(key);
+            if (it == shards_[shard_id].end()) {
+                return std::nullopt;
+            }
+            return it->second;
+        }
+    }
+
+    private:
+        auto hash(const KeyType& key) -> uint64_t {
+            return XXH64(key.data(), key.size(), 114514);
+        }
+
+        std::array<MapType, ShardNum> shards_;
+        std::array<std::mutex, ShardNum> locks_;
+    };
     DummyImpl(std::pmr::memory_resource* mr_) : data_(mr_) {}
 
-    template <class X, class Y>
-    auto set_impl(X&& key, Y&& value) -> Result<bool> {
-        data_.insert_or_assign(KeyType(std::forward<X>(key)), ValueType(std::forward<Y>(value)));
+    template <class U, class V>
+    auto set_impl(U&& key, V&& value) -> Result<bool> {
+        data_.insert(std::forward<U>(key), std::forward<V>(value));
         return {OpStatus::OK, true};
     }
 
-    template <class X>
-    auto get_impl(X&& key) -> Result<ValueType> {
-        auto it = data_.find(key);
-        if (it == data_.end()) {
+    template <class U>
+    auto get_impl(U&& key) -> Result<ValueType> {
+        auto record = data_.find(key);
+        if (record.has_value()) {
             return {OpStatus::OK, ValueType{}};
         }
-        return {OpStatus::OK, it->second};
+        return {OpStatus::OK, record.value()};
     }
 
-    template <class X>
-    auto del_impl(X&& key) -> Result<bool> {
-        return {OpStatus::OK, data_.erase(key) != 0};
+    template <class U>
+    auto del_impl(U&& key) -> Result<bool> {
+        return {OpStatus::OK, true};
     }
 
 private:
-    MapType data_;
-
-    std::mutex mu_;
+    ShardHash<32> data_;
 };
 
-template <class KeyType, class ValueType, class Hash = std::hash<KeyType>,
-          class KeyEqual = std::equal_to<KeyType>>
+template <class Key, class Value, class Hash = std::hash<Key>,
+          class KeyEqual = std::equal_to<Key>>
 class DashImpl {
 public:
-    using TableType   = dash::DashEH<KeyType, ValueType, Hash, KeyEqual>;
+    using KeyType = Key;
+    using ValueType = Value;
+    using TableType   = dash::DashEH<Key, Value, Hash, KeyEqual>;
 
     explicit DashImpl(std::pmr::memory_resource* mr) : mr_(mr) {}
 
     template <class U, class V>
     auto set_impl(U&& key, V&& value) -> Result<bool> {
-        KeyType   owned_key(std::forward<U>(key));
-        ValueType owned_value(std::forward<V>(value));
+        Key   owned_key(std::forward<U>(key));
+        Value owned_value(std::forward<V>(value));
 
         while (true) {
             if (data_.insert(owned_key, owned_value)) {
@@ -137,19 +172,18 @@ public:
     }
 
     template <class U>
-    auto get_impl(U&& key) -> Result<ValueType> {
-        auto record = data_.find_record(KeyType(std::forward<U>(key)));
+    auto get_impl(U&& key) -> Result<Value> {
+        auto record = data_.find_record(Key(std::forward<U>(key)));
         if (!record) {
-            return {OpStatus::OK, ValueType{}};
+            return {OpStatus::OK, Value{}};
         }
 
-        return {OpStatus::OK,
-                ConstValueRef(&record->value, std::static_pointer_cast<const void>(record))};
+        return {OpStatus::OK, record->value};
     }
 
     template <class U>
     auto del_impl(U&& key) -> Result<bool> {
-        return {OpStatus::OK, data_.erase(KeyType(std::forward<U>(key)))};
+        return {OpStatus::OK, data_.erase(Key(std::forward<U>(key)))};
     }
 
 private:

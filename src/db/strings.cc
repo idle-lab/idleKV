@@ -56,7 +56,7 @@ auto get(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
         return ExecResult::error(kWrongTypeErr);
     }
 
-    return ExecResult::bulk_string(value->as_string());
+    return ExecResult::bulk_string(value);
 }
 
 auto del(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {

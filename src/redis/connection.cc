@@ -9,11 +9,15 @@
 
 #include <asio/as_tuple.hpp>
 #include <asio/awaitable.hpp>
+#include <asio/read.hpp>
+#include <asio/read_at.hpp>
+#include <asio/read_until.hpp>
 #include <asio/steady_timer.hpp>
 #include <asio/use_awaitable.hpp>
 #include <cstddef>
 #include <deque>
 #include <spdlog/spdlog.h>
+#include <sys/uio.h>
 #include <system_error>
 
 namespace idlekv {
@@ -83,6 +87,23 @@ auto Connection::read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<R
     co_return ResultT{ec, size_t(n)};
 }
 
+auto Connection::readv_impl(const std::vector<Buf>& bufs) noexcept
+    -> asio::awaitable<ResultT<size_t>>  {
+    if (closed()) {
+        co_return ResultT<size_t>(asio::error::not_connected);
+    }
+
+    auto [ec, n] = co_await socket_->async_read_some(bufs,
+                                                     asio::as_tuple(asio::use_awaitable));
+    if (ec) {
+        ec_ = ec;
+        if (!is_connection_closed_error(ec) && !is_transient_io_error(ec)) {
+            LOG(warn, "read failed: {}", ec.message());
+        }
+    }
+    co_return ResultT{ec, size_t(n)};
+}
+
 auto Connection::write_impl(const byte* data, size_t size) noexcept
     -> asio::awaitable<ResultT<size_t>> {
     if (closed()) {
@@ -117,23 +138,21 @@ auto Connection::writev_impl(const std::vector<BufView>& bufs) noexcept
 
 auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
     for (;;) {
-        const auto parse_start = RequestStageMetrics::clock::now();
-        auto res = co_await p_.parse_one();
-        RequestStageMetrics::instance().observe_cmd_parse(RequestStageMetrics::clock::now() -
-                                                         parse_start);
-        if (!res.ok()) {
-            if (res == ParserResut::STD_ERROR) {
-                if (is_connection_closed_error(res.error_code())) {
+        auto parse_res = co_await p_.parse_one();
+
+        if (!parse_res.ok()) {
+            if (parse_res == ParserResut::STD_ERROR) {
+                if (is_connection_closed_error(parse_res.error_code())) {
                     break;
                 }
 
-                if (is_transient_io_error(res.error_code())) {
+                if (is_transient_io_error(parse_res.error_code())) {
                     continue;
                 }
             }
 
             // Parser failed. Try to send a single ERR reply then close the connection.
-            auto reply_ec = co_await reply_parse_error(s_, res);
+            auto reply_ec = co_await reply_parse_error(s_, parse_res);
             if (reply_ec && !is_connection_closed_error(reply_ec) &&
                 !is_transient_io_error(reply_ec)) {
                 LOG(warn, "failed to send parse error reply: {}", reply_ec.message());
@@ -141,7 +160,7 @@ auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
             break;
         }
 
-        auto& args = res.value();
+        auto& args = parse_res.value();
         if (args.empty()) [[unlikely]] {
             auto parse_err = ParserResut(ParserResut::PROTOCOL_ERROR,
                                          fmt::format(kProtocolErrFmt, "empty command"));
@@ -156,7 +175,35 @@ auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
         std::transform(args[0].begin(), args[0].end(), args[0].begin(),
                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         
-        engine->dispatch_cmd(this, args);
+        auto res = engine->dispatch_cmd(this, args);
+
+        switch (res.type()) {
+        case ExecResult::kPong:
+            co_await sender().send_pong();
+            break;
+        case ExecResult::kOk:
+            co_await sender().send_ok();
+            break;
+        case ExecResult::kSimpleString:
+            co_await sender().send_simple_string(res.string());
+            break;
+        case ExecResult::kBulkString:
+            co_await sender().send_bulk_string(res.data()->as_string());
+            break;
+        case ExecResult::kNull:
+            co_await sender().send_null_bulk_string();
+            break;
+        case ExecResult::kInteger:
+            co_await sender().send_integer(res.integer());
+            break;
+        case ExecResult::kError:
+            co_await sender().send_error(res.string());
+            break;
+        }
+
+        if (parse_res != ParserResut::HAS_MORE) {
+            co_await s_.flush();
+        }
     }
 }
 
@@ -203,7 +250,7 @@ auto Connection::handle_send() noexcept -> asio::awaitable<void> {
                 co_await sender().send_simple_string(res.string());
                 break;
             case ExecResult::kBulkString:
-                co_await sender().send_bulk_string(res.string());
+                co_await sender().send_bulk_string(res.data()->as_string());
                 break;
             case ExecResult::kNull:
                 co_await sender().send_null_bulk_string();
@@ -221,10 +268,8 @@ auto Connection::handle_send() noexcept -> asio::awaitable<void> {
             }
         }
 
-        const auto flush_start = PromiseResult::clock::now();
         co_await s_.flush();
-        RequestStageMetrics::instance().observe_flush_time(PromiseResult::clock::now() -
-                                                           flush_start);
+
         if (!is_active() || s_.get_error()) {
             co_return;
         }

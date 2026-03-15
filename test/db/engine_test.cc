@@ -22,7 +22,7 @@ using namespace idlekv;
 
 class LoopbackConnection final : public Connection {
 public:
-    LoopbackConnection() : Connection(nullptr) {}
+    explicit LoopbackConnection(const asio::any_io_executor& executor) : Connection(executor) {}
 
     auto read_impl(byte*, size_t) noexcept -> asio::awaitable<ResultT<size_t>> override {
         co_return ResultT<size_t>(asio::error::operation_not_supported);
@@ -101,7 +101,7 @@ protected:
             return ExecResult::error(fmt::format(kArgNumErrFmt, cmd->name()));
         }
 
-        CmdContext ctx(conn_.get(), dbs_[conn_->db_index()].get());
+        CmdContext ctx(conn_.get(), dbs_[conn_->db_index()].get(), 0);
         return cmd->exec(&ctx, owned);
     }
 
@@ -205,7 +205,7 @@ TEST(EngineAsyncExecTest, CrossShardExecRoundTripsReplies) {
     }
     ASSERT_FALSE(cross_shard_key.empty());
 
-    LoopbackConnection conn;
+    LoopbackConnection conn(pool.at(0)->io_context().get_executor());
 
     pool.at(0)->await_dispatch([&]() -> asio::awaitable<void> {
         std::vector<std::string> set_args = {"set", cross_shard_key, "value"};

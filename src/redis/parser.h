@@ -5,6 +5,7 @@
 #include "common/logger.h"
 #include "common/result.h"
 
+#include <array>
 #include <asio/asio.hpp>
 #include <asio/awaitable.hpp>
 #include <asiochan/asiochan.hpp>
@@ -25,7 +26,7 @@
 
 namespace idlekv {
 
-constexpr size_t kDefaultReadBufferSize = 2048;
+constexpr size_t kDefaultReadBufferSize = 4096;
 constexpr size_t kDefaultWriteBufferSize = 2048;
 constexpr size_t kMaxReplyFlushCount    = IOV_MAX - 2;
 constexpr size_t kMaxReplyFlushBytes    = 5 * KB;
@@ -48,10 +49,31 @@ enum class DataType : char {
 
 auto operator==(DataType dt, char prefix) -> bool;
 
+class Buf {
+public:
+    Buf() = default;
+    Buf(byte* data, size_t size) : data_(data), size_(size) {}
 
+    Buf(Buf&&)                         = default;
+    Buf(const Buf&)                    = default;
+    auto operator=(Buf&&) -> Buf&      = default;
+    auto operator=(const Buf&) -> Buf& = default;
+
+    auto begin() -> byte* { return data_; }
+    auto end() -> byte* { return data_ + size_; }
+    auto data() -> byte* { return const_cast<byte*>(data_); }
+    auto size() const -> size_t { return size_; }
+    operator asio::mutable_buffer() const noexcept { return asio::mutable_buffer(data_, size_); }
+    operator asio::const_buffer() const noexcept { return asio::const_buffer(data_, size_); }
+
+private:
+    byte* data_;
+    size_t      size_;  
+};
 
 class BufView {
 public:
+    BufView() = default;
     BufView(const byte* data, size_t size) : data_(data), size_(size) {}
 
     BufView(BufView&&)                         = default;
@@ -183,9 +205,11 @@ public:
     virtual ~Reader() = default;
 protected:
     virtual auto read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
+    virtual auto readv_impl(const std::vector<Buf>& bufs) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
 
 private:
     IOBuf buf_;
+    std::vector<Buf> bufs_;
 };
 
 class Writer {
@@ -337,7 +361,7 @@ private:
 
 class Parser {
 public:
-    Parser(Reader* rd) : rd_(rd), buf_(1024) {}
+    Parser(Reader* rd) : rd_(rd) {}
 
     // parse a Redis command
     auto parse_one() noexcept -> asio::awaitable<ParserResut>;
@@ -346,7 +370,6 @@ public:
 
 private:
     Reader* rd_;
-    IOBuf   buf_;
 };
 
 class Sender {

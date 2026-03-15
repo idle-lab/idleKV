@@ -3,6 +3,7 @@
 #include "common/config.h"
 #include "db/command.h"
 #include "db/db.h"
+#include "db/result.h"
 #include "db/shard.h"
 #include "redis/connection.h"
 #include "server/el_pool.h"
@@ -22,7 +23,8 @@ public:
 
     auto init(EventLoopPool* elp) -> void;
     auto calculate_shard_id(std::string_view key) -> ShardId;
-    auto dispatch_cmd(Connection*, const std::vector<std::string>& args) noexcept -> void;
+    auto dispatch_cmd(Connection*, const std::vector<std::string>& args) noexcept -> ExecResult;
+    auto exec(Connection*, const std::vector<std::string>& args) noexcept -> asio::awaitable<void>;
 
     auto db_num() const -> size_t { return db_num_; }
     auto get_cmd(const std::string& name) -> Cmd*;

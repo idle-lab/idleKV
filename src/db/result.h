@@ -1,5 +1,6 @@
 #pragma once
 
+#include "db/storage/kvstore.h"
 #include "utils/condition_variable/condition_variable.h"
 #include <atomic>
 #include <asio/any_io_executor.hpp>
@@ -8,6 +9,7 @@
 #include <asio/use_awaitable.hpp>
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -39,6 +41,11 @@ public:
         return ExecResult(kBulkString, std::move(value));
     }
 
+    static auto bulk_string(const std::shared_ptr<DataEntity>& data) -> ExecResult {
+        return ExecResult(kBulkString, data);
+    }
+
+
     static auto bulk_string(std::string_view value) -> ExecResult {
         return ExecResult(kBulkString, std::string(value));
     }
@@ -57,17 +64,21 @@ public:
 
     auto string() const -> std::string_view { return string_; }
 
+    auto data() -> const std::shared_ptr<DataEntity>& { return data_; }
+
     auto integer() const -> int64_t { return integer_; }
 
 private:
     explicit ExecResult(Type type) : type_(type) {}
 
     ExecResult(Type type, std::string value) : type_(type), string_(std::move(value)) {}
+    ExecResult(Type type, const std::shared_ptr<DataEntity>& data) : type_(type), data_(data) {}
 
     ExecResult(Type type, int64_t value) : type_(type), integer_(value) {}
 
     Type        type_ = kOk;
     std::string string_;
+    std::shared_ptr<DataEntity> data_;
     int64_t     integer_ = 0;
 };
 

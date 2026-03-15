@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef DEBUG
+
 #include "common/logger.h"
 
 #include <algorithm>
@@ -43,7 +45,15 @@ public:
             return pending;
         }
 
-        auto on_task_completed() -> size_t { return decrease_pending(1); }
+        auto on_task_completed(size_t count = 1) -> size_t {
+            if (count == 0) {
+                return pending_tasks_.load(std::memory_order_relaxed);
+            }
+
+            completed_count_.fetch_add(count, std::memory_order_relaxed);
+            total_completed_count_.fetch_add(count, std::memory_order_relaxed);
+            return decrease_pending(count);
+        }
 
         auto drop_pending(size_t count) -> size_t {
             if (count == 0) {
@@ -82,7 +92,15 @@ public:
         }
 
         auto report_once() -> void {
+            const auto now = clock::now();
+            const auto elapsed_seconds =
+                std::max(std::chrono::duration<double>(now - last_report_at_).count(), 1e-9);
+            last_report_at_ = now;
+
             const auto enqueue_count = enqueue_count_.exchange(0, std::memory_order_acq_rel);
+            const auto completed_count = completed_count_.exchange(0, std::memory_order_acq_rel);
+            const auto total_completed =
+                total_completed_count_.load(std::memory_order_relaxed);
             const auto pending_max   = window_max_pending_.exchange(0, std::memory_order_acq_rel);
             const auto pending_now   = pending_tasks_.load(std::memory_order_relaxed);
             const auto wake_to_first_task_count =
@@ -109,10 +127,13 @@ public:
                 lock_wait_samples.swap(lock_wait_samples_);
             }
 
-            if (enqueue_count == 0 && pending_now == 0 && pending_max == 0 &&
-                wake_to_first_task_count == 0 && lock_acquires == 0) {
+            const bool has_window_activity =
+                enqueue_count != 0 || completed_count != 0 || pending_max != 0 ||
+                wake_to_first_task_count != 0 || lock_acquires != 0;
+            if (!has_window_activity && pending_now == last_reported_pending_) {
                 return;
             }
+            last_reported_pending_ = pending_now;
 
             std::sort(depth_samples.begin(), depth_samples.end());
             std::sort(lock_wait_samples.begin(), lock_wait_samples.end());
@@ -132,6 +153,7 @@ public:
                 total_wake_to_first_task_count == 0
                     ? 0
                     : total_wake_to_first_task_ns / total_wake_to_first_task_count;
+            const auto completed_rate = static_cast<double>(completed_count) / elapsed_seconds;
 
             const auto contention_ratio =
                 lock_acquires == 0 ? 0.0
@@ -139,14 +161,16 @@ public:
                                       static_cast<double>(lock_acquires));
 
             spdlog::info(
-                "[task-queue:{}] enqueue_count={} pending_now={} pending_max={} "
+                "[task-queue:{}] enqueue_count={} completed_count={} completed_rate={:.2f} task/s "
+                "completed_total={} pending_now={} pending_max={} "
                 "depth_sampled={} depth_p50={} depth_p95={} depth_p99={} depth_max={} "
                 "wake_post_count={} wake_to_first_task_avg={} "
                 "wake_to_first_task_max={} total_wake_to_first_task_avg={} "
                 "lock_acquires={} contended={} contention={:.2f}% lock_sampled={} "
                 "lock_wait_p50={} lock_wait_p95={} lock_wait_p99={} lock_wait_max={}",
-                name_, enqueue_count, pending_now, pending_max, depth_samples.size(), depth_p50,
-                depth_p95, depth_p99, depth_max, wake_to_first_task_count,
+                name_, enqueue_count, completed_count, completed_rate, total_completed,
+                pending_now, pending_max, depth_samples.size(), depth_p50, depth_p95, depth_p99,
+                depth_max, wake_to_first_task_count,
                 format_duration_ns(wake_to_first_task_avg),
                 format_duration_ns(wake_to_first_task_max),
                 format_duration_ns(total_wake_to_first_task_avg), lock_acquires, contended,
@@ -222,6 +246,8 @@ public:
 
         std::string            name_;
         std::atomic<uint64_t>  enqueue_count_{0};
+        std::atomic<uint64_t>  completed_count_{0};
+        std::atomic<uint64_t>  total_completed_count_{0};
         std::atomic<uint64_t>  pending_tasks_{0};
         std::atomic<uint64_t>  window_max_pending_{0};
         std::atomic<uint64_t>  depth_sequence_{0};
@@ -239,6 +265,8 @@ public:
         std::atomic<uint64_t>  lock_wait_sequence_{0};
         std::mutex             lock_wait_mu_;
         std::vector<uint64_t>  lock_wait_samples_;
+        clock::time_point      last_report_at_{clock::now()};
+        uint64_t               last_reported_pending_{0};
     };
 
     static auto instance() -> TaskQueueMetricsRegistry& {
@@ -317,13 +345,59 @@ private:
         }
     }
 
-    std::chrono::seconds                 report_interval_{1};
-    std::mutex                           mu_;
+    std::chrono::seconds                     report_interval_{1};
+    std::mutex                               mu_;
     std::vector<std::weak_ptr<QueueMetrics>> queues_;
-    std::mutex                           cv_mu_;
-    std::condition_variable              cv_;
-    std::atomic<bool>                    stopped_{false};
-    std::jthread                         reporter_;
+    std::mutex                               cv_mu_;
+    std::condition_variable                  cv_;
+    std::atomic<bool>                        stopped_{false};
+    std::jthread                             reporter_;
 };
 
 } // namespace idlekv
+
+#else
+
+#include <chrono>
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <utility>
+
+namespace idlekv {
+
+class TaskQueueMetricsRegistry {
+public:
+    class QueueMetrics {
+    public:
+        explicit QueueMetrics(std::string) {}
+
+        auto on_task_enqueued() -> size_t { return 0; }
+        auto on_task_completed(size_t = 1) -> size_t { return 0; }
+        auto drop_pending(size_t = 0) -> size_t { return 0; }
+
+        template <class Rep, class Period>
+        auto observe_wake_to_first_task(std::chrono::duration<Rep, Period>) -> void {}
+
+        template <class Rep, class Period>
+        auto observe_lock_wait(std::chrono::duration<Rep, Period>, bool) -> void {}
+    };
+
+    static auto instance() -> TaskQueueMetricsRegistry& {
+        static TaskQueueMetricsRegistry registry;
+        return registry;
+    }
+
+    auto register_queue(std::string name) -> std::shared_ptr<QueueMetrics> {
+        return std::make_shared<QueueMetrics>(std::move(name));
+    }
+
+    auto stop() -> void {}
+
+private:
+    TaskQueueMetricsRegistry() = default;
+};
+
+} // namespace idlekv
+
+#endif

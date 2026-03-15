@@ -3,6 +3,7 @@
 #include "common/logger.h"
 #include "common/result.h"
 #include "metric/avg.h"
+#include "metric/request_stage.h"
 #include "redis/error.h"
 
 #include <algorithm>
@@ -128,22 +129,36 @@ auto Reader::read_bytes_to(byte* buf, size_t len) noexcept
     -> asio::awaitable<ResultT<std::monostate>> {
     size_t offset = 0;
 
-    for (;;) {
-        auto rv = buf_.read_view();
-        if (rv.size() >= len) {
-            std::memcpy(buf + offset, rv.data(), len);
-            buf_.consume(len);
-            co_return std::monostate{};
-        } else {
-            std::memcpy(buf + offset, rv.data(), rv.size());
-            offset += rv.size();
-            len -= rv.size();
+    auto rv = buf_.read_view();
+    if (rv.size() >= len) {
+        std::memcpy(buf + offset, rv.data(), len);
+        buf_.consume(len);
+        co_return std::monostate{};
+    }
 
-            buf_.clear();
-            auto ec = co_await fill();
-            if (ec) {
-                co_return ec;
-            }
+    std::memcpy(buf + offset, rv.data(), rv.size());
+    offset += rv.size();
+    len -= rv.size();
+
+    buf_.clear();
+
+    bufs_.resize(2);
+    bufs_.emplace_back(buf + offset, len);
+    auto wv  = buf_.write_view();
+    bufs_.emplace_back(wv.data(), wv.size());
+
+    for (;;) {
+        auto res = co_await readv_impl(bufs_);
+        if (!res.ok()) {
+            co_return res.err();
+        }
+        if (res.value() < len) {
+            offset +=  res.value();
+            len -= res.value();
+            bufs_[0] = Buf{buf + offset, len};
+        } else {
+            buf_.commit(res.value() - len);
+            co_return std::monostate{};
         }
     }
 }
@@ -159,22 +174,6 @@ auto Reader::fill() -> asio::awaitable<std::error_code> {
 }
 
 auto Reader::has_more() -> bool { return buf_.buffered() > 0; }
-
-// auto Writer::reserve_buf(size_t required_piece_size) -> std::error_code {
-//     if (required_piece_size <= buf_.capacity()) {
-//         return std::error_code{};
-//     }
-
-//     const size_t doubled_capacity = buf_.capacity() == 0 ? required_piece_size : buf_.capacity() * 2;
-//     const size_t next_capacity =
-//         std::min(kDefaultWriteBufferSize, std::max(required_piece_size, doubled_capacity));
-//     if (next_capacity < required_piece_size) {
-//         return std::make_error_code(std::errc::no_buffer_space);
-//     }
-
-//     buf_.reserve(next_capacity);
-//     return std::error_code{};
-// }
 
 auto Writer::reset_write_state() -> void {
     buf_.clear();
@@ -217,19 +216,23 @@ auto Writer::flush() -> asio::awaitable<std::error_code> {
         co_return std::error_code{};
     }
 
+    auto flush_start = std::chrono::steady_clock::now();
     // vecs_ preserves the original enqueue order, so a single writev keeps
     // mixed owned/external pieces in the same packet order they were queued.
     auto res = co_await writev_impl(vecs_);
-
+    RequestStageMetrics::instance().observe_flush_time(std::chrono::steady_clock::now() -
+                                                        flush_start);
     reset_write_state();
     co_return res.err();
 }
+
 
 auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
     auto headerRes = co_await rd_->read_line_view();
     if (!headerRes.ok()) {
         co_return headerRes.err();
     }
+    auto parse_start = std::chrono::steady_clock::now();
 
     auto& header = headerRes.value();
     if (header[0] != DataType::Arrays) [[unlikely]] {
@@ -274,7 +277,8 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
         // pop the trailing CRLF
         args[i].resize(strLen);
     }
-
+    RequestStageMetrics::instance().observe_cmd_parse(RequestStageMetrics::clock::now() -
+                                                    parse_start);
     co_return ParserResut(rd_->has_more() ? ParserResut::HAS_MORE : ParserResut::OK,
                           std::move(args));
 }

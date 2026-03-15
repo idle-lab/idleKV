@@ -31,10 +31,12 @@ class IdleEngine;
 
 class Connection : public Reader, public Writer {
 public:
-    explicit Connection(const asio::any_io_executor& exector)
+    explicit Connection(const asio::any_io_executor& exector = asio::any_io_executor{})
         : Reader(kDefaultReadBufferSize), Writer(kDefaultWriteBufferSize), p_(this), s_(this), sq_cv_(exector) {}
 
     virtual auto read_impl(byte* buf, size_t size) noexcept
+        -> asio::awaitable<ResultT<size_t>> override;
+    virtual auto readv_impl(const std::vector<Buf>& bufs) noexcept
         -> asio::awaitable<ResultT<size_t>> override;
 
     virtual auto write_impl(const byte* data, size_t size) noexcept
@@ -55,7 +57,9 @@ public:
 
     auto db_index() const -> size_t { return db_index_; }
     auto socket() -> asio::ip::tcp::socket& { return *socket_; }
-    auto get_executor() -> const asio::any_io_executor& { return socket_->get_executor(); }
+    auto get_executor() -> const asio::any_io_executor& {
+        return socket_.has_value() ? socket_->get_executor() : sq_cv_.get_executor();
+    }
     void set_db_index(size_t db_index) { db_index_ = db_index; }
 
     auto remote_endpoint() const -> asio::ip::tcp::endpoint {

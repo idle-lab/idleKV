@@ -35,7 +35,7 @@ auto RedisService::handle(asio::ip::tcp::socket socket) -> asio::awaitable<void>
     conn_list.emplace_front(conn.get());
     auto it = conn_list.begin();
 
-    asio::co_spawn(conn->get_executor(), conn->handle_send(), asio::detached);
+    // asio::co_spawn(conn->get_executor(), conn->handle_send(), asio::detached);
 
     co_await conn->handle_requests();
 
