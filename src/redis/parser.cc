@@ -2,6 +2,7 @@
 
 #include "common/logger.h"
 #include "common/result.h"
+#include "db/storage/kvstore.h"
 #include "redis/error.h"
 
 #include <algorithm>
@@ -155,6 +156,7 @@ auto Reader::has_more() -> bool { return buf_.buffered() > 0; }
 auto Writer::reset_write_state() -> void {
     buf_.clear();
     vecs_.clear();
+    keepalive_.clear();
     queued_size_ = 0;
 }
 
@@ -177,6 +179,36 @@ auto Writer::write(std::string_view s) -> asio::awaitable<std::error_code> {
     queued_size_ += s.size();
     buf_.commit(s.size());
     vecs_.emplace_back(begin, s.size());
+
+    if (vecs_.size() >= kMaxReplyFlushCount || queued_size_ >= kMaxReplyFlushBytes) {
+        auto ec = co_await flush();
+        if (ec) {
+            co_return ec;
+        }
+    }
+
+    co_return std::error_code{};
+}
+
+auto Writer::write_ref(std::string_view s, std::shared_ptr<const void> holder)
+    -> asio::awaitable<std::error_code> {
+    if (s.empty()) {
+        co_return std::error_code{};
+    }
+
+    if (!vecs_.empty() &&
+        (vecs_.size() >= kMaxReplyFlushCount || queued_size_ + s.size() >= kMaxReplyFlushBytes)) {
+        auto ec = co_await flush();
+        if (ec) {
+            co_return ec;
+        }
+    }
+
+    queued_size_ += s.size();
+    vecs_.emplace_back(s.data(), s.size());
+    if (holder) {
+        keepalive_.push_back(std::move(holder));
+    }
 
     if (vecs_.size() >= kMaxReplyFlushCount || queued_size_ >= kMaxReplyFlushBytes) {
         auto ec = co_await flush();
@@ -271,6 +303,22 @@ auto Sender::send_bulk_string(std::string_view s) -> asio::awaitable<void> {
     ec_ = co_await wr_->write_pieces(BULK_STRING_PREFIX, s.size(), CRLF);
     ec_ = co_await wr_->write(s);
     ec_ = co_await wr_->write(CRLF);
+}
+
+auto Sender::send_bulk_string(const std::shared_ptr<const DataEntity>& data) -> asio::awaitable<void> {
+    if (!data) {
+        co_await send_null_bulk_string();
+        co_return;
+    }
+
+    const auto& value = data->as_string();
+    ec_ = co_await wr_->write_pieces(BULK_STRING_PREFIX, value.size(), CRLF);
+    if (!ec_) {
+        ec_ = co_await wr_->write_ref(value, data);
+    }
+    if (!ec_) {
+        ec_ = co_await wr_->write(CRLF);
+    }
 }
 
 auto Sender::send_null_bulk_string() -> asio::awaitable<void> {

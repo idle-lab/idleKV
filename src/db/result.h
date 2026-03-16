@@ -65,6 +65,7 @@ public:
     auto string() const -> std::string_view { return string_; }
 
     auto data() -> const std::shared_ptr<DataEntity>& { return data_; }
+    auto data() const -> const std::shared_ptr<DataEntity>& { return data_; }
 
     auto integer() const -> int64_t { return integer_; }
 

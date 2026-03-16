@@ -101,7 +101,7 @@ public:
         std::optional<std::conditional_t<std::is_void_v<RetType>, std::monostate, RetType>>;
 
     EventLoopPool(size_t pool_size = 0)
-        : pool_size_(pool_size > 0 ? pool_size : utils::get_online_cpus_num()) {}
+        : pool_size_(pool_size > 0 ? pool_size : 3 * utils::get_online_cpus_num()) {}
 
     auto run() -> void;
 

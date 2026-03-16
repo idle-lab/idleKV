@@ -46,7 +46,11 @@ auto send_exec_result(Sender& sender, const ExecResult& res) -> asio::awaitable<
         co_await sender.send_simple_string(res.string());
         break;
     case ExecResult::kBulkString:
-        co_await sender.send_bulk_string(res.string());
+        if (res.data()) {
+            co_await sender.send_bulk_string(res.data());
+        } else {
+            co_await sender.send_bulk_string(res.string());
+        }
         break;
     case ExecResult::kNull:
         co_await sender.send_null_bulk_string();

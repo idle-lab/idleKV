@@ -11,6 +11,8 @@
 #include <cstddef>
 #include <memory>
 #include <mimalloc.h>
+#include <absl/container/flat_hash_map.h>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -37,7 +39,7 @@ private:
 
     size_t db_num_;
     // read-only
-    std::unordered_map<std::string, Cmd> cmd_map_;
+    absl::flat_hash_map<std::string, Cmd> cmd_map_;
     std::vector<std::unique_ptr<Shard>>  shard_set_;
     size_t                               shard_num_;
 };

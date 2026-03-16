@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -26,10 +27,12 @@
 
 namespace idlekv {
 
+class DataEntity;
+
 constexpr size_t kDefaultReadBufferSize = 4096;
 constexpr size_t kDefaultWriteBufferSize = 2048;
 constexpr size_t kMaxReplyFlushCount    = IOV_MAX - 2;
-constexpr size_t kMaxReplyFlushBytes    = 5 * KB;
+constexpr size_t kMaxReplyFlushBytes    = 64 * KB;
 using byte                              = char;
 
 constexpr const char* CRLF                 = "\r\n";
@@ -223,6 +226,11 @@ public:
     // caller should ensure that s is valid until the next flush.
     auto write(std::string_view s) -> asio::awaitable<std::error_code>;
 
+    // Queue an external slice without copying and keep `holder` alive until the
+    // pending reply batch is flushed.
+    auto write_ref(std::string_view s, std::shared_ptr<const void> holder)
+        -> asio::awaitable<std::error_code>;
+
     // Flush all queued slices, including both owned buffer slices and
     // externally referenced views added via write().
     auto flush() -> asio::awaitable<std::error_code>;
@@ -257,6 +265,7 @@ private:
 
     IOBuf buf_;
     std::vector<BufView> vecs_;
+    std::vector<std::shared_ptr<const void>> keepalive_;
     size_t queued_size_{0};
     std::chrono::high_resolution_clock::time_point last_ = std::chrono::high_resolution_clock::now();
 };
@@ -381,6 +390,7 @@ public:
     auto send_ok() -> asio::awaitable<void>;
     auto send_pong() -> asio::awaitable<void>;
     auto send_bulk_string(std::string_view s) -> asio::awaitable<void>;
+    auto send_bulk_string(const std::shared_ptr<const DataEntity>& data) -> asio::awaitable<void>;
     auto send_null_bulk_string() -> asio::awaitable<void>;
     auto send_integer(int64_t value) -> asio::awaitable<void>;
     auto send_error(std::string_view s) -> asio::awaitable<void>;

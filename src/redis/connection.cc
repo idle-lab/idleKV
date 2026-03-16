@@ -217,7 +217,11 @@ auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
             co_await sender().send_simple_string(res.string());
             break;
         case ExecResult::kBulkString:
-            co_await sender().send_bulk_string(res.data()->as_string());
+            if (res.data()) {
+                co_await sender().send_bulk_string(res.data());
+            } else {
+                co_await sender().send_bulk_string(res.string());
+            }
             break;
         case ExecResult::kNull:
             co_await sender().send_null_bulk_string();
@@ -279,7 +283,11 @@ auto Connection::handle_send() noexcept -> asio::awaitable<void> {
                 co_await sender().send_simple_string(res.string());
                 break;
             case ExecResult::kBulkString:
-                co_await sender().send_bulk_string(res.data()->as_string());
+                if (res.data()) {
+                    co_await sender().send_bulk_string(res.data());
+                } else {
+                    co_await sender().send_bulk_string(res.string());
+                }
                 break;
             case ExecResult::kNull:
                 co_await sender().send_null_bulk_string();

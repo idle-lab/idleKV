@@ -21,6 +21,7 @@ target_link_libraries(idlekv_core
     PUBLIC
         third_part
         ${XXHASH_LIBRARY}
+        absl::flat_hash_map
 )
 
 target_compile_definitions(idlekv_core

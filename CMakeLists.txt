@@ -28,6 +28,16 @@ endif()
 # 查找依赖
 find_package(Threads REQUIRED)
 
+include(FetchContent)
+
+FetchContent_Declare(
+  abseil
+  GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
+  GIT_TAG 20240116.2
+)
+
+FetchContent_MakeAvailable(abseil)
+
 add_subdirectory(third_part)
 add_subdirectory(src)
 if (ENABLE_BENCHMARK)

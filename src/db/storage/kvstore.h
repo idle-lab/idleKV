@@ -93,7 +93,7 @@ public:
         auto shard_id = hash(key) % ShardNum;
         {
             std::lock_guard<std::mutex> lg(locks_[shard_id]);
-            shards_[shard_id].emplace(std::forward<U>(key), std::forward<V>(value));
+            shards_[shard_id].insert(std::make_pair(std::forward<U>(key), std::forward<V>(value)));
         }
     }
 
