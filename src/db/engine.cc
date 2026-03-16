@@ -92,7 +92,7 @@ auto IdleEngine::calculate_shard_id(std::string_view key) -> ShardId {
 auto IdleEngine::dispatch_cmd(Connection* conn, const std::vector<std::string>& args) noexcept
     -> ExecResult {
     size_t id = ThreadState::tlocal()->pool_index();
-    auto promise = std::make_shared<PromiseResult>(conn->get_executor());
+    // auto promise = std::make_shared<PromiseResult>(conn->get_executor());
     // conn->enqueue_result(promise);
 
     auto cmd = get_cmd(args[0]);
@@ -115,23 +115,22 @@ auto IdleEngine::dispatch_cmd(Connection* conn, const std::vector<std::string>& 
         return cmd->exec(&cmdctx, args);
     }
 
-    // ShardId shard_id = id;
+    ShardId shard_id = id;
 
-    // if (cmd->first_key() != -1) {
-    //     // now only support single-key command, so directly check if the first key is a key
-    //     if (args.size() <= static_cast<size_t>(cmd->first_key())) {
-    //         promise->set_reslute(ExecResult::error(fmt::format(kArgNumErrFmt, cmd->name())));
-    //         promise->notify();
-    //         return;
-    //     }
+    if (cmd->first_key() != -1) {
+        // now only support single-key command, so directly check if the first key is a key
+        if (args.size() <= static_cast<size_t>(cmd->first_key())) {
+            return ExecResult::error(fmt::format(kArgNumErrFmt, cmd->name()));
+        }
 
-    //     shard_id = calculate_shard_id(args[cmd->first_key()]);
-    // }
+        shard_id = calculate_shard_id(args[cmd->first_key()]);
+    }
 
-    auto db_ptr = shard_set_[0]->db_at(conn->db_index()); // keep shared_ptr alive
-    promise->mark_shard_enqueued();
+    auto db_ptr = shard_set_[shard_id]->db_at(conn->db_index()); // keep shared_ptr alive
+    // promise->mark_shard_enqueued();
     CmdContext cmdctx(conn, db_ptr.get(), 0);
     return cmd->exec(&cmdctx, args);
+
     // shard_set_[shard_id]->dispatch([conn, cmd, args = args, promise, db_ptr, owner_id = id] {
     //     const auto shard_start = PromiseResult::clock::now();
     //     if (promise->has_stage_tracking()) {

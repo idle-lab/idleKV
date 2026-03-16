@@ -110,9 +110,20 @@ public:
         }
     }
 
+    template <class U>
+    auto earse(U&& key) -> std::optional<size_t> {
+        auto shard_id = hash(key) % ShardNum;
+        {
+            std::lock_guard<std::mutex> lg(locks_[shard_id]);
+            std::unordered_map<int, int> a;
+            a.erase(1);
+            return shards_[shard_id].erase(key);
+        }
+    }
+
     private:
         auto hash(const KeyType& key) -> uint64_t {
-            return XXH64(key.data(), key.size(), 114514);
+            return XXH32(key.data(), key.size(), 54188);
         }
 
         std::array<MapType, ShardNum> shards_;
@@ -129,14 +140,18 @@ public:
     template <class U>
     auto get_impl(U&& key) -> Result<ValueType> {
         auto record = data_.find(key);
-        if (record.has_value()) {
-            return {OpStatus::OK, ValueType{}};
+        if (!record.has_value()) {
+            return {OpStatus::NoSuchKey, ValueType{}};
         }
         return {OpStatus::OK, record.value()};
     }
 
     template <class U>
     auto del_impl(U&& key) -> Result<bool> {
+        auto count = data_.earse(std::forward<U>(key));
+        if (count == 0) {
+            return {OpStatus::NoSuchKey, true};
+        }
         return {OpStatus::OK, true};
     }
 

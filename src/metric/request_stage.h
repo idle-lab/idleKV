@@ -11,6 +11,7 @@
 #include <mutex>
 #include <sstream>
 #include <stop_token>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -21,9 +22,103 @@ class RequestStageMetrics {
 public:
     using clock = std::chrono::steady_clock;
 
+    struct ParseBreakdown {
+        uint64_t total_ns{0};
+        uint64_t io_wait_ns{0};
+        uint64_t decode_ns{0};
+    };
+
+    struct SlowRequestBreakdown {
+        ParseBreakdown parse;
+        uint64_t       total_ns{0};
+        uint64_t       command_prepare_ns{0};
+        uint64_t       exec_ns{0};
+        uint64_t       reply_encode_ns{0};
+        uint64_t       flush_ns{0};
+        size_t         arg_count{0};
+        bool           pipelined{false};
+        bool           flushed{false};
+        bool           parse_failed{false};
+        std::string    cmd_name;
+        std::string    peer;
+        std::string    note;
+    };
+
+    static constexpr auto slow_request_threshold() -> std::chrono::nanoseconds {
+        return std::chrono::microseconds(3000000);
+    }
+
     static auto instance() -> RequestStageMetrics& {
         static RequestStageMetrics metrics;
         return metrics;
+    }
+
+    static auto format_duration_ns(uint64_t ns) -> std::string {
+        constexpr double kNsPerUs = 1000.0;
+        constexpr double kNsPerMs = 1000.0 * kNsPerUs;
+        constexpr double kNsPerS  = 1000.0 * kNsPerMs;
+
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(2);
+
+        const auto value = static_cast<double>(ns);
+        if (value >= kNsPerS) {
+            oss << (value / kNsPerS) << " s";
+        } else if (value >= kNsPerMs) {
+            oss << (value / kNsPerMs) << " ms";
+        } else if (value >= kNsPerUs) {
+            oss << (value / kNsPerUs) << " us";
+        } else {
+            oss << value << " ns";
+        }
+
+        return oss.str();
+    }
+
+    static auto format_slow_request(const SlowRequestBreakdown& breakdown) -> std::string {
+        const auto send_total_ns = breakdown.reply_encode_ns + breakdown.flush_ns;
+        const auto accounted_ns =
+            breakdown.parse.total_ns + breakdown.command_prepare_ns + breakdown.exec_ns +
+            breakdown.reply_encode_ns + breakdown.flush_ns;
+        const auto other_ns =
+            accounted_ns >= breakdown.total_ns ? 0 : (breakdown.total_ns - accounted_ns);
+
+        std::ostringstream oss;
+        oss << "[slow-request] cmd="
+            << (breakdown.cmd_name.empty() ? "<parse-error>" : breakdown.cmd_name)
+            << " argc=" << breakdown.arg_count
+            << " total=" << format_duration_ns(breakdown.total_ns)
+            << " parse=" << format_duration_ns(breakdown.parse.total_ns)
+            << " parse_io_wait=" << format_duration_ns(breakdown.parse.io_wait_ns)
+            << " parse_decode=" << format_duration_ns(breakdown.parse.decode_ns)
+            << " cmd_prepare=" << format_duration_ns(breakdown.command_prepare_ns)
+            << " exec=" << format_duration_ns(breakdown.exec_ns)
+            << " send=" << format_duration_ns(send_total_ns)
+            << " reply_encode=" << format_duration_ns(breakdown.reply_encode_ns)
+            << " flush=" << format_duration_ns(breakdown.flush_ns)
+            << " other=" << format_duration_ns(other_ns)
+            << " pipelined=" << std::boolalpha << breakdown.pipelined
+            << " flushed=" << breakdown.flushed
+            << " parse_failed=" << breakdown.parse_failed
+            << " peer=" << (breakdown.peer.empty() ? "-" : breakdown.peer);
+
+        if (!breakdown.note.empty()) {
+            oss << " note=\"" << breakdown.note << "\"";
+        }
+
+        return oss.str();
+    }
+
+    static auto should_report_slow_request(uint64_t total_ns) -> bool {
+        return total_ns >= static_cast<uint64_t>(slow_request_threshold().count());
+    }
+
+    auto maybe_report_slow_request(const SlowRequestBreakdown& breakdown) -> void {
+        if (!should_report_slow_request(breakdown.total_ns)) {
+            return;
+        }
+
+        spdlog::warn("{}", format_slow_request(breakdown));
     }
 
     template <class Rep, class Period>
@@ -175,28 +270,6 @@ private:
         const double blended = static_cast<double>(sorted[low]) * (1.0 - weight) +
                                static_cast<double>(sorted[high]) * weight;
         return static_cast<uint64_t>(blended);
-    }
-
-    static auto format_duration_ns(uint64_t ns) -> std::string {
-        constexpr double kNsPerUs = 1000.0;
-        constexpr double kNsPerMs = 1000.0 * kNsPerUs;
-        constexpr double kNsPerS  = 1000.0 * kNsPerMs;
-
-        std::ostringstream oss;
-        oss << std::fixed << std::setprecision(2);
-
-        const auto value = static_cast<double>(ns);
-        if (value >= kNsPerS) {
-            oss << (value / kNsPerS) << " s";
-        } else if (value >= kNsPerMs) {
-            oss << (value / kNsPerMs) << " ms";
-        } else if (value >= kNsPerUs) {
-            oss << (value / kNsPerUs) << " us";
-        } else {
-            oss << value << " ns";
-        }
-
-        return oss.str();
     }
 
     StageWindow           cmd_parse_;

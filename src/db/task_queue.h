@@ -151,13 +151,13 @@ public:
     }
 
     auto start() -> void {
-        std::lock_guard<std::mutex> lg(lifecycle_mu_);
-        if (started_.load(std::memory_order_acquire) || consumer_.joinable()) {
-            return;
-        }
+        // std::lock_guard<std::mutex> lg(lifecycle_mu_);
+        // if (started_.load(std::memory_order_acquire) || consumer_.joinable()) {
+        //     return;
+        // }
 
-        started_.store(true, std::memory_order_release);
-        consumer_ = std::jthread(&TaskQueue::work, this);
+        // started_.store(true, std::memory_order_release);
+        // consumer_ = std::jthread(&TaskQueue::work, this);
     }
 
     auto close() -> void {

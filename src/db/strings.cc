@@ -43,8 +43,8 @@ auto set(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
 
 auto get(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
     auto res = ctx->db()->get(args[1]);
-    if (!res.ok()) {
-        return ExecResult::error(kStandardErr);
+    if (res == OpStatus::NoSuchKey) {
+        return ExecResult::null();
     }
 
     const auto& value = res.get();
@@ -61,8 +61,8 @@ auto get(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
 
 auto del(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
     auto res = ctx->db()->del(args[1]);
-    if (!res.ok()) {
-        return ExecResult::error(kStandardErr);
+    if (res == OpStatus::NoSuchKey) {
+        return ExecResult::integer(0);
     }
 
     return ExecResult::integer(res.get() ? 1 : 0);

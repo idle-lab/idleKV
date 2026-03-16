@@ -2,8 +2,6 @@
 
 #include "common/logger.h"
 #include "common/result.h"
-#include "metric/avg.h"
-#include "metric/request_stage.h"
 #include "redis/error.h"
 
 #include <algorithm>
@@ -82,33 +80,12 @@ auto decimal_size(T value) -> size_t {
 
 } // namespace
 
-auto Reader::read_line() noexcept -> asio::awaitable<ResultT<std::string>> {
-    std::string line;
-
-    for (;;) {
-        auto rv  = buf_.read_view();
-        auto pos = std::find(rv.begin(), rv.end(), '\n');
-        if (pos == rv.end()) {
-            line.append(rv.data(), rv.size());
-
-            buf_.clear();
-            auto ec = co_await fill();
-            if (ec) {
-                co_return ec;
-            }
-            continue;
-        }
-
-        line.append(rv.begin(), pos + 1);
-        buf_.consume(pos + 1 - rv.data());
-        co_return line;
-    }
-}
 
 auto Reader::read_line_view() noexcept -> asio::awaitable<ResultT<std::string_view>> {
     for (;;) {
         auto rv  = buf_.read_view();
-        auto pos = std::find(rv.begin(), rv.end(), '\n');
+        // auto pos = static_cast<const byte*>(std::memchr(rv.data(), '\n', rv.size()));
+        auto pos = std::find(rv.begin(), rv.end(),  '\n');
         if (pos == rv.end()) {
             CHECK(rv.size() < buf_.capacity()) << "line length exceeds buffer size";
             buf_.defrag();
@@ -143,9 +120,9 @@ auto Reader::read_bytes_to(byte* buf, size_t len) noexcept
     buf_.clear();
 
     bufs_.resize(2);
-    bufs_.emplace_back(buf + offset, len);
+    bufs_[0]= Buf{buf + offset, len};
     auto wv  = buf_.write_view();
-    bufs_.emplace_back(wv.data(), wv.size());
+    bufs_[1]= Buf{wv.data(), wv.size()};
 
     for (;;) {
         auto res = co_await readv_impl(bufs_);
@@ -216,12 +193,9 @@ auto Writer::flush() -> asio::awaitable<std::error_code> {
         co_return std::error_code{};
     }
 
-    auto flush_start = std::chrono::steady_clock::now();
     // vecs_ preserves the original enqueue order, so a single writev keeps
     // mixed owned/external pieces in the same packet order they were queued.
     auto res = co_await writev_impl(vecs_);
-    RequestStageMetrics::instance().observe_flush_time(std::chrono::steady_clock::now() -
-                                                        flush_start);
     reset_write_state();
     co_return res.err();
 }
@@ -232,11 +206,10 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
     if (!headerRes.ok()) {
         co_return headerRes.err();
     }
-    auto parse_start = std::chrono::steady_clock::now();
 
     auto& header = headerRes.value();
     if (header[0] != DataType::Arrays) [[unlikely]] {
-        co_return ParserResut(ParserResut::WRONG_TYPE_ERROR, kWrongTypeErr);
+        co_return ParserResut(ParserResut::PROTOCOL_ERROR, fmt::format("need '*' but '{}'", header[0]));
     }
     int arrLen;
     auto [ptr, err] = std::from_chars(header.data() + 1, header.data() + header.size() - 2, arrLen);
@@ -253,7 +226,7 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
 
         auto& line = lineRes.value();
         if (line.size() < 4 || line[0] != DataType::BulkString) [[unlikely]] {
-            co_return ParserResut(ParserResut::WRONG_TYPE_ERROR, kWrongTypeErr);
+            co_return ParserResut(ParserResut::PROTOCOL_ERROR, fmt::format("need $ but '{}'", line[0]));
         }
 
         int strLen;
@@ -274,11 +247,10 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
         if (!bytesRes.ok()) {
             co_return bytesRes.err();
         }
+
         // pop the trailing CRLF
         args[i].resize(strLen);
     }
-    RequestStageMetrics::instance().observe_cmd_parse(RequestStageMetrics::clock::now() -
-                                                    parse_start);
     co_return ParserResut(rd_->has_more() ? ParserResut::HAS_MORE : ParserResut::OK,
                           std::move(args));
 }

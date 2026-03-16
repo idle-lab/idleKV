@@ -70,6 +70,36 @@ auto reply_parse_error(Sender& sender, const ParserResut& res) -> asio::awaitabl
     co_return sender.get_error();
 }
 
+auto format_remote_endpoint(const Connection& conn) -> std::string {
+    const auto ep = conn.remote_endpoint();
+    if (ep == asio::ip::tcp::endpoint{}) {
+        return {};
+    }
+
+    return fmt::format("{}:{}", ep.address().to_string(), ep.port());
+}
+
+auto exec_result_name(const ExecResult& res) -> std::string_view {
+    switch (res.type()) {
+    case ExecResult::kPong:
+        return "pong";
+    case ExecResult::kOk:
+        return "ok";
+    case ExecResult::kSimpleString:
+        return "simple_string";
+    case ExecResult::kBulkString:
+        return "bulk_string";
+    case ExecResult::kNull:
+        return "null";
+    case ExecResult::kInteger:
+        return "integer";
+    case ExecResult::kError:
+        return "error";
+    }
+
+    return "unknown";
+}
+
 } // namespace
 
 auto Connection::read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> {
@@ -174,7 +204,6 @@ auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
         }
         std::transform(args[0].begin(), args[0].end(), args[0].begin(),
                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        
         auto res = engine->dispatch_cmd(this, args);
 
         switch (res.type()) {

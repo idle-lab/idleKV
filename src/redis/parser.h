@@ -193,8 +193,6 @@ class Reader {
 public:
     Reader(size_t cap) : buf_(cap) {}
 
-    // return a single line with '\n'
-    auto read_line() noexcept -> asio::awaitable<ResultT<std::string>>;
     auto read_line_view() noexcept -> asio::awaitable<ResultT<std::string_view>>;
     auto read_bytes_to(byte* buf, size_t len) noexcept -> asio::awaitable<ResultT<std::monostate>>;
 
@@ -338,9 +336,12 @@ public:
         PROTOCOL_ERROR,
     };
 
-    ParserResut(Status s, std::vector<std::string>&& args) : s_(s), args_(std::move(args)) {}
-    ParserResut(Status s, std::string&& msg) : s_(s), err_msg_(std::move(msg)) {}
-    ParserResut(std::error_code ec) : s_(Status::STD_ERROR), err_msg_(ec.message()), ec_(ec) {}
+    ParserResut(Status s, std::vector<std::string>&& args)
+        : s_(s), args_(std::move(args)) {}
+    ParserResut(Status s, std::string&& msg)
+        : s_(s), err_msg_(std::move(msg)) {}
+    ParserResut(std::error_code ec)
+        : s_(Status::STD_ERROR), err_msg_(ec.message()), ec_(ec) {}
 
     auto ok() const -> bool { return s_ == Status::OK || s_ == Status::HAS_MORE; }
 

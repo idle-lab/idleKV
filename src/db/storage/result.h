@@ -6,7 +6,7 @@
 
 namespace idlekv {
 
-enum struct OpStatus : uint8_t { OK, DupKey, Unknown };
+enum struct OpStatus : uint8_t { OK, DupKey, NoSuchKey, Unknown };
 
 template <class PayLoad>
 struct Result {
