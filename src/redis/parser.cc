@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <asio/awaitable.hpp>
+#include <asio/buffer_registration.hpp>
 #include <charconv>
 #include <chrono>
 #include <climits>
@@ -142,8 +143,14 @@ auto Reader::read_bytes_to(byte* buf, size_t len) noexcept
 }
 
 auto Reader::fill() -> asio::awaitable<std::error_code> {
-    auto wv  = buf_.write_view();
-    auto res = co_await read_impl(wv.data(), wv.size());
+    ResultT<size_t> res{std::error_code{}};
+    if (reg_buf_.data()) {
+        res  = co_await read_impl(reg_buf_);
+    } else {
+        auto wv  = buf_.write_view();
+        res = co_await read_impl(wv.data(), wv.size());
+    }
+
     if (!res.ok()) {
         co_return res.err();
     }

@@ -9,6 +9,8 @@
 #include <array>
 #include <asio/asio.hpp>
 #include <asio/awaitable.hpp>
+#include <asio/detail/is_buffer_sequence.hpp>
+#include <asio/registered_buffer.hpp>
 #include <asiochan/asiochan.hpp>
 #include <charconv>
 #include <chrono>
@@ -99,7 +101,8 @@ private:
 
 class IOBuf {
 public:
-    IOBuf(size_t cap) { reserve(cap); }
+    IOBuf(size_t cap) : owner_(true) { reserve(cap); }
+    IOBuf(byte* data, size_t size) : buf_(data), cap_(size), owner_(false) {}
     IOBuf(const IOBuf&)                    = delete;
     auto operator=(const IOBuf&) -> IOBuf& = delete;
 
@@ -147,6 +150,7 @@ public:
     auto data() const -> const byte* { return buf_; }
 
     auto reserve(size_t sz) -> void {
+        CHECK(owner_);
         if (sz <= cap_)
             return;
 
@@ -169,7 +173,7 @@ public:
 
 private:
     auto release_owned_buffer() -> void {
-        if (buf_) {
+        if (owner_ && buf_) {
             ::operator delete[](buf_, std::align_val_t{alignment_});
         }
 
@@ -185,17 +189,21 @@ private:
         alignment_   = other.alignment_;
         r_           = std::exchange(other.r_, 0);
         w_           = std::exchange(other.w_, 0);
+        owner_ = std::exchange(other.owner_, false);
     }
 
-    size_t cap_{0};
     byte*  buf_{nullptr};
+    size_t cap_{0};
     size_t alignment_{8};
     size_t r_{0}, w_{0};
+    bool owner_;
 };
 
 class Reader {
 public:
     Reader(size_t cap) : buf_(cap) {}
+    Reader(byte* data, size_t size) : buf_(data, size) {}
+    Reader(asio::mutable_registered_buffer buf) : buf_(static_cast<byte*>(buf.data()), buf.size()), reg_buf_(buf) {}
 
     auto read_line_view() noexcept -> asio::awaitable<ResultT<std::string_view>>;
     auto read_bytes_to(byte* buf, size_t len) noexcept -> asio::awaitable<ResultT<std::monostate>>;
@@ -207,10 +215,13 @@ public:
     virtual ~Reader() = default;
 protected:
     virtual auto read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
+    virtual auto read_impl(asio::mutable_registered_buffer reg_buf) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
     virtual auto readv_impl(const std::vector<Buf>& bufs) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
 
 private:
+    // 在底层 buf_ 和 reg_buf_ 应该指向同一片内存空间。当我们需要使用 io_uring 的 register_buffer 时，我们需要使用 reg_buf_ 来读取数据，在这个过程中也要保证 buf_ 的正确性
     IOBuf buf_;
+    asio::mutable_registered_buffer reg_buf_;
     std::vector<Buf> bufs_;
 };
 

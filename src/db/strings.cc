@@ -33,7 +33,7 @@ auto single_write_key(const std::vector<std::string>& args)
 } // namespace
 
 auto set(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
-    auto res = ctx->db()->set(args[1], DataEntity::from_string(args[2]));
+    auto res = ctx->db()->set(args[1], DataEntity::from_string(std::move(args[2])));
     if (!res.ok()) {
         return ExecResult::error(kStandardErr);
     }

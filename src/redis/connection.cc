@@ -12,6 +12,7 @@
 #include <asio/read.hpp>
 #include <asio/read_at.hpp>
 #include <asio/read_until.hpp>
+#include <asio/registered_buffer.hpp>
 #include <asio/steady_timer.hpp>
 #include <asio/use_awaitable.hpp>
 #include <cstddef>
@@ -106,6 +107,21 @@ auto Connection::read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<R
         co_return ResultT<size_t>(asio::error::not_connected);
     }
     auto [ec, n] = co_await socket_->async_read_some(asio::buffer(buf, size),
+                                                     asio::as_tuple(asio::use_awaitable));
+    if (ec) {
+        ec_ = ec;
+        if (!is_connection_closed_error(ec) && !is_transient_io_error(ec)) {
+            LOG(warn, "read failed: {}", ec.message());
+        }
+    }
+    co_return ResultT{ec, size_t(n)};
+}
+
+auto Connection::read_impl(asio::mutable_registered_buffer reg_buf) noexcept -> asio::awaitable<ResultT<size_t>> {
+    if (closed()) {
+        co_return ResultT<size_t>(asio::error::not_connected);
+    }
+    auto [ec, n] = co_await socket_->async_read_some(reg_buf,
                                                      asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_ = ec;
@@ -256,9 +272,6 @@ auto Connection::reset(asio::ip::tcp::socket&& socket) -> void {
 }
 
 auto Connection::reset() -> void {
-    send_generation_.fetch_add(1, std::memory_order_acq_rel);
-    sq_cv_.notify();
-
     if (socket_.has_value()) {
         if (socket_->is_open()) {
             std::error_code ignored_ec;
