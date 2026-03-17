@@ -28,6 +28,7 @@ target_compile_definitions(idlekv_core
     PUBLIC
         ASIOCHAN_USE_STANDALONE_ASIO=ON
         ASIO_NO_EXCEPTIONS=1
+        IDLEKV_ENABLE_CORO_TRACKING=1
 )
 
 option(ENABLE_ASIO_IO_URING "Enable Asio io_uring backend" ON)

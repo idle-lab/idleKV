@@ -19,6 +19,7 @@
 #include "asio/async_result.hpp"
 #include "asio/cancellation_signal.hpp"
 #include "asio/disposition.hpp"
+#include "asio/detail/coro_tracked.hpp"
 
 #include "asio/detail/push_options.hpp"
 
@@ -70,6 +71,7 @@ public:
     this->frame()->return_void();
     this->frame()->clear_cancellation_slot();
     this->frame()->pop_frame();
+    CoroTracked::on_resume(this);
     this->pump();
   }
 };
@@ -99,6 +101,7 @@ public:
       this->frame()->return_value(std::forward<Arg>(arg));
     this->frame()->clear_cancellation_slot();
     this->frame()->pop_frame();
+    CoroTracked::on_resume(this);
     this->pump();
   }
 };
@@ -131,6 +134,7 @@ public:
     }
     this->frame()->clear_cancellation_slot();
     this->frame()->pop_frame();
+    CoroTracked::on_resume(this);
     this->pump();
   }
 };
@@ -165,6 +169,7 @@ public:
     }
     this->frame()->clear_cancellation_slot();
     this->frame()->pop_frame();
+    CoroTracked::on_resume(this);
     this->pump();
   }
 };

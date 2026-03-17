@@ -23,6 +23,7 @@
 #include "asio/cancellation_state.hpp"
 #include "asio/detail/memory.hpp"
 #include "asio/detail/thread_context.hpp"
+#include "asio/detail/coro_tracked.hpp"
 #include "asio/detail/thread_info_base.hpp"
 #include "asio/detail/throw_error.hpp"
 #include "asio/detail/type_traits.hpp"
@@ -680,7 +681,8 @@ public:
 
   // Transfer ownership from another awaitable_thread.
   awaitable_thread(awaitable_thread&& other) noexcept
-    : bottom_of_stack_(std::move(other.bottom_of_stack_))
+    : bottom_of_stack_(std::move(other.bottom_of_stack_)),
+      tracked_coro_id_(std::exchange(other.tracked_coro_id_, 0))
   {
   }
 
@@ -762,6 +764,26 @@ public:
     bottom_of_stack_.frame_->launch(&awaitable_thread::do_pump, this);
   }
 
+  bool has_tracked_coro() const noexcept
+  {
+    return tracked_coro_id_ != 0;
+  }
+
+  uint64_t tracked_coro_id() const noexcept
+  {
+    return tracked_coro_id_;
+  }
+
+  void set_tracked_coro_id(uint64_t id) noexcept
+  {
+    tracked_coro_id_ = id;
+  }
+
+  void clear_tracked_coro() noexcept
+  {
+    tracked_coro_id_ = 0;
+  }
+
 protected:
   template <typename> friend class awaitable_frame_base;
 
@@ -775,6 +797,7 @@ protected:
 
     if (bottom_of_stack_.frame_)
     {
+      CoroTracked::on_finish(this);
       awaitable<awaitable_thread_entry_point, Executor> a(
           std::move(bottom_of_stack_));
       a.frame_->rethrow_exception();
@@ -787,6 +810,7 @@ protected:
   }
 
   awaitable<awaitable_thread_entry_point, Executor> bottom_of_stack_;
+  uint64_t tracked_coro_id_ = 0;
 };
 
 template <typename Signature, typename Executor, typename = void>
@@ -1034,22 +1058,24 @@ public:
     return false;
   }
 
-  void await_suspend(coroutine_handle<void>)
-  {
-    frame_->after_suspend(
-        [](void* arg)
-        {
-          awaitable_async_op* self = static_cast<awaitable_async_op*>(arg);
+      void await_suspend(coroutine_handle<void>)
+      {
+        frame_->after_suspend(
+            [](void* arg)
+            {
+              awaitable_async_op* self = static_cast<awaitable_async_op*>(arg);
 #if defined(ASIO_ENABLE_HANDLER_TRACKING)
 # if defined(ASIO_HAS_SOURCE_LOCATION)
-          ASIO_HANDLER_LOCATION((self->location_.file_name(),
-              self->location_.line(), self->location_.function_name()));
+              ASIO_HANDLER_LOCATION((self->location_.file_name(),
+                  self->location_.line(), self->location_.function_name()));
 # endif // defined(ASIO_HAS_SOURCE_LOCATION)
 #endif // defined(ASIO_ENABLE_HANDLER_TRACKING)
-          std::forward<Op&&>(self->op_)(
-              handler_type(self->frame_->detach_thread(), self->result_));
-        }, this);
-  }
+              auto* tracked_thread = self->frame_->detach_thread();
+              CoroTracked::on_suspend(tracked_thread);
+              std::forward<Op&&>(self->op_)(
+                  handler_type(tracked_thread, self->result_));
+            }, this);
+      }
 
   auto await_resume()
   {

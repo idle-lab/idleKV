@@ -50,10 +50,7 @@ public:
     virtual std::string name() override { return "Redis"; }
 
     virtual ~RedisService() override = default;
-
 private:
-    std::vector<std::unique_ptr<Connection>> conns_;
-
     std::atomic<bool> stop_{false};
 
     static thread_local ServiceTLState* tl_;

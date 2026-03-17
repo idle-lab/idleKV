@@ -1,0 +1,46 @@
+#pragma once
+#include <cstdint>
+#include <string>
+namespace idlekv {
+
+class DataEntity {
+public:
+    enum class Type : uint8_t {
+        kUnknow,
+        kString,
+        kHash,
+        kSet,
+    };
+
+    DataEntity() = default;
+
+    static auto from_string(std::string value) -> DataEntity {
+        return DataEntity(Type::kString, std::move(value));
+    }
+
+    auto type() const -> Type { return type_; }
+
+    auto is_string() const -> bool { return type_ == Type::kString; }
+
+    auto as_string() const -> const std::string& { return string_value_; }
+
+    auto operator==(const DataEntity&) const -> bool = default;
+
+private:
+    DataEntity(Type type, std::string value) : type_(type), string_value_(std::move(value)) {}
+
+    Type        type_ = Type::kString;
+    std::string string_value_;
+};
+
+
+class String : public DataEntity {
+public:
+    auto type() const -> Type { return Type::kString; }
+    
+
+private:
+    std::string string_value_;
+};
+
+} // namespace idlekv

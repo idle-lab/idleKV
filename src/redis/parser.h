@@ -4,6 +4,7 @@
 #include "common/config.h"
 #include "common/logger.h"
 #include "common/result.h"
+#include "db/storage/data_entity.h"
 
 #include <array>
 #include <asio/asio.hpp>

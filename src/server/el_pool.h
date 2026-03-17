@@ -11,6 +11,7 @@
 #include <asio/post.hpp>
 #include <asio/use_future.hpp>
 #include <atomic>
+#include <chrono>
 #include <concepts>
 #include <cstddef>
 #include <future>
@@ -24,7 +25,7 @@
 #include <vector>
 namespace idlekv {
 
-constexpr auto kMaxBusyCpuTime = std::chrono::milliseconds(100);
+constexpr auto kMaxBusyCpuTime = std::chrono::microseconds(100);
 
 // manages a single io_context thread and runs submitted tasks on its bound cpu.
 class EventLoop {

@@ -2,6 +2,7 @@
 
 #include "common/asio_no_exceptions.h"
 #include "db/result.h"
+#include "db/storage/data_entity.h"
 #include "redis/parser.h"
 #include "server/el_pool.h"
 #include "utils/condition_variable/condition_variable.h"
@@ -18,9 +19,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstring>
-#include <memory>
 #include <optional>
-#include <queue>
 #include <system_error>
 #include <vector>
 
@@ -45,8 +44,6 @@ public:
         -> asio::awaitable<ResultT<size_t>> override;
 
     auto handle_requests() noexcept -> asio::awaitable<void>;
-    auto handle_send() noexcept -> asio::awaitable<void>;
-    auto enqueue_result(std::shared_ptr<PromiseResult> promise) -> void;
 
     auto flush() -> asio::awaitable<void>;
 
@@ -74,11 +71,6 @@ public:
 
     auto closed() const -> bool { return ec_ || !(socket_.has_value() && socket_->is_open()) || s_.get_error(); }
 private:
-    auto clear_pending_results() -> void {
-        while (!sending_queue_.empty()) {
-            sending_queue_.pop();
-        }
-    }
 
     std::optional<asio::ip::tcp::socket>           socket_;
     std::error_code                                ec_;
@@ -86,7 +78,6 @@ private:
     Parser p_;
     Sender s_;
 
-    std::queue<std::shared_ptr<PromiseResult>> sending_queue_;
     utils::ConditionVariable sq_cv_;
     std::atomic<uint64_t>    send_generation_{0};
 

@@ -3,7 +3,7 @@
 #include "common/asio_no_exceptions.h"
 #include "db/storage/kvstore.h"
 #include "db/storage/result.h"
-#include "db/xmalloc.h"
+#include "db/storage/data_entity.h"
 
 #include <asio/awaitable.hpp>
 #include <memory>

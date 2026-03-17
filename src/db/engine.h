@@ -13,7 +13,6 @@
 #include <mimalloc.h>
 #include <absl/container/flat_hash_map.h>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace idlekv {
@@ -26,7 +25,6 @@ public:
     auto init(EventLoopPool* elp) -> void;
     auto calculate_shard_id(std::string_view key) -> ShardId;
     auto dispatch_cmd(Connection*, const std::vector<std::string>& args) noexcept -> ExecResult;
-    auto exec(Connection*, const std::vector<std::string>& args) noexcept -> asio::awaitable<void>;
 
     auto db_num() const -> size_t { return db_num_; }
     auto get_cmd(const std::string& name) -> Cmd*;
