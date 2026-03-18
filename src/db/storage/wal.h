@@ -3,8 +3,6 @@
 
 namespace idlekv {
 
-class RecordSpace {
-    
-};
+
     
 } // namespace idlekv

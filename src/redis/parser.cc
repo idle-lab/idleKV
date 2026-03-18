@@ -145,7 +145,8 @@ auto Reader::read_bytes_to(byte* buf, size_t len) noexcept
 auto Reader::fill() -> asio::awaitable<std::error_code> {
     ResultT<size_t> res{std::error_code{}};
     if (reg_buf_.data()) {
-        res  = co_await read_impl(reg_buf_);
+        auto reg_wv = asio::buffer(reg_buf_ + buf_.write_offset(), buf_.write_size());
+        res  = co_await read_impl(reg_wv);
     } else {
         auto wv  = buf_.write_view();
         res = co_await read_impl(wv.data(), wv.size());
@@ -167,6 +168,25 @@ auto Writer::reset_write_state() -> void {
     queued_size_ = 0;
 }
 
+auto Writer::write_view(std::string_view s) -> asio::awaitable<std::error_code> {
+    if (s.empty()) {
+        co_return std::error_code{};
+    }
+
+    if (!vecs_.empty() &&
+        (vecs_.size() >= kMaxReplyFlushCount || queued_size_ + s.size() >= kMaxReplyFlushBytes)) {
+        auto ec = co_await flush();
+        if (ec) {
+            co_return ec;
+        }
+    }
+
+    queued_size_ += s.size();
+    vecs_.emplace_back(s.data(), s.size());
+
+    co_return std::error_code{};
+}
+
 auto Writer::write(std::string_view s) -> asio::awaitable<std::error_code> {
     if (buf_.write_size() < s.size() || queued_size_ + s.size() >= kMaxReplyFlushBytes) {
         auto ec = co_await flush();
@@ -186,13 +206,6 @@ auto Writer::write(std::string_view s) -> asio::awaitable<std::error_code> {
     queued_size_ += s.size();
     buf_.commit(s.size());
     vecs_.emplace_back(begin, s.size());
-
-    if (vecs_.size() >= kMaxReplyFlushCount || queued_size_ >= kMaxReplyFlushBytes) {
-        auto ec = co_await flush();
-        if (ec) {
-            co_return ec;
-        }
-    }
 
     co_return std::error_code{};
 }
@@ -217,13 +230,6 @@ auto Writer::write_ref(std::string_view s, std::shared_ptr<const void> holder)
         keepalive_.push_back(std::move(holder));
     }
 
-    if (vecs_.size() >= kMaxReplyFlushCount || queued_size_ >= kMaxReplyFlushBytes) {
-        auto ec = co_await flush();
-        if (ec) {
-            co_return ec;
-        }
-    }
-
     co_return std::error_code{};
 }
 
@@ -240,7 +246,7 @@ auto Writer::flush() -> asio::awaitable<std::error_code> {
 }
 
 
-auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
+auto Parser::parse_one(std::vector<std::string>& args) noexcept -> asio::awaitable<ParserResut> {
     auto headerRes = co_await rd_->read_line_view();
     if (!headerRes.ok()) {
         co_return headerRes.err();
@@ -256,7 +262,7 @@ auto Parser::parse_one() noexcept -> asio::awaitable<ParserResut> {
         co_return std::make_error_code(err);
     }
 
-    std::vector<std::string> args(arrLen);
+    args.resize(arrLen);
     for (int i = 0; i < arrLen; ++i) {
         auto lineRes = co_await rd_->read_line_view();
         if (!lineRes.ok()) {
@@ -308,8 +314,12 @@ auto Sender::send_pong() -> asio::awaitable<void> {
 
 auto Sender::send_bulk_string(std::string_view s) -> asio::awaitable<void> {
     ec_ = co_await wr_->write_pieces(BULK_STRING_PREFIX, s.size(), CRLF);
-    ec_ = co_await wr_->write(s);
-    ec_ = co_await wr_->write(CRLF);
+    if (!ec_) {
+        ec_ = co_await wr_->write_view(s);
+    }
+    if (!ec_) {
+        ec_ = co_await wr_->write_pieces(CRLF);
+    }
 }
 
 auto Sender::send_bulk_string(const std::shared_ptr<const DataEntity>& data) -> asio::awaitable<void> {

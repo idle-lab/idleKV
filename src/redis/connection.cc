@@ -19,6 +19,7 @@
 #include <spdlog/spdlog.h>
 #include <sys/uio.h>
 #include <system_error>
+#include <vector>
 
 namespace idlekv {
 
@@ -182,8 +183,9 @@ auto Connection::writev_impl(const std::vector<BufView>& bufs) noexcept
 }
 
 auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
+    std::vector<std::string> args;
     for (;;) {
-        auto parse_res = co_await p_.parse_one();
+        auto parse_res = co_await p_.parse_one(args);
 
         if (!parse_res.ok()) {
             if (parse_res == ParserResut::STD_ERROR) {

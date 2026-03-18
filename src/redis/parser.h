@@ -133,6 +133,7 @@ public:
 
     auto write_view() -> BufView { return BufView{buf_ + w_, cap_ - w_}; }
     auto write_size() const -> size_t { return cap_ - w_; }
+    auto write_offset() const -> size_t { return w_; }
     auto commit(size_t n) -> void { w_ += n; }
 
     auto read_view() -> BufView { return BufView{buf_ + r_, w_ - r_}; }
@@ -219,7 +220,9 @@ protected:
     virtual auto readv_impl(const std::vector<Buf>& bufs) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
 
 private:
-    // 在底层 buf_ 和 reg_buf_ 应该指向同一片内存空间。当我们需要使用 io_uring 的 register_buffer 时，我们需要使用 reg_buf_ 来读取数据，在这个过程中也要保证 buf_ 的正确性
+    // buf_ and reg_buf_ refer to the same underlying memory region.
+    // When we want to use io_uring registered buffers, reads should go through
+    // reg_buf_, while buf_ must remain consistent throughout the process.
     IOBuf buf_;
     asio::mutable_registered_buffer reg_buf_;
     std::vector<Buf> bufs_;
@@ -234,6 +237,9 @@ public:
     // this coroutine flushes pending output before growing the buffer.
     template <typename... Ts>
     auto write_pieces(Ts&&... pieces) -> asio::awaitable<std::error_code>;
+
+    // caller should ensure that s is valid until the next flush.
+    auto write_view(std::string_view s) -> asio::awaitable<std::error_code>;
 
     // caller should ensure that s is valid until the next flush.
     auto write(std::string_view s) -> asio::awaitable<std::error_code>;
@@ -386,7 +392,7 @@ public:
     Parser(Reader* rd) : rd_(rd) {}
 
     // parse a Redis command
-    auto parse_one() noexcept -> asio::awaitable<ParserResut>;
+    auto parse_one(std::vector<std::string>& args) noexcept -> asio::awaitable<ParserResut>;
 
     auto clear() -> void { rd_->claer(); }
 

@@ -59,7 +59,11 @@ public:
     using MapType =
         absl::flat_hash_map<KeyType, ValueType, std::hash<KeyType>, std::equal_to<KeyType>, 
                             std::pmr::polymorphic_allocator<std::pair<const KeyType, ValueType>>>;
-    explicit ShardHash([[maybe_unused]] std::pmr::memory_resource* mr_) {}
+    explicit ShardHash(std::pmr::memory_resource* mr_) {
+        for (auto& shard : shards_) {
+            shard = MapType(mr_);
+        }
+    }
     
     template <class U, class V>
     auto insert(U&& key, V&& value) -> void {
