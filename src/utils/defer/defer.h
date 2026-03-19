@@ -29,19 +29,19 @@ public:
             return *this;
         }
 
-        run_if_active();
+        RunIfActive();
         fn_     = std::move(other.fn_);
         active_ = std::exchange(other.active_, false);
         return *this;
     }
 
-    ~Defer() { run_if_active(); }
+    ~Defer() { RunIfActive(); }
 
-    auto dismiss() noexcept -> void { active_ = false; }
-    auto active() const noexcept -> bool { return active_; }
+    auto Dismiss() noexcept -> void { active_ = false; }
+    auto Active() const noexcept -> bool { return active_; }
 
 private:
-    auto run_if_active() -> void {
+    auto RunIfActive() -> void {
         if (!active_) {
             return;
         }

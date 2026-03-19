@@ -25,54 +25,54 @@ namespace idlekv {
 
 namespace {
 
-auto is_connection_closed_error(const std::error_code& ec) -> bool {
+auto IsConnectionClosedError(const std::error_code& ec) -> bool {
     return ec == asio::error::eof || ec == asio::error::connection_reset ||
            ec == asio::error::connection_aborted || ec == asio::error::not_connected ||
            ec == asio::error::broken_pipe || ec == asio::error::bad_descriptor ||
            ec == asio::error::operation_aborted;
 }
 
-auto is_transient_io_error(const std::error_code& ec) -> bool {
+auto IsTransientIoError(const std::error_code& ec) -> bool {
     return ec == asio::error::try_again || ec == asio::error::would_block ||
            ec == asio::error::timed_out || ec == asio::error::interrupted;
 }
 
-auto is_protocol_format_error(const std::error_code& ec) -> bool {
+auto IsProtocolFormatError(const std::error_code& ec) -> bool {
     return ec == std::errc::invalid_argument || ec == std::errc::result_out_of_range;
 }
 
-auto make_parse_error_reply(const ParserResut& res) -> std::string {
+auto MakeParseErrorReply(const ParserResut& res) -> std::string {
     if (res == ParserResut::WRONG_TYPE_ERROR || res == ParserResut::PROTOCOL_ERROR) {
-        return res.message().empty() ? fmt::format(kProtocolErrFmt, "invalid request")
-                                     : res.message();
+        return res.Message().empty() ? fmt::format(kProtocolErrFmt, "invalid request")
+                                     : res.Message();
     }
 
     if (res == ParserResut::STD_ERROR) {
-        if (is_protocol_format_error(res.error_code())) {
-            return fmt::format(kProtocolErrFmt, res.error_code().message());
+        if (IsProtocolFormatError(res.ErrorCode())) {
+            return fmt::format(kProtocolErrFmt, res.ErrorCode().message());
         }
-        return fmt::format(kStandardErr, res.error_code().message());
+        return fmt::format(kStandardErr, res.ErrorCode().message());
     }
 
     return fmt::format(kUnknownCmdErrFmt, "unknown command");
 }
 
-auto reply_parse_error(Sender& sender, const ParserResut& res) -> asio::awaitable<std::error_code> {
-    auto reply = make_parse_error_reply(res);
+auto ReplyParseError(Sender& sender, const ParserResut& res) -> asio::awaitable<std::error_code> {
+    auto reply = MakeParseErrorReply(res);
     if (reply.empty()) {
         co_return std::error_code{};
     }
-    co_await sender.send_error(reply);
-    if (sender.get_error()) {
-        co_return sender.get_error();
+    co_await sender.SendError(reply);
+    if (sender.GetError()) {
+        co_return sender.GetError();
     }
 
-    co_await sender.flush();
-    co_return sender.get_error();
+    co_await sender.Flush();
+    co_return sender.GetError();
 }
 
-auto format_remote_endpoint(const Connection& conn) -> std::string {
-    const auto ep = conn.remote_endpoint();
+auto FormatRemoteEndpoint(const Connection& conn) -> std::string {
+    const auto ep = conn.RemoteEndpoint();
     if (ep == asio::ip::tcp::endpoint{}) {
         return {};
     }
@@ -80,16 +80,16 @@ auto format_remote_endpoint(const Connection& conn) -> std::string {
     return fmt::format("{}:{}", ep.address().to_string(), ep.port());
 }
 
-auto exec_result_name(const ExecResult& res) -> std::string_view {
-    switch (res.type()) {
+auto ExecResultName(const ExecResult& res) -> std::string_view {
+    switch (res.GetType()) {
     case ExecResult::kPong:
         return "pong";
     case ExecResult::kOk:
         return "ok";
     case ExecResult::kSimpleString:
-        return "simple_string";
+        return "SimpleString";
     case ExecResult::kBulkString:
-        return "bulk_string";
+        return "BulkString";
     case ExecResult::kNull:
         return "null";
     case ExecResult::kInteger:
@@ -103,39 +103,39 @@ auto exec_result_name(const ExecResult& res) -> std::string_view {
 
 } // namespace
 
-auto Connection::read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> {
-    if (closed()) {
+auto Connection::ReadImpl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> {
+    if (IsClosed()) {
         co_return ResultT<size_t>(asio::error::not_connected);
     }
     auto [ec, n] = co_await socket_->async_read_some(asio::buffer(buf, size),
                                                      asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_ = ec;
-        if (!is_connection_closed_error(ec) && !is_transient_io_error(ec)) {
+        if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
             LOG(warn, "read failed: {}", ec.message());
         }
     }
     co_return ResultT{ec, size_t(n)};
 }
 
-auto Connection::read_impl(asio::mutable_registered_buffer reg_buf) noexcept -> asio::awaitable<ResultT<size_t>> {
-    if (closed()) {
+auto Connection::ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept -> asio::awaitable<ResultT<size_t>> {
+    if (IsClosed()) {
         co_return ResultT<size_t>(asio::error::not_connected);
     }
     auto [ec, n] = co_await socket_->async_read_some(reg_buf,
                                                      asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_ = ec;
-        if (!is_connection_closed_error(ec) && !is_transient_io_error(ec)) {
+        if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
             LOG(warn, "read failed: {}", ec.message());
         }
     }
     co_return ResultT{ec, size_t(n)};
 }
 
-auto Connection::readv_impl(const std::vector<Buf>& bufs) noexcept
+auto Connection::ReadvImpl(const std::vector<Buf>& bufs) noexcept
     -> asio::awaitable<ResultT<size_t>>  {
-    if (closed()) {
+    if (IsClosed()) {
         co_return ResultT<size_t>(asio::error::not_connected);
     }
 
@@ -143,137 +143,137 @@ auto Connection::readv_impl(const std::vector<Buf>& bufs) noexcept
                                                      asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_ = ec;
-        if (!is_connection_closed_error(ec) && !is_transient_io_error(ec)) {
+        if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
             LOG(warn, "read failed: {}", ec.message());
         }
     }
     co_return ResultT{ec, size_t(n)};
 }
 
-auto Connection::write_impl(const byte* data, size_t size) noexcept
+auto Connection::WriteImpl(const byte* data, size_t size) noexcept
     -> asio::awaitable<ResultT<size_t>> {
-    if (closed()) {
+    if (IsClosed()) {
         co_return ResultT<size_t>(asio::error::not_connected);
     }
     auto [ec, n] = co_await asio::async_write(*socket_, asio::buffer(data, size),
                                               asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_ = ec;
-        if (!is_connection_closed_error(ec) && !is_transient_io_error(ec)) {
+        if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
             LOG(warn, "write failed: {}", ec.message());
         }
     }
     co_return ResultT{ec, size_t(n)};
 }
 
-auto Connection::writev_impl(const std::vector<BufView>& bufs) noexcept
+auto Connection::WritevImpl(const std::vector<BufView>& bufs) noexcept
     -> asio::awaitable<ResultT<size_t>> {
-    if (closed()) {
+    if (IsClosed()) {
         co_return ResultT<size_t>(asio::error::not_connected);
     }
 
     auto [ec, n] = co_await asio::async_write(*socket_, bufs, asio::as_tuple(asio::use_awaitable));
     if (ec) {
         ec_ = ec;
-        if (!is_connection_closed_error(ec) && !is_transient_io_error(ec)) {
+        if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
             LOG(warn, "writev failed: {}", ec.message());
         }
     }
     co_return ResultT{ec, size_t(n)};
 }
 
-auto Connection::handle_requests() noexcept -> asio::awaitable<void> {
+auto Connection::HandleRequests() noexcept -> asio::awaitable<void> {
     std::vector<std::string> args;
     for (;;) {
-        auto parse_res = co_await p_.parse_one(args);
+        auto parse_res = co_await p_.ParseOne(args);
 
-        if (!parse_res.ok()) {
+        if (!parse_res.Ok()) {
             if (parse_res == ParserResut::STD_ERROR) {
-                if (is_connection_closed_error(parse_res.error_code())) {
+                if (IsConnectionClosedError(parse_res.ErrorCode())) {
                     break;
                 }
 
-                if (is_transient_io_error(parse_res.error_code())) {
+                if (IsTransientIoError(parse_res.ErrorCode())) {
                     continue;
                 }
             }
 
             // Parser failed. Try to send a single ERR reply then close the connection.
-            auto reply_ec = co_await reply_parse_error(s_, parse_res);
-            if (reply_ec && !is_connection_closed_error(reply_ec) &&
-                !is_transient_io_error(reply_ec)) {
+            auto reply_ec = co_await ReplyParseError(s_, parse_res);
+            if (reply_ec && !IsConnectionClosedError(reply_ec) &&
+                !IsTransientIoError(reply_ec)) {
                 LOG(warn, "failed to send parse error reply: {}", reply_ec.message());
             }
             break;
         }
 
-        auto& args = parse_res.value();
+        auto& args = parse_res.Value();
         if (args.empty()) [[unlikely]] {
             auto parse_err = ParserResut(ParserResut::PROTOCOL_ERROR,
                                          fmt::format(kProtocolErrFmt, "empty command"));
 
-            auto reply_ec = co_await reply_parse_error(s_, parse_err);
-            if (reply_ec && !is_connection_closed_error(reply_ec) &&
-                !is_transient_io_error(reply_ec)) {
+            auto reply_ec = co_await ReplyParseError(s_, parse_err);
+            if (reply_ec && !IsConnectionClosedError(reply_ec) &&
+                !IsTransientIoError(reply_ec)) {
                 LOG(warn, "failed to send protocol error reply: {}", reply_ec.message());
             }
             break;
         }
         std::transform(args[0].begin(), args[0].end(), args[0].begin(),
                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        auto res = engine->dispatch_cmd(this, args);
+        auto res = engine->DispatchCmd(this, args);
 
-        switch (res.type()) {
+        switch (res.GetType()) {
         case ExecResult::kPong:
-            co_await sender().send_pong();
+            co_await GetSender().SendPong();
             break;
         case ExecResult::kOk:
-            co_await sender().send_ok();
+            co_await GetSender().SendOk();
             break;
         case ExecResult::kSimpleString:
-            co_await sender().send_simple_string(res.string());
+            co_await GetSender().SendSimpleString(res.GetString());
             break;
         case ExecResult::kBulkString:
-            if (res.data()) {
-                co_await sender().send_bulk_string(res.data());
+            if (res.GetData()) {
+                co_await GetSender().SendBulkString(res.GetData());
             } else {
-                co_await sender().send_bulk_string(res.string());
+                co_await GetSender().SendBulkString(res.GetString());
             }
             break;
         case ExecResult::kNull:
-            co_await sender().send_null_bulk_string();
+            co_await GetSender().SendNullBulkString();
             break;
         case ExecResult::kInteger:
-            co_await sender().send_integer(res.integer());
+            co_await GetSender().SendInteger(res.GetInteger());
             break;
         case ExecResult::kError:
-            co_await sender().send_error(res.string());
+            co_await GetSender().SendError(res.GetString());
             break;
         }
 
         if (parse_res != ParserResut::HAS_MORE) {
-            co_await s_.flush();
+            co_await s_.Flush();
         }
     }
 }
 
-auto Connection::flush() -> asio::awaitable<void> {
-    if (s_.get_error() || closed()) {
+auto Connection::Flush() -> asio::awaitable<void> {
+    if (s_.GetError() || IsClosed()) {
         co_return;
     }
-    co_await s_.flush();
+    co_await s_.Flush();
 }
 
-auto Connection::reset(asio::ip::tcp::socket&& socket) -> void {
+auto Connection::Reset(asio::ip::tcp::socket&& socket) -> void {
     CHECK(socket_.has_value() == false) << "override a connection that is currently in use";
     socket_.emplace(std::move(socket));
-    p_.clear();
-    s_.clear();
+    p_.Clear();
+    s_.Clear();
     ec_       = std::error_code{};
     db_index_ = 0;
 }
 
-auto Connection::reset() -> void {
+auto Connection::Reset() -> void {
     if (socket_.has_value()) {
         if (socket_->is_open()) {
             std::error_code ignored_ec;
@@ -285,8 +285,8 @@ auto Connection::reset() -> void {
         }
         socket_.reset();
     }
-    p_.clear();
-    s_.clear();
+    p_.Clear();
+    s_.Clear();
     ec_ = std::error_code{};
     db_index_ = 0;
 }

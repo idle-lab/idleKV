@@ -15,11 +15,11 @@ public:
 
     ResultT(T res) : res_(std::move(res)) {}
 
-    auto ok() const -> bool { return !ec_; }
+    auto Ok() const -> bool { return !ec_; }
 
-    auto value() -> T& { return *res_; }
+    auto Value() -> T& { return *res_; }
 
-    auto err() const -> const std::error_code& { return ec_; }
+    auto Err() const -> const std::error_code& { return ec_; }
 
 private:
     std::error_code  ec_ = std::error_code{};

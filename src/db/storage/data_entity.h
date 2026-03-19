@@ -14,15 +14,15 @@ public:
 
     DataEntity() = default;
 
-    static auto from_string(std::string value) -> DataEntity {
+    static auto FromString(std::string value) -> DataEntity {
         return DataEntity(Type::kString, std::move(value));
     }
 
-    auto type() const -> Type { return type_; }
+    auto GetType() const -> Type { return type_; }
 
-    auto is_string() const -> bool { return type_ == Type::kString; }
+    auto IsString() const -> bool { return type_ == Type::kString; }
 
-    auto as_string() const -> const std::string& { return string_value_; }
+    auto AsString() const -> const std::string& { return string_value_; }
 
     auto operator==(const DataEntity&) const -> bool = default;
 
@@ -36,7 +36,7 @@ private:
 
 class String : public DataEntity {
 public:
-    auto type() const -> Type { return Type::kString; }
+    auto GetType() const -> Type { return Type::kString; }
     
 
 private:

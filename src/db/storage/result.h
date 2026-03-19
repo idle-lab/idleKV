@@ -14,10 +14,10 @@ struct Result {
 
     auto operator==(const OpStatus& s) const -> bool { return s_ == s; }
 
-    auto ok() const -> bool { return *this == OpStatus::OK; }
+    auto Ok() const -> bool { return *this == OpStatus::OK; }
 
-    auto get() -> PayLoad& { return res_.value(); }
-    auto get() const -> const PayLoad& { return res_.value(); }
+    auto Get() -> PayLoad& { return res_.value(); }
+    auto Get() const -> const PayLoad& { return res_.value(); }
 
     OpStatus               s_;
     std::optional<PayLoad> res_;

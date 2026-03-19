@@ -6,9 +6,9 @@ namespace idlekv {
 
 namespace utils {
 
-auto get_online_cpus() -> cpu_set_t;
+auto GetOnlineCpus() -> cpu_set_t;
 
-auto get_online_cpus_num() -> size_t;
+auto GetOnlineCpusNum() -> size_t;
 
 } // namespace utils
 

@@ -32,10 +32,10 @@ public:
             lock_wait_samples_.reserve(2048);
         }
 
-        auto on_task_enqueued() -> size_t {
+        auto OnTaskEnqueued() -> size_t {
             enqueue_count_.fetch_add(1, std::memory_order_relaxed);
             const auto pending = pending_tasks_.fetch_add(1, std::memory_order_relaxed) + 1;
-            update_max(window_max_pending_, pending);
+            UpdateMax(window_max_pending_, pending);
 
             if ((depth_sequence_.fetch_add(1, std::memory_order_relaxed) & kSampleMask) == 0) {
                 std::lock_guard<std::mutex> lk(depth_mu_);
@@ -45,25 +45,25 @@ public:
             return pending;
         }
 
-        auto on_task_completed(size_t count = 1) -> size_t {
+        auto OnTaskCompleted(size_t count = 1) -> size_t {
             if (count == 0) {
                 return pending_tasks_.load(std::memory_order_relaxed);
             }
 
             completed_count_.fetch_add(count, std::memory_order_relaxed);
             total_completed_count_.fetch_add(count, std::memory_order_relaxed);
-            return decrease_pending(count);
+            return DecreasePending(count);
         }
 
-        auto drop_pending(size_t count) -> size_t {
+        auto DropPending(size_t count) -> size_t {
             if (count == 0) {
                 return pending_tasks_.load(std::memory_order_relaxed);
             }
-            return decrease_pending(count);
+            return DecreasePending(count);
         }
 
         template <class Rep, class Period>
-        auto observe_wake_to_first_task(std::chrono::duration<Rep, Period> dur) -> void {
+        auto ObserveWakeToFirstTask(std::chrono::duration<Rep, Period> dur) -> void {
             const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(dur).count();
 
             wake_to_first_task_count_.fetch_add(1, std::memory_order_relaxed);
@@ -72,11 +72,11 @@ public:
                                                    std::memory_order_relaxed);
             window_wake_to_first_task_ns_.fetch_add(static_cast<uint64_t>(ns),
                                                     std::memory_order_relaxed);
-            update_max(window_wake_to_first_task_max_ns_, static_cast<uint64_t>(ns));
+            UpdateMax(window_wake_to_first_task_max_ns_, static_cast<uint64_t>(ns));
         }
 
         template <class Rep, class Period>
-        auto observe_lock_wait(std::chrono::duration<Rep, Period> dur, bool contended) -> void {
+        auto ObserveLockWait(std::chrono::duration<Rep, Period> dur, bool contended) -> void {
             lock_acquires_.fetch_add(1, std::memory_order_relaxed);
             if (contended) {
                 contended_acquires_.fetch_add(1, std::memory_order_relaxed);
@@ -91,7 +91,7 @@ public:
             lock_wait_samples_.push_back(static_cast<uint64_t>(ns));
         }
 
-        auto report_once() -> void {
+        auto ReportOnce() -> void {
             const auto now = clock::now();
             const auto elapsed_seconds =
                 std::max(std::chrono::duration<double>(now - last_report_at_).count(), 1e-9);
@@ -111,7 +111,7 @@ public:
                 window_wake_to_first_task_max_ns_.exchange(0, std::memory_order_acq_rel);
             const auto lock_acquires = lock_acquires_.exchange(0, std::memory_order_acq_rel);
             const auto contended     = contended_acquires_.exchange(0, std::memory_order_acq_rel);
-            const auto total_wake_to_first_task_count = wake_to_first_task_total_count();
+            const auto total_wake_to_first_task_count = WakeToFirstTaskTotalCount();
             const auto total_wake_to_first_task_ns =
                 total_wake_to_first_task_ns_.load(std::memory_order_relaxed);
 
@@ -138,14 +138,14 @@ public:
             std::sort(depth_samples.begin(), depth_samples.end());
             std::sort(lock_wait_samples.begin(), lock_wait_samples.end());
 
-            const auto depth_p50 = percentile(depth_samples, 0.50);
-            const auto depth_p95 = percentile(depth_samples, 0.95);
-            const auto depth_p99 = percentile(depth_samples, 0.99);
+            const auto depth_p50 = Percentile(depth_samples, 0.50);
+            const auto depth_p95 = Percentile(depth_samples, 0.95);
+            const auto depth_p99 = Percentile(depth_samples, 0.99);
             const auto depth_max = depth_samples.empty() ? 0 : depth_samples.back();
 
-            const auto lock_p50 = percentile(lock_wait_samples, 0.50);
-            const auto lock_p95 = percentile(lock_wait_samples, 0.95);
-            const auto lock_p99 = percentile(lock_wait_samples, 0.99);
+            const auto lock_p50 = Percentile(lock_wait_samples, 0.50);
+            const auto lock_p95 = Percentile(lock_wait_samples, 0.95);
+            const auto lock_p99 = Percentile(lock_wait_samples, 0.99);
             const auto lock_max = lock_wait_samples.empty() ? 0 : lock_wait_samples.back();
             const auto wake_to_first_task_avg =
                 wake_to_first_task_count == 0 ? 0 : wake_to_first_task_ns / wake_to_first_task_count;
@@ -171,22 +171,22 @@ public:
                 name_, enqueue_count, completed_count, completed_rate, total_completed,
                 pending_now, pending_max, depth_samples.size(), depth_p50, depth_p95, depth_p99,
                 depth_max, wake_to_first_task_count,
-                format_duration_ns(wake_to_first_task_avg),
-                format_duration_ns(wake_to_first_task_max),
-                format_duration_ns(total_wake_to_first_task_avg), lock_acquires, contended,
-                contention_ratio, lock_wait_samples.size(), format_duration_ns(lock_p50),
-                format_duration_ns(lock_p95), format_duration_ns(lock_p99),
-                format_duration_ns(lock_max));
+                FormatDurationNs(wake_to_first_task_avg),
+                FormatDurationNs(wake_to_first_task_max),
+                FormatDurationNs(total_wake_to_first_task_avg), lock_acquires, contended,
+                contention_ratio, lock_wait_samples.size(), FormatDurationNs(lock_p50),
+                FormatDurationNs(lock_p95), FormatDurationNs(lock_p99),
+                FormatDurationNs(lock_max));
         }
 
     private:
         static constexpr uint64_t kSampleMask = 0xFF;
 
-        auto wake_to_first_task_total_count() const -> uint64_t {
+        auto WakeToFirstTaskTotalCount() const -> uint64_t {
             return wake_to_first_task_count_total_.load(std::memory_order_relaxed);
         }
 
-        static auto percentile(const std::vector<uint64_t>& sorted, double q) -> uint64_t {
+        static auto Percentile(const std::vector<uint64_t>& sorted, double q) -> uint64_t {
             if (sorted.empty()) {
                 return 0;
             }
@@ -204,7 +204,7 @@ public:
             return static_cast<uint64_t>(blended);
         }
 
-        static auto format_duration_ns(uint64_t ns) -> std::string {
+        static auto FormatDurationNs(uint64_t ns) -> std::string {
             constexpr double kNsPerUs = 1000.0;
             constexpr double kNsPerMs = 1000.0 * kNsPerUs;
             constexpr double kNsPerS  = 1000.0 * kNsPerMs;
@@ -226,14 +226,14 @@ public:
             return oss.str();
         }
 
-        static auto update_max(std::atomic<uint64_t>& target, uint64_t value) -> void {
+        static auto UpdateMax(std::atomic<uint64_t>& target, uint64_t value) -> void {
             auto current = target.load(std::memory_order_relaxed);
             while (current < value &&
                    !target.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
             }
         }
 
-        auto decrease_pending(size_t count) -> size_t {
+        auto DecreasePending(size_t count) -> size_t {
             auto current = pending_tasks_.load(std::memory_order_relaxed);
             while (true) {
                 const auto next = count >= current ? 0U : static_cast<uint64_t>(current - count);
@@ -269,12 +269,12 @@ public:
         uint64_t               last_reported_pending_{0};
     };
 
-    static auto instance() -> TaskQueueMetricsRegistry& {
+    static auto Instance() -> TaskQueueMetricsRegistry& {
         static TaskQueueMetricsRegistry registry;
         return registry;
     }
 
-    auto register_queue(std::string name) -> std::shared_ptr<QueueMetrics> {
+    auto RegisterQueue(std::string name) -> std::shared_ptr<QueueMetrics> {
         auto metrics = std::make_shared<QueueMetrics>(std::move(name));
         {
             std::lock_guard<std::mutex> lk(mu_);
@@ -283,7 +283,7 @@ public:
         return metrics;
     }
 
-    auto stop() -> void {
+    auto Stop() -> void {
         bool expected = false;
         if (!stopped_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
             return;
@@ -296,16 +296,16 @@ public:
         }
     }
 
-    ~TaskQueueMetricsRegistry() { stop(); }
+    ~TaskQueueMetricsRegistry() { Stop(); }
 
 private:
     TaskQueueMetricsRegistry()
-        : reporter_([this](std::stop_token stop_token) { report_loop(stop_token); }) {}
+        : reporter_([this](std::stop_token stop_token) { ReportLoop(stop_token); }) {}
 
     TaskQueueMetricsRegistry(const TaskQueueMetricsRegistry&) = delete;
     auto operator=(const TaskQueueMetricsRegistry&) -> TaskQueueMetricsRegistry& = delete;
 
-    auto report_loop(std::stop_token stop_token) -> void {
+    auto ReportLoop(std::stop_token stop_token) -> void {
         std::unique_lock lk(cv_mu_);
         while (!stop_token.stop_requested() && !stopped_.load(std::memory_order_acquire)) {
             cv_.wait_for(lk, report_interval_, [this, &stop_token]() {
@@ -317,15 +317,15 @@ private:
             }
 
             lk.unlock();
-            report_once();
+            ReportOnce();
             lk.lock();
         }
 
         lk.unlock();
-        report_once();
+        ReportOnce();
     }
 
-    auto report_once() -> void {
+    auto ReportOnce() -> void {
         std::vector<std::shared_ptr<QueueMetrics>> queues;
         {
             std::lock_guard<std::mutex> lk(mu_);
@@ -341,7 +341,7 @@ private:
         }
 
         for (const auto& queue : queues) {
-            queue->report_once();
+            queue->ReportOnce();
         }
     }
 
@@ -372,27 +372,27 @@ public:
     public:
         explicit QueueMetrics(std::string) {}
 
-        auto on_task_enqueued() -> size_t { return 0; }
-        auto on_task_completed(size_t = 1) -> size_t { return 0; }
-        auto drop_pending(size_t = 0) -> size_t { return 0; }
+        auto OnTaskEnqueued() -> size_t { return 0; }
+        auto OnTaskCompleted(size_t = 1) -> size_t { return 0; }
+        auto DropPending(size_t = 0) -> size_t { return 0; }
 
         template <class Rep, class Period>
-        auto observe_wake_to_first_task(std::chrono::duration<Rep, Period>) -> void {}
+        auto ObserveWakeToFirstTask(std::chrono::duration<Rep, Period>) -> void {}
 
         template <class Rep, class Period>
-        auto observe_lock_wait(std::chrono::duration<Rep, Period>, bool) -> void {}
+        auto ObserveLockWait(std::chrono::duration<Rep, Period>, bool) -> void {}
     };
 
-    static auto instance() -> TaskQueueMetricsRegistry& {
+    static auto Instance() -> TaskQueueMetricsRegistry& {
         static TaskQueueMetricsRegistry registry;
         return registry;
     }
 
-    auto register_queue(std::string name) -> std::shared_ptr<QueueMetrics> {
+    auto RegisterQueue(std::string name) -> std::shared_ptr<QueueMetrics> {
         return std::make_shared<QueueMetrics>(std::move(name));
     }
 
-    auto stop() -> void {}
+    auto Stop() -> void {}
 
 private:
     TaskQueueMetricsRegistry() = default;

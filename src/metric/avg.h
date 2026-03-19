@@ -35,20 +35,20 @@ public:
             if (this == &other) {
                 return *this;
             }
-            finish();
+            Finish();
             avg_       = other.avg_;
             start_     = other.start_;
             other.avg_ = nullptr;
             return *this;
         }
 
-        ~Scope() { finish(); }
+        ~Scope() { Finish(); }
 
-        auto finish() -> void {
+        auto Finish() -> void {
             if (avg_ == nullptr) {
                 return;
             }
-            avg_->observe_since(start_);
+            avg_->ObserveSince(start_);
             avg_ = nullptr;
         }
 
@@ -61,17 +61,17 @@ public:
                  spdlog::level::level_enum level = spdlog::level::info, bool report_empty = false)
         : name_(std::move(name)), report_interval_(report_interval), level_(level),
           report_empty_(report_empty),
-          reporter_([this](std::stop_token stop_token) { report_loop(stop_token); }) {}
+          reporter_([this](std::stop_token stop_token) { ReportLoop(stop_token); }) {}
 
     Avg(const Avg&)                    = delete;
     auto operator=(const Avg&) -> Avg& = delete;
     Avg(Avg&&)                         = delete;
     auto operator=(Avg&&) -> Avg&      = delete;
 
-    ~Avg() { stop(); }
+    ~Avg() { Stop(); }
 
     template <class Rep, class Period>
-    auto observe(std::chrono::duration<Rep, Period> dur) -> void {
+    auto Observe(std::chrono::duration<Rep, Period> dur) -> void {
         auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(dur).count();
         total_ns_.fetch_add(static_cast<uint64_t>(ns), std::memory_order_relaxed);
         total_count_.fetch_add(1, std::memory_order_relaxed);
@@ -79,16 +79,16 @@ public:
         window_count_.fetch_add(1, std::memory_order_relaxed);
     }
 
-    auto observe_bytes(uint64_t bytes) -> void {
+    auto ObserveBytes(uint64_t bytes) -> void {
         total_bytes_.fetch_add(bytes, std::memory_order_relaxed);
         window_bytes_.fetch_add(bytes, std::memory_order_relaxed);
     }
 
-    auto observe_since(clock::time_point start) -> void { observe(clock::now() - start); }
+    auto ObserveSince(clock::time_point start) -> void { Observe(clock::now() - start); }
 
-    auto scope() -> Scope { return Scope(*this); }
+    auto MakeScope() -> Scope { return Scope(*this); }
 
-    auto average() const -> std::chrono::nanoseconds {
+    auto Average() const -> std::chrono::nanoseconds {
         auto count = total_count_.load(std::memory_order_relaxed);
         if (count == 0) {
             return std::chrono::nanoseconds{0};
@@ -97,21 +97,21 @@ public:
         return std::chrono::nanoseconds(total_ns / count);
     }
 
-    auto count() const -> uint64_t { return total_count_.load(std::memory_order_relaxed); }
-    auto total_bytes() const -> uint64_t { return total_bytes_.load(std::memory_order_relaxed); }
-    auto average_bytes() const -> double {
+    auto Count() const -> uint64_t { return total_count_.load(std::memory_order_relaxed); }
+    auto TotalBytes() const -> uint64_t { return total_bytes_.load(std::memory_order_relaxed); }
+    auto AverageBytes() const -> double {
         auto count = total_count_.load(std::memory_order_relaxed);
         if (count == 0) {
             return 0.0;
         }
 
-        auto total_bytes = total_bytes_.load(std::memory_order_relaxed);
-        return static_cast<double>(total_bytes) / count;
+        auto TotalBytes = total_bytes_.load(std::memory_order_relaxed);
+        return static_cast<double>(TotalBytes) / count;
     }
 
-    auto report_now() -> void { report_once(); }
+    auto ReportNow() -> void { ReportOnce(); }
 
-    auto stop() -> void {
+    auto Stop() -> void {
         bool expected = false;
         if (!stopped_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
             return;
@@ -125,7 +125,7 @@ public:
     }
 
 private:
-    auto report_loop(std::stop_token stop_token) -> void {
+    auto ReportLoop(std::stop_token stop_token) -> void {
         std::unique_lock lk(mu_);
         while (!stop_token.stop_requested() && !stopped_.load(std::memory_order_acquire)) {
             cv_.wait_for(lk, report_interval_, [this, &stop_token]() {
@@ -137,14 +137,14 @@ private:
             }
 
             lk.unlock();
-            report_once();
+            ReportOnce();
             lk.lock();
         }
         lk.unlock();
-        report_once();
+        ReportOnce();
     }
 
-    auto report_once() -> void {
+    auto ReportOnce() -> void {
         auto window_count = window_count_.exchange(0, std::memory_order_acq_rel);
         auto window_ns    = window_ns_.exchange(0, std::memory_order_acq_rel);
         auto window_bytes = window_bytes_.exchange(0, std::memory_order_acq_rel);
@@ -155,10 +155,10 @@ private:
 
         auto total_count = total_count_.load(std::memory_order_relaxed);
         auto total_ns    = total_ns_.load(std::memory_order_relaxed);
-        auto total_bytes = total_bytes_.load(std::memory_order_relaxed);
+        auto TotalBytes = total_bytes_.load(std::memory_order_relaxed);
 
         bool has_latency = window_count > 0 || total_count > 0;
-        bool has_bytes   = window_bytes > 0 || total_bytes > 0;
+        bool has_bytes   = window_bytes > 0 || TotalBytes > 0;
 
         if (has_latency) {
             double window_avg_ns =
@@ -170,7 +170,7 @@ private:
                 double window_avg_bytes =
                     window_count == 0 ? 0.0 : static_cast<double>(window_bytes) / window_count;
                 double total_avg_bytes =
-                    total_count == 0 ? 0.0 : static_cast<double>(total_bytes) / total_count;
+                    total_count == 0 ? 0.0 : static_cast<double>(TotalBytes) / total_count;
                 double seconds = std::chrono::duration<double>(report_interval_).count();
                 double window_rate =
                     seconds <= 0.0 ? 0.0 : static_cast<double>(window_bytes) / seconds;
@@ -178,19 +178,19 @@ private:
                 spdlog::log(level_,
                             "[avg:{}] window_avg={} window_count={} total_avg={} total_count={} "
                             "window_avg_bytes={} total_avg_bytes={} window_rate={} "
-                            "window_bytes={} total_bytes={}",
-                            name_, format_duration(window_avg_ns), window_count,
-                            format_duration(total_avg_ns), total_count,
-                            format_bytes(window_avg_bytes), format_bytes(total_avg_bytes),
-                            format_rate(window_rate),
-                            format_bytes(static_cast<double>(window_bytes)),
-                            format_bytes(static_cast<double>(total_bytes)));
+                            "window_bytes={} TotalBytes={}",
+                            name_, FormatDuration(window_avg_ns), window_count,
+                            FormatDuration(total_avg_ns), total_count,
+                            FormatBytes(window_avg_bytes), FormatBytes(total_avg_bytes),
+                            FormatRate(window_rate),
+                            FormatBytes(static_cast<double>(window_bytes)),
+                            FormatBytes(static_cast<double>(TotalBytes)));
                 return;
             }
 
             spdlog::log(level_,
                         "[avg:{}] window_avg={} window_count={} total_avg={} total_count={}", name_,
-                        format_duration(window_avg_ns), window_count, format_duration(total_avg_ns),
+                        FormatDuration(window_avg_ns), window_count, FormatDuration(total_avg_ns),
                         total_count);
             return;
         }
@@ -198,12 +198,12 @@ private:
         double seconds     = std::chrono::duration<double>(report_interval_).count();
         double window_rate = seconds <= 0.0 ? 0.0 : static_cast<double>(window_bytes) / seconds;
 
-        spdlog::log(level_, "[avg:{}] window_rate={} window_bytes={} total_bytes={}", name_,
-                    format_rate(window_rate), format_bytes(static_cast<double>(window_bytes)),
-                    format_bytes(static_cast<double>(total_bytes)));
+        spdlog::log(level_, "[avg:{}] window_rate={} window_bytes={} TotalBytes={}", name_,
+                    FormatRate(window_rate), FormatBytes(static_cast<double>(window_bytes)),
+                    FormatBytes(static_cast<double>(TotalBytes)));
     }
 
-    static auto format_duration(double ns) -> std::string {
+    static auto FormatDuration(double ns) -> std::string {
         constexpr double kNsPerUs = 1000.0;
         constexpr double kNsPerMs = 1000.0 * kNsPerUs;
         constexpr double kNsPerS  = 1000.0 * kNsPerMs;
@@ -224,7 +224,7 @@ private:
         return oss.str();
     }
 
-    static auto format_bytes(double bytes) -> std::string {
+    static auto FormatBytes(double bytes) -> std::string {
         constexpr double kB  = 1024.0;
         constexpr double kMB = 1024.0 * kB;
         constexpr double kGB = 1024.0 * kMB;
@@ -245,8 +245,8 @@ private:
         return oss.str();
     }
 
-    static auto format_rate(double bytes_per_sec) -> std::string {
-        return format_bytes(bytes_per_sec) + "/s";
+    static auto FormatRate(double bytes_per_sec) -> std::string {
+        return FormatBytes(bytes_per_sec) + "/s";
     }
 
     std::string               name_;

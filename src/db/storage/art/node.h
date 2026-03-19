@@ -39,10 +39,10 @@ class Node4 : public InnerNode {
 public:
     Node4() : InnerNode(NodeType::Node4) {}
 
-    auto find_next(byte key) -> Node*;
-    auto set_next(byte key, Node*) -> void;
-    auto del_next(byte key) -> Node*;
-    auto is_full() -> bool { return size_ == 4; }
+    auto FindNext(byte key) -> Node*;
+    auto SetNext(byte key, Node*) -> void;
+    auto DelNext(byte key) -> Node*;
+    auto IsFull() -> bool { return size_ == 4; }
 
     byte keys_[4]{};
     Node* next_[4]{};
@@ -52,10 +52,10 @@ class Node16 : public InnerNode {
 public:
     Node16() : InnerNode(NodeType::Node16) {}
 
-    auto find_next(byte key) -> Node*;
-    auto set_next(byte key, Node*) -> void;
-    auto del_next(byte key) -> Node*;
-    auto is_full() -> bool { return size_ == 16; }
+    auto FindNext(byte key) -> Node*;
+    auto SetNext(byte key, Node*) -> void;
+    auto DelNext(byte key) -> Node*;
+    auto IsFull() -> bool { return size_ == 16; }
 
     byte keys_[16]{};
     Node* next_[16]{};
@@ -67,10 +67,10 @@ public:
 
     Node48() : InnerNode(NodeType::Node48) {}
 
-    auto find_next(byte key) -> Node*;
-    auto set_next(byte key, Node*) -> void;
-    auto del_next(byte key) -> Node*;
-    auto is_full() -> bool { return size_ == 48; }
+    auto FindNext(byte key) -> Node*;
+    auto SetNext(byte key, Node*) -> void;
+    auto DelNext(byte key) -> Node*;
+    auto IsFull() -> bool { return size_ == 48; }
 
     byte keys_[256]{};
     Node* next_[48]{};
@@ -80,10 +80,10 @@ class Node256 : public InnerNode {
 public:
     Node256() : InnerNode(NodeType::Node256) {}
 
-    auto find_next(byte key) -> Node*;
-    auto set_next(byte key, Node*) -> void;
-    auto del_next(byte key) -> Node*;
-    auto is_full() -> bool { return false; }
+    auto FindNext(byte key) -> Node*;
+    auto SetNext(byte key, Node*) -> void;
+    auto DelNext(byte key) -> Node*;
+    auto IsFull() -> bool { return false; }
 
     Node* next_[256]{};
 };
@@ -97,8 +97,8 @@ public:
     T value_;
 };
 
-auto node_grow(Node* node) -> Node* ;
-auto node_shrink(Node* node) -> Node*;
+auto NodeGrow(Node* node) -> Node* ;
+auto NodeShrink(Node* node) -> Node*;
 
 
 } // namespace idlekv

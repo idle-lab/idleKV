@@ -39,12 +39,12 @@ public:
     public:
         static constexpr auto kConnPoolSize = 64;
 
-        auto init(asio::any_io_executor exector, size_t buf_size_per_conn) -> void;
+        auto Init(asio::any_io_executor exector, size_t buf_size_per_conn) -> void;
 
-        auto get_register_buffer() -> std::optional<Slot>;
-        auto free_buffer(size_t) -> void;
-        auto conn_pool() -> utils::Pool<ConnectionPtr>& { return conn_pool_; }
-        auto conn_list() -> std::list<Connection*>& { return conn_list_; }
+        auto GetRegisterBuffer() -> std::optional<Slot>;
+        auto FreeBuffer(size_t) -> void;
+        auto ConnPool() -> utils::Pool<ConnectionPtr>& { return conn_pool_; }
+        auto ConnList() -> std::list<Connection*>& { return conn_list_; }
 
     private:
         utils::Pool<ConnectionPtr>                            conn_pool_;
@@ -56,16 +56,16 @@ public:
 
     RedisService(const Config& cfg) : Handler(cfg.ip_, std::atoi(cfg.port_.c_str())) {}
 
-    virtual auto init(EventLoop* el) -> void override;
-    virtual auto handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> override;
+    virtual auto Init(EventLoop* el) -> void override;
+    virtual auto Handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> override;
 
-    static auto tlocal() -> ServiceTLState* { return tl_; }
+    static auto Tlocal() -> ServiceTLState* { return tl_; }
 
-    auto stopped() -> bool { return stop_.load(std::memory_order_acquire); }
+    auto Stopped() -> bool { return stop_.load(std::memory_order_acquire); }
 
-    virtual void stop() override { stop_.store(true, std::memory_order_release); }
+    virtual void Stop() override { stop_.store(true, std::memory_order_release); }
 
-    virtual std::string name() override { return "Redis"; }
+    virtual std::string Name() override { return "Redis"; }
 
     virtual ~RedisService() override = default;
 private:

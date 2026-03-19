@@ -15,8 +15,8 @@ class Pool {
 public:
     using NewFunc = std::function<T()>;
 
-    explicit Pool(size_t pool_size = 0, NewFunc new_func = {})
-        : pool_size_(pool_size), new_func_(std::move(new_func)) {}
+    explicit Pool(size_t PoolSize = 0, NewFunc new_func = {})
+        : pool_size_(PoolSize), new_func_(std::move(new_func)) {}
 
     Pool(const Pool&)                    = delete;
     auto operator=(const Pool&) -> Pool& = delete;
@@ -24,7 +24,7 @@ public:
     Pool(Pool&&)                    = delete;
     auto operator=(Pool&&) -> Pool& = delete;
 
-    auto get() -> T {
+    auto Get() -> T {
         if (!free_list_.empty()) {
             T obj = std::move(free_list_.back());
             free_list_.pop_back();
@@ -39,13 +39,13 @@ public:
             return T{};
         } else {
             throw std::logic_error(
-                "Pool::get() needs a new function for non-default-constructible types");
+                "Pool::Get() needs a new function for non-default-constructible types");
         }
     }
 
     template <class U>
         requires std::is_constructible_v<T, U&&>
-    auto put(U&& obj) -> void {
+    auto Put(U&& obj) -> void {
         if (pool_size_ != 0 && free_list_.size() >= pool_size_) {
             // Same spirit as Go sync.Pool: cached objects are best-effort and can be dropped.
             return;
@@ -53,14 +53,14 @@ public:
         free_list_.emplace_back(std::forward<U>(obj));
     }
 
-    auto clear() -> void { free_list_.clear(); }
+    auto Clear() -> void { free_list_.clear(); }
 
-    auto size() const -> size_t { return free_list_.size(); }
+    auto Size() const -> size_t { return free_list_.size(); }
 
-    auto set_new(NewFunc new_func) -> void { new_func_ = std::move(new_func); }
+    auto SetNew(NewFunc new_func) -> void { new_func_ = std::move(new_func); }
 
-    auto set_pool_size(size_t pool_size) -> void {
-        pool_size_ = pool_size;
+    auto SetPoolSize(size_t PoolSize) -> void {
+        pool_size_ = PoolSize;
         if (pool_size_ == 0) {
             return;
         }

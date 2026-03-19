@@ -16,34 +16,34 @@
 
 namespace idlekv {
 
-auto EventLoop::run() -> void {
+auto EventLoop::Run() -> void {
     // start the io loop on its dedicated worker thread.
     th_ = std::jthread([this]() mutable { io_.run(); });
 }
 
-auto EventLoop::stop() -> void {
+auto EventLoop::Stop() -> void {
     // release the work guard first so io_.run() can exit cleanly.
     io_.stop();
     wg_.reset();
 }
 
-auto EventLoopPool::run() -> void {
+auto EventLoopPool::Run() -> void {
     // create and start all worker event loops before marking the pool ready.
-    setup_els();
+    SetupEls();
 
     is_running_.store(true, std::memory_order_release);
     LOG(info, "Running {} io threads", pool_size_);
 }
 
-auto EventLoopPool::stop() -> void {
+auto EventLoopPool::Stop() -> void {
     is_running_.store(false, std::memory_order_release);
 
     for (auto& el : els_) {
-        el->stop();
+        el->Stop();
     }
 }
 
-auto EventLoopPool::pick_up_el() -> EventLoop* {
+auto EventLoopPool::PickUpEl() -> EventLoop* {
     // use a simple round-robin cursor to spread connections across loops.
     auto idx = next_el_.load(std::memory_order_relaxed);
 
@@ -57,9 +57,9 @@ auto EventLoopPool::pick_up_el() -> EventLoop* {
     return el;
 }
 
-auto EventLoopPool::setup_els() -> void {
+auto EventLoopPool::SetupEls() -> void {
     // build a relative-to-absolute cpu map from the current online cpu set.
-    auto     online_cpus     = utils::get_online_cpus();
+    auto     online_cpus     = utils::GetOnlineCpus();
     unsigned num_online_cpus = CPU_COUNT(&online_cpus);
 
     std::vector<unsigned> rel_to_abs_cpu(num_online_cpus, 0);
@@ -86,9 +86,9 @@ auto EventLoopPool::setup_els() -> void {
         unsigned abs_cpu  = rel_to_abs_cpu[rel_indx];
         els_[i]           = std::make_unique<EventLoop>(abs_cpu);
 
-        els_[i]->run();
+        els_[i]->Run();
 
-        // pthread_t tid = els_[i]->thread_id();
+        // pthread_t tid = els_[i]->ThreadId();
 
         // CPU_SET(abs_cpu, &cps);
 

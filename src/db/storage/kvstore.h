@@ -25,18 +25,18 @@ public:
     KvStore(std::pmr::memory_resource* mr) : data_(mr), mr_(mr) {}
 
     template <class U, class V>
-    auto set(U&& key, V&& value) -> Result<bool> {
-        return data_.set_impl(key, value);
+    auto Set(U&& key, V&& value) -> Result<bool> {
+        return data_.SetImpl(key, value);
     }
 
     template <class U>
-    auto get(U&& key) -> Result<ValueType> {
-        return data_.get_impl(key);
+    auto Get(U&& key) -> Result<ValueType> {
+        return data_.GetImpl(key);
     }
 
     template <class U>
-    auto del(U&& key) -> Result<bool> {
-        return data_.del_impl(key);
+    auto Del(U&& key) -> Result<bool> {
+        return data_.DelImpl(key);
     }
 
     virtual ~KvStore() = default;
@@ -66,8 +66,8 @@ public:
     }
     
     template <class U, class V>
-    auto insert(U&& key, V&& value) -> void {
-        auto shard_id = hash(key) % ShardNum;
+    auto Insert(U&& key, V&& value) -> void {
+        auto shard_id = Hash(key) % ShardNum;
         {
             std::lock_guard<std::mutex> lg(locks_[shard_id]);
             shards_[shard_id].insert(std::make_pair(std::forward<U>(key), std::forward<V>(value)));
@@ -75,8 +75,8 @@ public:
     }
 
     template <class U>
-    auto find(U&& key) -> std::optional<ValueType> {
-        auto shard_id = hash(key) % ShardNum;
+    auto Find(U&& key) -> std::optional<ValueType> {
+        auto shard_id = Hash(key) % ShardNum;
         {
             std::lock_guard<std::mutex> lg(locks_[shard_id]);
             auto it = shards_[shard_id].find(key);
@@ -88,8 +88,8 @@ public:
     }
 
     template <class U>
-    auto earse(U&& key) -> std::optional<size_t> {
-        auto shard_id = hash(key) % ShardNum;
+    auto Erase(U&& key) -> std::optional<size_t> {
+        auto shard_id = Hash(key) % ShardNum;
         {
             std::lock_guard<std::mutex> lg(locks_[shard_id]);
             std::unordered_map<int, int> a;
@@ -99,7 +99,7 @@ public:
     }
 
     private:
-        auto hash(const KeyType& key) -> uint64_t {
+        auto Hash(const KeyType& key) -> uint64_t {
             return XXH32(key.data(), key.size(), 54188);
         }
 
@@ -109,14 +109,14 @@ public:
     DummyImpl(std::pmr::memory_resource* mr_) : data_(mr_) {}
 
     template <class U, class V>
-    auto set_impl(U&& key, V&& value) -> Result<bool> {
-        data_.insert(std::forward<U>(key), std::forward<V>(value));
+    auto SetImpl(U&& key, V&& value) -> Result<bool> {
+        data_.Insert(std::forward<U>(key), std::forward<V>(value));
         return {OpStatus::OK, true};
     }
 
     template <class U>
-    auto get_impl(U&& key) -> Result<ValueType> {
-        auto record = data_.find(key);
+    auto GetImpl(U&& key) -> Result<ValueType> {
+        auto record = data_.Find(key);
         if (!record.has_value()) {
             return {OpStatus::NoSuchKey, ValueType{}};
         }
@@ -124,8 +124,8 @@ public:
     }
 
     template <class U>
-    auto del_impl(U&& key) -> Result<bool> {
-        auto count = data_.earse(std::forward<U>(key));
+    auto DelImpl(U&& key) -> Result<bool> {
+        auto count = data_.Erase(std::forward<U>(key));
         if (count == 0) {
             return {OpStatus::NoSuchKey, true};
         }
@@ -147,16 +147,16 @@ public:
     explicit DashImpl(std::pmr::memory_resource* mr) : mr_(mr) {}
 
     template <class U, class V>
-    auto set_impl(U&& key, V&& value) -> Result<bool> {
+    auto SetImpl(U&& key, V&& value) -> Result<bool> {
         Key   owned_key(std::forward<U>(key));
         Value owned_value(std::forward<V>(value));
 
         while (true) {
-            if (data_.insert(owned_key, owned_value)) {
+            if (data_.Insert(owned_key, owned_value)) {
                 return {OpStatus::OK, true};
             }
 
-            auto erased = data_.erase(owned_key);
+            auto erased = data_.Erase(owned_key);
             if (!erased) {
                 continue;
             }
@@ -164,8 +164,8 @@ public:
     }
 
     template <class U>
-    auto get_impl(U&& key) -> Result<Value> {
-        auto record = data_.find_record(Key(std::forward<U>(key)));
+    auto GetImpl(U&& key) -> Result<Value> {
+        auto record = data_.FindRecord(Key(std::forward<U>(key)));
         if (!record) {
             return {OpStatus::OK, Value{}};
         }
@@ -174,8 +174,8 @@ public:
     }
 
     template <class U>
-    auto del_impl(U&& key) -> Result<bool> {
-        return {OpStatus::OK, data_.erase(Key(std::forward<U>(key)))};
+    auto DelImpl(U&& key) -> Result<bool> {
+        return {OpStatus::OK, data_.Erase(Key(std::forward<U>(key)))};
     }
 
 private:

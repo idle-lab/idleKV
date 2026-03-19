@@ -34,11 +34,11 @@ public:
     BlockingQueue(BlockingQueue&&)                    = delete;
     auto operator=(BlockingQueue&&) -> BlockingQueue& = delete;
 
-    ~BlockingQueue() { close(); }
+    ~BlockingQueue() { Close(); }
 
     template <class U>
         requires std::constructible_from<T, U&&>
-    auto try_push(U&& value) -> bool {
+    auto TryPush(U&& value) -> bool {
         std::shared_ptr<PopWaiterBase> pop_waiter;
         std::optional<T>               ready_value;
 
@@ -54,7 +54,7 @@ public:
                 pop_waiter->queued = false;
                 ready_value.emplace(std::forward<U>(value));
             } else {
-                if (is_full_unlocked()) {
+                if (IsFullUnlocked()) {
                     return false;
                 }
 
@@ -63,19 +63,19 @@ public:
             }
         }
 
-        complete_pop(pop_waiter, std::move(ready_value));
+        CompletePop(pop_waiter, std::move(ready_value));
         return true;
     }
 
     template <class... Args>
         requires std::constructible_from<T, Args&&...>
-    auto try_emplace(Args&&... args) -> bool {
-        return try_push(T(std::forward<Args>(args)...));
+    auto TryEmplace(Args&&... args) -> bool {
+        return TryPush(T(std::forward<Args>(args)...));
     }
 
     template <class U, class CompletionToken = asio::use_awaitable_t<>>
         requires std::constructible_from<T, U&&>
-    auto async_push(U&& value, CompletionToken token = CompletionToken{}) {
+    auto asyncPush(U&& value, CompletionToken token = CompletionToken{}) {
         return asio::async_initiate<CompletionToken, void(bool)>(
             [this, item = T(std::forward<U>(value))](auto handler) mutable {
                 using Handler = decltype(handler);
@@ -102,7 +102,7 @@ public:
                         waiter->value.reset();
                         complete_now = true;
                         accepted     = true;
-                    } else if (!is_full_unlocked()) {
+                    } else if (!IsFullUnlocked()) {
                         items_.emplace_back(std::move(*waiter->value));
                         waiter->value.reset();
                         complete_now = true;
@@ -114,16 +114,16 @@ public:
                 }
 
                 if (complete_now) {
-                    complete_push(waiter, accepted);
+                    CompletePush(waiter, accepted);
                     if (pop_waiter) {
-                        complete_pop(pop_waiter, std::move(ready_value));
+                        CompletePop(pop_waiter, std::move(ready_value));
                     }
                 }
             },
             token);
     }
 
-    auto try_pop() -> std::optional<T> {
+    auto TryPop() -> std::optional<T> {
         std::shared_ptr<PushWaiterBase> push_waiter;
         std::optional<T>                value;
 
@@ -135,17 +135,17 @@ public:
 
             value.emplace(std::move(items_.front()));
             items_.pop_front();
-            push_waiter = admit_one_waiting_push_unlocked();
+            push_waiter = AdmitOneWaitingPushUnlocked();
         }
 
         if (push_waiter) {
-            complete_push(push_waiter, true);
+            CompletePush(push_waiter, true);
         }
         return value;
     }
 
     template <class CompletionToken = asio::use_awaitable_t<>>
-    auto async_pop(CompletionToken token = CompletionToken{}) {
+    auto asyncPop(CompletionToken token = CompletionToken{}) {
         return asio::async_initiate<CompletionToken, void(std::optional<T>)>(
             [this](auto handler) mutable {
                 using Handler = decltype(handler);
@@ -164,7 +164,7 @@ public:
                     if (!items_.empty()) {
                         value.emplace(std::move(items_.front()));
                         items_.pop_front();
-                        push_waiter  = admit_one_waiting_push_unlocked();
+                        push_waiter  = AdmitOneWaitingPushUnlocked();
                         complete_now = true;
                     } else if (closed_) {
                         complete_now = true;
@@ -175,16 +175,16 @@ public:
                 }
 
                 if (complete_now) {
-                    complete_pop(waiter, std::move(value));
+                    CompletePop(waiter, std::move(value));
                     if (push_waiter) {
-                        complete_push(push_waiter, true);
+                        CompletePush(push_waiter, true);
                     }
                 }
             },
             token);
     }
 
-    auto close() noexcept -> void {
+    auto Close() noexcept -> void {
         std::deque<std::shared_ptr<PopWaiterBase>>  pop_waiters;
         std::deque<std::shared_ptr<PushWaiterBase>> push_waiters;
 
@@ -208,36 +208,36 @@ public:
         }
 
         for (const auto& waiter : pop_waiters) {
-            complete_pop(waiter, std::nullopt);
+            CompletePop(waiter, std::nullopt);
         }
         for (const auto& waiter : push_waiters) {
-            complete_push(waiter, false);
+            CompletePush(waiter, false);
         }
     }
 
-    auto closed() const -> bool {
+    auto Closed() const -> bool {
         std::lock_guard<std::mutex> lk(mu_);
         return closed_;
     }
 
-    auto empty() const -> bool {
+    auto Empty() const -> bool {
         std::lock_guard<std::mutex> lk(mu_);
         return items_.empty();
     }
 
-    auto size() const -> size_t {
+    auto Size() const -> size_t {
         std::lock_guard<std::mutex> lk(mu_);
         return items_.size();
     }
 
-    auto capacity() const -> size_t { return capacity_; }
+    auto Capacity() const -> size_t { return capacity_; }
 
 private:
     struct PopWaiterBase {
         explicit PopWaiterBase(asio::any_io_executor executor) : executor(std::move(executor)) {}
         virtual ~PopWaiterBase() = default;
 
-        virtual void complete(std::optional<T> value) = 0;
+        virtual void Complete(std::optional<T> value) = 0;
 
         asio::any_io_executor executor;
         bool                  queued = false;
@@ -248,7 +248,7 @@ private:
         PopWaiter(asio::any_io_executor executor, Handler&& handler)
             : PopWaiterBase(std::move(executor)), handler(std::move(handler)) {}
 
-        void complete(std::optional<T> value) override {
+        void Complete(std::optional<T> value) override {
             auto h = std::move(handler);
             std::move(h)(std::move(value));
         }
@@ -261,7 +261,7 @@ private:
             : executor(std::move(executor)), value(std::move(value)) {}
         virtual ~PushWaiterBase() = default;
 
-        virtual void complete(bool accepted) = 0;
+        virtual void Complete(bool accepted) = 0;
 
         asio::any_io_executor executor;
         std::optional<T>      value;
@@ -273,7 +273,7 @@ private:
         PushWaiter(asio::any_io_executor executor, Handler&& handler, T value)
             : PushWaiterBase(std::move(executor), std::move(value)), handler(std::move(handler)) {}
 
-        void complete(bool accepted) override {
+        void Complete(bool accepted) override {
             auto h = std::move(handler);
             std::move(h)(accepted);
         }
@@ -281,12 +281,12 @@ private:
         Handler handler;
     };
 
-    auto is_full_unlocked() const noexcept -> bool {
+    auto IsFullUnlocked() const noexcept -> bool {
         return capacity_ != 0 && items_.size() >= capacity_;
     }
 
-    auto admit_one_waiting_push_unlocked() -> std::shared_ptr<PushWaiterBase> {
-        if (closed_ || push_waiters_.empty() || is_full_unlocked()) {
+    auto AdmitOneWaitingPushUnlocked() -> std::shared_ptr<PushWaiterBase> {
+        if (closed_ || push_waiters_.empty() || IsFullUnlocked()) {
             return nullptr;
         }
 
@@ -299,25 +299,25 @@ private:
         return waiter;
     }
 
-    static auto complete_pop(const std::shared_ptr<PopWaiterBase>& waiter,
-                             std::optional<T>                      value) noexcept -> void {
+    static auto CompletePop(const std::shared_ptr<PopWaiterBase>& waiter,
+                            std::optional<T>                      value) noexcept -> void {
         if (!waiter) {
             return;
         }
 
         asio::dispatch(waiter->executor, [waiter, value = std::move(value)]() mutable {
-            waiter->complete(std::move(value));
+            waiter->Complete(std::move(value));
         });
     }
 
-    static auto complete_push(const std::shared_ptr<PushWaiterBase>& waiter, bool accepted) noexcept
+    static auto CompletePush(const std::shared_ptr<PushWaiterBase>& waiter, bool accepted) noexcept
         -> void {
         if (!waiter) {
             return;
         }
 
         asio::dispatch(waiter->executor,
-                       [waiter, accepted]() mutable { waiter->complete(accepted); });
+                       [waiter, accepted]() mutable { waiter->Complete(accepted); });
     }
 
 private:

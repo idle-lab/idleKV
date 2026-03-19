@@ -26,16 +26,16 @@ public:
         timer_.expires_at(kMaxTimePoint);
     }
 
-    auto notify() -> void { 
+    auto Notify() -> void { 
         timer_.cancel(); 
         timer_.expires_at(kMaxTimePoint);
     }
 
-    auto async_wait() -> asio::awaitable<void> {
+    auto AsyncWait() -> asio::awaitable<void> {
         auto [ec] = co_await timer_.async_wait(asio::as_tuple(asio::use_awaitable));
         CHECK_EQ(ec, asio::error::operation_aborted);
     }
-    auto get_executor() -> const asio::any_io_executor& { return timer_.get_executor(); }
+    auto GetExecutor() -> const asio::any_io_executor& { return timer_.get_executor(); }
 
     ~ConditionVariable() {}
 private:
@@ -50,15 +50,15 @@ public:
         timer_.expires_at(kMaxTimePoint);
     }
 
-    auto notify() -> void { 
+    auto Notify() -> void { 
         timer_.cancel(); 
     }
 
-    auto async_wait() -> asio::awaitable<void> {
+    auto AsyncWait() -> asio::awaitable<void> {
         auto [ec] = co_await timer_.async_wait(asio::as_tuple(asio::use_awaitable));
         CHECK_EQ(ec, asio::error::operation_aborted);
     }
-    auto get_executor() -> const asio::any_io_executor& { return timer_.get_executor(); }
+    auto GetExecutor() -> const asio::any_io_executor& { return timer_.get_executor(); }
 
     ~DisposableConditionVariable() {}
 private:

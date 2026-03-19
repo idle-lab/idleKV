@@ -48,36 +48,36 @@ public:
         }
     }
 
-    virtual auto read_impl(byte* buf, size_t size) noexcept
+    virtual auto ReadImpl(byte* buf, size_t size) noexcept
         -> asio::awaitable<ResultT<size_t>> override;
-    virtual auto read_impl(asio::mutable_registered_buffer reg_buf) noexcept
+    virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept
         -> asio::awaitable<ResultT<size_t>> override;
-    virtual auto readv_impl(const std::vector<Buf>& bufs) noexcept
-        -> asio::awaitable<ResultT<size_t>> override;
-
-    virtual auto write_impl(const byte* data, size_t size) noexcept
-        -> asio::awaitable<ResultT<size_t>> override;
-    virtual auto writev_impl(const std::vector<BufView>& bufs) noexcept
+    virtual auto ReadvImpl(const std::vector<Buf>& bufs) noexcept
         -> asio::awaitable<ResultT<size_t>> override;
 
-    auto handle_requests() noexcept -> asio::awaitable<void>;
+    virtual auto WriteImpl(const byte* data, size_t size) noexcept
+        -> asio::awaitable<ResultT<size_t>> override;
+    virtual auto WritevImpl(const std::vector<BufView>& bufs) noexcept
+        -> asio::awaitable<ResultT<size_t>> override;
 
-    auto flush() -> asio::awaitable<void>;
+    auto HandleRequests() noexcept -> asio::awaitable<void>;
 
-    auto reset(asio::ip::tcp::socket&& socket) -> void;
-    auto reset() -> void;
+    auto Flush() -> asio::awaitable<void>;
 
-    auto sender() -> Sender& { return s_; }
+    auto Reset(asio::ip::tcp::socket&& socket) -> void;
+    auto Reset() -> void;
 
-    auto db_index() const -> size_t { return db_index_; }
-    auto socket() -> asio::ip::tcp::socket& { return *socket_; }
-    auto get_executor() -> const asio::any_io_executor& {
+    auto GetSender() -> Sender& { return s_; }
+
+    auto DbIndex() const -> size_t { return db_index_; }
+    auto GetSocket() -> asio::ip::tcp::socket& { return *socket_; }
+    auto GetExecutor() -> const asio::any_io_executor& {
         CHECK(socket_.has_value());
         return socket_->get_executor();
     }
-    void set_db_index(size_t db_index) { db_index_ = db_index; }
+    void SetDbIndex(size_t DbIndex) { db_index_ = DbIndex; }
 
-    auto remote_endpoint() const -> asio::ip::tcp::endpoint {
+    auto RemoteEndpoint() const -> asio::ip::tcp::endpoint {
         if (!socket_.has_value()) {
             return {};
         }
@@ -87,7 +87,9 @@ public:
         return ec ? asio::ip::tcp::endpoint{} : ep;
     }
 
-    auto closed() const -> bool { return ec_ || !(socket_.has_value() && socket_->is_open()) || s_.get_error(); }
+    auto IsClosed() const -> bool {
+        return ec_ || !(socket_.has_value() && socket_->is_open()) || s_.GetError();
+    }
 private:
 
     std::optional<asio::ip::tcp::socket>           socket_;

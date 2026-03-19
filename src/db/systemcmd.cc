@@ -11,45 +11,45 @@ namespace idlekv {
 
 namespace {
 
-auto no_keys(const std::vector<std::string>& args)
+auto NoKeys(const std::vector<std::string>& args)
     -> std::pair<std::vector<std::string>, std::vector<std::string>> {
     (void)args;
     return {};
 }
 
-auto ping(CmdContext*, const std::vector<std::string>& args) -> ExecResult {
+auto Ping(CmdContext*, const std::vector<std::string>& args) -> ExecResult {
     switch (args.size()) {
     case 1:
-        return ExecResult::pong();
+        return ExecResult::Pong();
     case 2:
-        return ExecResult::simple_string(args[1]);
+        return ExecResult::SimpleString(args[1]);
     default:
-        return ExecResult::error("ERR wrong number of arguments for 'ping' command");
+        return ExecResult::Error("ERR wrong number of arguments for 'ping' command");
     }
 }
 
-auto select(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
-    size_t      db_index = 0;
+auto Select(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
+    size_t      DbIndex = 0;
     const auto* begin    = args[1].data();
     const auto* end      = begin + args[1].size();
-    auto [ptr, ec]       = std::from_chars(begin, end, db_index);
+    auto [ptr, ec]       = std::from_chars(begin, end, DbIndex);
     if (ec != std::errc{} || ptr != end) {
-        return ExecResult::error(fmt::format(kProtocolErrFmt, "invalid DB index"));
+        return ExecResult::Error(fmt::format(kProtocolErrFmt, "invalid DB index"));
     }
 
-    if (db_index >= engine->db_num()) {
-        return ExecResult::error("ERR DB index is out of range");
+    if (DbIndex >= engine->DbNum()) {
+        return ExecResult::Error("ERR DB index is out of range");
     }
 
-    ctx->connection()->set_db_index(db_index);
-    return ExecResult::ok();
+    ctx->GetConnection()->SetDbIndex(DbIndex);
+    return ExecResult::Ok();
 }
 
 } // namespace
 
-auto init_systemcmd(IdleEngine* eng) -> void {
-    eng->register_cmd("ping", -1, -1, -1, ping, no_keys, CmdFlags::CanExecInline);
-    eng->register_cmd("select", 2, -1, -1, select, no_keys, CmdFlags::CanExecInline);
+auto InitSystemCmd(IdleEngine* eng) -> void {
+    eng->RegisterCmd("ping", -1, -1, -1, Ping, NoKeys, CmdFlags::CanExecInline);
+    eng->RegisterCmd("select", 2, -1, -1, Select, NoKeys, CmdFlags::CanExecInline);
 }
 
 } // namespace idlekv

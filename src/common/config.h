@@ -24,7 +24,7 @@ public:
         opts_.add_option("--port", port_, "Listen port")->default_val(DEFAULT_PORT);
 
         opts_.add_option("-c,--config", config_file_path, "Config file path");
-        opts_.add_option("--db_num", db_num_, "number of DB");
+        opts_.add_option("--DbNum", db_num_, "number of DB");
     }
 
     // 不能拷贝不能移动
@@ -33,11 +33,11 @@ public:
     Config& operator=(const Config&) = delete;
     Config& operator=(Config&&)      = delete;
 
-    void parse(int argc, char** argv) { opts_.parse(argc, argv); }
+    void Parse(int argc, char** argv) { opts_.parse(argc, argv); }
 
-    void parse_from_file() { throw std::runtime_error("Not yet implemented"); }
+    void ParseFromFile() { throw std::runtime_error("Not yet implemented"); }
 
-    bool has_config_file() const { return !config_file_path.empty(); }
+    bool HasConfigFile() const { return !config_file_path.empty(); }
 
     std::string ip_, port_;
     uint16_t    io_threads_     = 1;

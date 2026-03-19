@@ -30,22 +30,22 @@ class ThreadState {
 public:
     ThreadState() = default;
 
-    static auto init(size_t pool_index, EventLoop* el, std::thread::native_handle_type thread_id)
+    static auto Init(size_t PoolIndex, EventLoop* el, std::thread::native_handle_type ThreadId)
         -> void;
 
-    // on_startup should call on every coro start up.
-    static auto on_startup() -> uint64_t;
-    static auto on_resume(uint64_t coro_id) -> void;
-    static auto on_suspend_or_finish(uint64_t coro_id, bool done) -> void;
-    static auto cur_coro() -> CoroState*;
+    // OnStartup should call on every coro start up.
+    static auto OnStartup() -> uint64_t;
+    static auto OnResume(uint64_t coro_id) -> void;
+    static auto OnSuspendOrFinish(uint64_t coro_id, bool done) -> void;
+    static auto CurCoro() -> CoroState*;
 
-    static auto tlocal() -> ThreadState* { return state_; }
+    static auto Tlocal() -> ThreadState* { return state_; }
 
-    auto event_loop() -> EventLoop* { return el_; }
+    auto GetEventLoop() -> EventLoop* { return el_; }
 
-    auto data_heap() -> mi_heap_t* { return data_heap_; }
+    auto DataHeap() -> mi_heap_t* { return data_heap_; }
 
-    auto pool_index() -> size_t { return pool_index_; }
+    auto PoolIndex() -> size_t { return pool_index_; }
 
 private:
     EventLoop* el_;

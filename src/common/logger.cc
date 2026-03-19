@@ -3,7 +3,7 @@
 
 namespace idlekv {
 
-std::shared_ptr<spdlog::logger> make_default_logger() {
+std::shared_ptr<spdlog::logger> MakeDefaultLogger() {
     auto lg = std::make_shared<spdlog::logger>(
         "default", std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
 #ifdef NDEBUG

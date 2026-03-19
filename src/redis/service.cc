@@ -26,18 +26,18 @@
 namespace idlekv {
 
 
-auto RedisService::init(EventLoop* el) -> void {
+auto RedisService::Init(EventLoop* el) -> void {
     tl_ = new ServiceTLState();
-    tl_->init(el->io_context().get_executor(), kDefaultReadBufferSize);
+    tl_->Init(el->IoContext().get_executor(), kDefaultReadBufferSize);
 
-    tl_->conn_pool().set_pool_size(ServiceTLState::kConnPoolSize);
-    tl_->conn_pool().set_new([]() -> ConnectionPtr {
-        auto* tl = RedisService::tlocal();
+    tl_->ConnPool().SetPoolSize(ServiceTLState::kConnPoolSize);
+    tl_->ConnPool().SetNew([]() -> ConnectionPtr {
+        auto* tl = RedisService::Tlocal();
         CHECK(tl);
         
-        if (auto slot = tl->get_register_buffer(); slot.has_value()) {
+        if (auto slot = tl->GetRegisterBuffer(); slot.has_value()) {
             return std::make_unique<Connection>(slot->buffer, [index = slot->index, tl]() {
-                tl->free_buffer(index);
+                tl->FreeBuffer(index);
             });
         } else {
             // use normal buffer
@@ -46,7 +46,7 @@ auto RedisService::init(EventLoop* el) -> void {
     });
 }
 
-auto RedisService::ServiceTLState::init(asio::any_io_executor exector, size_t buf_size_per_conn) -> void {
+auto RedisService::ServiceTLState::Init(asio::any_io_executor exector, size_t buf_size_per_conn) -> void {
     const size_t total = buf_size_per_conn * kConnPoolSize;
 
     buf_space_ = std::make_unique<byte[]>(total);
@@ -60,7 +60,7 @@ auto RedisService::ServiceTLState::init(asio::any_io_executor exector, size_t bu
     buffer_registration_.emplace(exector, bufs);
 }
 
-auto RedisService::ServiceTLState::get_register_buffer() -> std::optional<Slot> {
+auto RedisService::ServiceTLState::GetRegisterBuffer() -> std::optional<Slot> {
     CHECK(buffer_registration_.has_value());
 
     if (free_list_.empty()) {
@@ -75,27 +75,27 @@ auto RedisService::ServiceTLState::get_register_buffer() -> std::optional<Slot> 
     };
 }
 
-auto RedisService::ServiceTLState::free_buffer(size_t i) -> void {
+auto RedisService::ServiceTLState::FreeBuffer(size_t i) -> void {
     free_list_.emplace_back(i);
 }
 
 
-auto RedisService::handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> {
-    auto& conn_list = tlocal()->conn_list();
-    auto& conn_pool = tlocal()->conn_pool();
+auto RedisService::Handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> {
+    auto& ConnList = Tlocal()->ConnList();
+    auto& ConnPool = Tlocal()->ConnPool();
 
     // get a connection from the pool and put it to the front of the list.
-    auto conn = conn_pool.get();
-    conn->reset(std::move(socket));
-    conn_list.emplace_front(conn.get());
-    auto it = conn_list.begin();
+    auto conn = ConnPool.Get();
+    conn->Reset(std::move(socket));
+    ConnList.emplace_front(conn.get());
+    auto it = ConnList.begin();
 
-    co_await conn->handle_requests();
+    co_await conn->HandleRequests();
 
-    conn_list.erase(it);
+    ConnList.erase(it);
 
-    conn->reset();
-    conn_pool.put(std::move(conn));
+    conn->Reset();
+    ConnPool.Put(std::move(conn));
 }
 
 thread_local RedisService::ServiceTLState* RedisService::tl_ = nullptr;

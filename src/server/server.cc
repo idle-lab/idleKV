@@ -28,7 +28,7 @@ namespace idlekv {
 
 namespace {
 
-auto log_io_backend_status() -> void {
+auto LogIoBackendStatus() -> void {
 #if defined(ASIO_HAS_IO_URING_AS_DEFAULT)
     LOG(info, "I/O backend: io_uring enabled");
 #elif defined(ASIO_HAS_IO_URING)
@@ -43,22 +43,22 @@ auto log_io_backend_status() -> void {
 Server::Server(const Config& cfg) {
     // initialize the event loop pool and thread-local state for each worker.
     cfg_ = &cfg;
-    log_io_backend_status();
+    LogIoBackendStatus();
     elp_ = std::make_unique<EventLoopPool>();
-    elp_->run();
-    elp_->await_foreach([](size_t i, EventLoop* el) { ThreadState::init(i, el, el->thread_id()); });
+    elp_->Run();
+    elp_->AwaitForeach([](size_t i, EventLoop* el) { ThreadState::Init(i, el, el->ThreadId()); });
     // check or create the data directory.
 
     // recover persisted data.
 }
 
-auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
+auto Server::DoAccept(Handler* h) -> asio::awaitable<void> {
     auto                    exec = co_await asio::this_coro::executor;
     asio::ip::tcp::acceptor acceptor(exec);
     std::error_code         ec;
 
     // open and prepare the listening socket for this handler.
-    DISCARD_RESULT(acceptor.open(h->endpoint().protocol(), ec));
+    DISCARD_RESULT(acceptor.open(h->Endpoint().protocol(), ec));
     if (ec) {
         LOG(error, "acceptor open failed: {}", ec.message());
         co_return;
@@ -70,7 +70,7 @@ auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
         co_return;
     }
 
-    DISCARD_RESULT(acceptor.bind(h->endpoint(), ec));
+    DISCARD_RESULT(acceptor.bind(h->Endpoint(), ec));
     if (ec) {
         LOG(error, "acceptor bind failed: {}", ec.message());
         co_return;
@@ -82,8 +82,8 @@ auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
         co_return;
     }
 
-    LOG(info, "start handler {}, listen on {}:{}", h->name(), h->endpoint().address().to_string(),
-        h->endpoint().port());
+    LOG(info, "start handler {}, listen on {}:{}", h->Name(), h->Endpoint().address().to_string(),
+        h->Endpoint().port());
 
     for (;;) {
         // accept connections continuously and hand them off to worker loops.
@@ -101,7 +101,7 @@ auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
             if (accept_ec == asio::error::no_descriptors) {
                 LOG(warn, "FD limit reached");
 
-                co_await set_timeout(std::chrono::seconds(1)).read();
+                co_await SetTimeout(std::chrono::seconds(1)).read();
                 continue;
             }
 
@@ -116,31 +116,31 @@ auto Server::do_accept(Handler* h) -> asio::awaitable<void> {
             LOG(warn, "set TCP_NODELAY failed: {}", ec.message());
         }
 
-        auto* target_el = pick_up_conn_el(socket);
-        if (&socket.get_executor().context() != &target_el->io_context()) {
+        auto* target_el = PickUpConnEl(socket);
+        if (&socket.get_executor().context() != &target_el->IoContext()) {
             auto native_socket = socket.release(ec);
             if (ec) {
                 LOG(warn, "release accepted socket failed: {}", ec.message());
                 continue;
             }
 
-            asio::ip::tcp::socket rebound_socket(target_el->io_context());
-            DISCARD_RESULT(rebound_socket.assign(h->endpoint().protocol(), native_socket, ec));
+            asio::ip::tcp::socket rebound_socket(target_el->IoContext());
+            DISCARD_RESULT(rebound_socket.assign(h->Endpoint().protocol(), native_socket, ec));
             if (ec) {
                 LOG(warn, "rebind accepted socket failed: {}", ec.message());
                 ::close(native_socket);
                 continue;
             }
 
-            target_el->dispatch(h->handle(std::move(rebound_socket)));
+            target_el->Dispatch(h->Handle(std::move(rebound_socket)));
             continue;
         }
 
-        target_el->dispatch(h->handle(std::move(socket)));
+        target_el->Dispatch(h->Handle(std::move(socket)));
     }
 }
 
-auto Server::pick_up_conn_el(asio::ip::tcp::socket& sock) -> EventLoop* {
+auto Server::PickUpConnEl(asio::ip::tcp::socket& sock) -> EventLoop* {
     uint32_t res_id = UINT32_MAX;
     // int fd = sock.native_handle();
 
@@ -150,28 +150,28 @@ auto Server::pick_up_conn_el(asio::ip::tcp::socket& sock) -> EventLoop* {
     // if (0 == getsockopt(fd, SOL_SOCKET, SO_INCOMING_CPU, &cpu, &len)) {
     //     LOG(info, "CPU for connection {} is {}", fd, cpu);
 
-    //     const std::vector<unsigned>& ids = elp_->map_cpu_to_threads(cpu);
+    //     const std::vector<unsigned>& ids = elp_->MapCpuToThreads(cpu);
     //     if (!ids.empty()) {
     //       res_id = ids[0];
     //     }
     // }
 
     // fall back to round-robin selection when no cpu hint is available.
-    return res_id == UINT_MAX ? elp_->pick_up_el() : elp_->at(res_id);
+    return res_id == UINT_MAX ? elp_->PickUpEl() : elp_->At(res_id);
 }
 
-void Server::listen_and_server() {
+void Server::ListenAndServe() {
     LOG(info, "start server");
 
     // initialize every handler on each event loop before accepting traffic.
-    elp_->await_foreach([this]([[maybe_unused]] size_t i, EventLoop* el) {
+    elp_->AwaitForeach([this]([[maybe_unused]] size_t i, EventLoop* el) {
         for (auto& handler : handlers_) {
-            handler->init(el);
+            handler->Init(el);
         }
     });
 
     for (size_t i = 0; i < handlers_.size(); i++) {
-        elp_->dispatch(do_accept(handlers_[i].get()));
+        elp_->Dispatch(DoAccept(handlers_[i].get()));
     }
 
     // keep a small signal loop on the main thread for graceful shutdown.
@@ -180,26 +180,26 @@ void Server::listen_and_server() {
     asio::signal_set          signals(signals_handler, SIGINT, SIGTERM, SIGABRT);
     signals.async_wait([this, &wg](const asio::error_code&, int) {
         LOG(info, "signal received, stopping server...");
-        stop();
+        Stop();
         wg.reset();
     });
 
     signals_handler.run();
 }
 
-void Server::register_handler(std::unique_ptr<Handler> handler) {
-    LOG(info, "register handler: {}", handler->name());
+void Server::RegisterHandler(std::unique_ptr<Handler> handler) {
+    LOG(info, "register handler: {}", handler->Name());
     handlers_.push_back(std::move(handler));
 }
 
-void Server::stop() {
+void Server::Stop() {
     // stop handlers first so they stop producing new work.
     for (auto& handler : handlers_) {
-        handler->stop();
+        handler->Stop();
     }
 
     // then stop all worker loops.
-    elp_->stop();
+    elp_->Stop();
     LOG(info, "server stopped");
 }
 

@@ -20,17 +20,17 @@ class Server {
 public:
     Server(const Config& cfg);
 
-    auto do_accept(Handler* h) -> asio::awaitable<void>;
+    auto DoAccept(Handler* h) -> asio::awaitable<void>;
 
-    auto pick_up_conn_el(asio::ip::tcp::socket& sock) -> EventLoop*;
+    auto PickUpConnEl(asio::ip::tcp::socket& sock) -> EventLoop*;
 
-    void listen_and_server();
+    void ListenAndServe();
 
-    void register_handler(std::unique_ptr<Handler> handler);
+    void RegisterHandler(std::unique_ptr<Handler> handler);
 
-    auto event_loop_pool() -> EventLoopPool* { return elp_.get(); }
+    auto GetEventLoopPool() -> EventLoopPool* { return elp_.get(); }
 
-    void stop();
+    void Stop();
 
 private:
     std::unique_ptr<EventLoopPool> elp_;

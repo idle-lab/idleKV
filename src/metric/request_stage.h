@@ -44,16 +44,16 @@ public:
         std::string    note;
     };
 
-    static constexpr auto slow_request_threshold() -> std::chrono::nanoseconds {
+    static constexpr auto SlowRequestThreshold() -> std::chrono::nanoseconds {
         return std::chrono::microseconds(3000000);
     }
 
-    static auto instance() -> RequestStageMetrics& {
+    static auto Instance() -> RequestStageMetrics& {
         static RequestStageMetrics metrics;
         return metrics;
     }
 
-    static auto format_duration_ns(uint64_t ns) -> std::string {
+    static auto FormatDurationNs(uint64_t ns) -> std::string {
         constexpr double kNsPerUs = 1000.0;
         constexpr double kNsPerMs = 1000.0 * kNsPerUs;
         constexpr double kNsPerS  = 1000.0 * kNsPerMs;
@@ -75,7 +75,7 @@ public:
         return oss.str();
     }
 
-    static auto format_slow_request(const SlowRequestBreakdown& breakdown) -> std::string {
+    static auto FormatSlowRequest(const SlowRequestBreakdown& breakdown) -> std::string {
         const auto send_total_ns = breakdown.reply_encode_ns + breakdown.flush_ns;
         const auto accounted_ns =
             breakdown.parse.total_ns + breakdown.command_prepare_ns + breakdown.exec_ns +
@@ -87,16 +87,16 @@ public:
         oss << "[slow-request] cmd="
             << (breakdown.cmd_name.empty() ? "<parse-error>" : breakdown.cmd_name)
             << " argc=" << breakdown.arg_count
-            << " total=" << format_duration_ns(breakdown.total_ns)
-            << " parse=" << format_duration_ns(breakdown.parse.total_ns)
-            << " parse_io_wait=" << format_duration_ns(breakdown.parse.io_wait_ns)
-            << " parse_decode=" << format_duration_ns(breakdown.parse.decode_ns)
-            << " cmd_prepare=" << format_duration_ns(breakdown.command_prepare_ns)
-            << " exec=" << format_duration_ns(breakdown.exec_ns)
-            << " send=" << format_duration_ns(send_total_ns)
-            << " reply_encode=" << format_duration_ns(breakdown.reply_encode_ns)
-            << " flush=" << format_duration_ns(breakdown.flush_ns)
-            << " other=" << format_duration_ns(other_ns)
+            << " total=" << FormatDurationNs(breakdown.total_ns)
+            << " parse=" << FormatDurationNs(breakdown.parse.total_ns)
+            << " parse_io_wait=" << FormatDurationNs(breakdown.parse.io_wait_ns)
+            << " parse_decode=" << FormatDurationNs(breakdown.parse.decode_ns)
+            << " cmd_prepare=" << FormatDurationNs(breakdown.command_prepare_ns)
+            << " exec=" << FormatDurationNs(breakdown.exec_ns)
+            << " send=" << FormatDurationNs(send_total_ns)
+            << " reply_encode=" << FormatDurationNs(breakdown.reply_encode_ns)
+            << " flush=" << FormatDurationNs(breakdown.flush_ns)
+            << " other=" << FormatDurationNs(other_ns)
             << " pipelined=" << std::boolalpha << breakdown.pipelined
             << " flushed=" << breakdown.flushed
             << " parse_failed=" << breakdown.parse_failed
@@ -109,44 +109,44 @@ public:
         return oss.str();
     }
 
-    static auto should_report_slow_request(uint64_t total_ns) -> bool {
-        return total_ns >= static_cast<uint64_t>(slow_request_threshold().count());
+    static auto ShouldReportSlowRequest(uint64_t total_ns) -> bool {
+        return total_ns >= static_cast<uint64_t>(SlowRequestThreshold().count());
     }
 
-    auto maybe_report_slow_request(const SlowRequestBreakdown& breakdown) -> void {
-        if (!should_report_slow_request(breakdown.total_ns)) {
+    auto MaybeReportSlowRequest(const SlowRequestBreakdown& breakdown) -> void {
+        if (!ShouldReportSlowRequest(breakdown.total_ns)) {
             return;
         }
 
-        spdlog::warn("{}", format_slow_request(breakdown));
+        spdlog::warn("{}", FormatSlowRequest(breakdown));
     }
 
     template <class Rep, class Period>
-    auto observe_cmd_parse(std::chrono::duration<Rep, Period> dur) -> void {
-        observe(cmd_parse_, dur);
+    auto ObserveCmdParse(std::chrono::duration<Rep, Period> dur) -> void {
+        ObserveStage(cmd_parse_, dur);
     }
 
     template <class Rep, class Period>
-    auto observe_queue_to_shard(std::chrono::duration<Rep, Period> dur) -> void {
-        observe(queue_to_shard_, dur);
+    auto ObserveQueueToShard(std::chrono::duration<Rep, Period> dur) -> void {
+        ObserveStage(queue_to_shard_, dur);
     }
 
     template <class Rep, class Period>
-    auto observe_exec_on_shard(std::chrono::duration<Rep, Period> dur) -> void {
-        observe(exec_on_shard_, dur);
+    auto ObserveExecOnShard(std::chrono::duration<Rep, Period> dur) -> void {
+        ObserveStage(exec_on_shard_, dur);
     }
 
     template <class Rep, class Period>
-    auto observe_queue_to_send(std::chrono::duration<Rep, Period> dur) -> void {
-        observe(queue_to_send_, dur);
+    auto ObserveQueueToSend(std::chrono::duration<Rep, Period> dur) -> void {
+        ObserveStage(queue_to_send_, dur);
     }
 
     template <class Rep, class Period>
-    auto observe_flush_time(std::chrono::duration<Rep, Period> dur) -> void {
-        observe(flush_time_, dur);
+    auto ObserveFlushTime(std::chrono::duration<Rep, Period> dur) -> void {
+        ObserveStage(flush_time_, dur);
     }
 
-    auto stop() -> void {
+    auto Stop() -> void {
         bool expected = false;
         if (!stopped_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
             return;
@@ -159,7 +159,7 @@ public:
         }
     }
 
-    ~RequestStageMetrics() { stop(); }
+    ~RequestStageMetrics() { Stop(); }
 
 private:
     struct StageWindow {
@@ -180,13 +180,13 @@ private:
           exec_on_shard_("exec_on_shard"),
           queue_to_send_("queue_to_send"),
           flush_time_("flush_time"),
-          reporter_([this](std::stop_token stop_token) { report_loop(stop_token); }) {}
+          reporter_([this](std::stop_token stop_token) { ReportLoop(stop_token); }) {}
 
     RequestStageMetrics(const RequestStageMetrics&) = delete;
     auto operator=(const RequestStageMetrics&) -> RequestStageMetrics& = delete;
 
     template <class Rep, class Period>
-    auto observe(StageWindow& stage, std::chrono::duration<Rep, Period> dur) -> void {
+    auto ObserveStage(StageWindow& stage, std::chrono::duration<Rep, Period> dur) -> void {
         stage.seen.fetch_add(1, std::memory_order_relaxed);
         if ((stage.sequence.fetch_add(1, std::memory_order_relaxed) & kSampleMask) != 0) {
             return;
@@ -197,7 +197,7 @@ private:
         stage.samples.push_back(static_cast<uint64_t>(ns));
     }
 
-    auto report_loop(std::stop_token stop_token) -> void {
+    auto ReportLoop(std::stop_token stop_token) -> void {
         std::unique_lock lk(mu_);
         while (!stop_token.stop_requested() && !stopped_.load(std::memory_order_acquire)) {
             cv_.wait_for(lk, report_interval_, [this, &stop_token]() {
@@ -209,23 +209,23 @@ private:
             }
 
             lk.unlock();
-            report_once();
+            ReportOnce();
             lk.lock();
         }
 
         lk.unlock();
-        report_once();
+        ReportOnce();
     }
 
-    auto report_once() -> void {
-        report_stage(cmd_parse_);
-        // report_stage(queue_to_shard_);
-        report_stage(exec_on_shard_);
-        report_stage(queue_to_send_);
-        report_stage(flush_time_);
+    auto ReportOnce() -> void {
+        ReportStage(cmd_parse_);
+        // ReportStage(queue_to_shard_);
+        ReportStage(exec_on_shard_);
+        ReportStage(queue_to_send_);
+        ReportStage(flush_time_);
     }
 
-    auto report_stage(StageWindow& stage) -> void {
+    auto ReportStage(StageWindow& stage) -> void {
         auto seen = stage.seen.exchange(0, std::memory_order_acq_rel);
         if (seen == 0) {
             return;
@@ -243,18 +243,18 @@ private:
         }
 
         std::sort(samples.begin(), samples.end());
-        const auto p50 = percentile(samples, 0.50);
-        const auto p95 = percentile(samples, 0.95);
-        const auto p99 = percentile(samples, 0.99);
+        const auto p50 = Percentile(samples, 0.50);
+        const auto p95 = Percentile(samples, 0.95);
+        const auto p99 = Percentile(samples, 0.99);
         const auto max = samples.back();
 
         spdlog::info("[stage:{}] window_count={} sampled={} p50={} p95={} p99={} max={}",
-                     stage.name, seen, samples.size(), format_duration_ns(p50),
-                     format_duration_ns(p95), format_duration_ns(p99),
-                     format_duration_ns(max));
+                     stage.name, seen, samples.size(), FormatDurationNs(p50),
+                     FormatDurationNs(p95), FormatDurationNs(p99),
+                     FormatDurationNs(max));
     }
 
-    static auto percentile(const std::vector<uint64_t>& sorted, double q) -> uint64_t {
+    static auto Percentile(const std::vector<uint64_t>& sorted, double q) -> uint64_t {
         if (sorted.empty()) {
             return 0;
         }

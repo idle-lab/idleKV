@@ -11,18 +11,18 @@ namespace idlekv {
 
 thread_local ThreadState* ThreadState::state_ = nullptr;
 
-auto ThreadState::init(size_t pool_index, EventLoop* el, std::thread::native_handle_type thread_id)
+auto ThreadState::Init(size_t PoolIndex, EventLoop* el, std::thread::native_handle_type ThreadId)
     -> void {
     // create thread-local resources once for the current worker thread.
     state_              = new ThreadState();
     state_->data_heap_  = mi_heap_new();
     state_->el_         = el;
-    state_->thread_id_  = thread_id;
-    state_->pool_index_ = pool_index;
+    state_->thread_id_  = ThreadId;
+    state_->pool_index_ = PoolIndex;
 }
 
-auto ThreadState::on_startup() -> uint64_t {
-    auto* tl = ThreadState::tlocal();
+auto ThreadState::OnStartup() -> uint64_t {
+    auto* tl = ThreadState::Tlocal();
     CHECK(tl != nullptr);
 
     const auto coro_id = tl->next_coro_id_;
@@ -37,8 +37,8 @@ auto ThreadState::on_startup() -> uint64_t {
     return coro_id;
 }
 
-auto ThreadState::on_resume(uint64_t coro_id) -> void {
-    auto* tl = ThreadState::tlocal();
+auto ThreadState::OnResume(uint64_t coro_id) -> void {
+    auto* tl = ThreadState::Tlocal();
     CHECK(tl != nullptr);
 
     auto it = tl->coro_state_.find(coro_id);
@@ -49,8 +49,8 @@ auto ThreadState::on_resume(uint64_t coro_id) -> void {
     tl->cur_coro_->entered_at = Clock::now();
 }
 
-auto ThreadState::on_suspend_or_finish(uint64_t coro_id, bool done) -> void {
-    auto* tl = ThreadState::tlocal();
+auto ThreadState::OnSuspendOrFinish(uint64_t coro_id, bool done) -> void {
+    auto* tl = ThreadState::Tlocal();
     CHECK(tl != nullptr);
 
     if (done) {
@@ -61,24 +61,24 @@ auto ThreadState::on_suspend_or_finish(uint64_t coro_id, bool done) -> void {
     tl->cur_coro_ = nullptr;
 }
 
-auto ThreadState::cur_coro() -> CoroState* {
-    return ThreadState::tlocal()->cur_coro_;
+auto ThreadState::CurCoro() -> CoroState* {
+    return ThreadState::Tlocal()->cur_coro_;
 }
 
-auto has_thread_state() -> bool {
-    return ThreadState::tlocal() != nullptr;
+auto HasThreadState() -> bool {
+    return ThreadState::Tlocal() != nullptr;
 }
 
-auto coro_tracking_on_startup() -> uint64_t {
-    return ThreadState::on_startup();
+auto CoroTrackingOnStartup() -> uint64_t {
+    return ThreadState::OnStartup();
 }
 
-auto coro_tracking_on_resume(uint64_t coro_id) -> void {
-    ThreadState::on_resume(coro_id);
+auto CoroTrackingOnResume(uint64_t coro_id) -> void {
+    ThreadState::OnResume(coro_id);
 }
 
-auto coro_tracking_on_suspend_or_finish(uint64_t coro_id, bool done) -> void {
-    ThreadState::on_suspend_or_finish(coro_id, done);
+auto CoroTrackingOnSuspendOrFinish(uint64_t coro_id, bool done) -> void {
+    ThreadState::OnSuspendOrFinish(coro_id, done);
 }
 
 } // namespace idlekv

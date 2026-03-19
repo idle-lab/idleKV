@@ -16,9 +16,9 @@ constexpr ShardId kInvalidShardId = std::numeric_limits<ShardId>::max();
 
 class Shard {
 public:
-    Shard(mi_heap_t* heap, ShardId id, size_t db_num)
+    Shard(mi_heap_t* heap, ShardId id, size_t DbNum)
         : mr_(heap), id_(id) {
-        for (size_t i = 0; i < db_num; ++i) {
+        for (size_t i = 0; i < DbNum; ++i) {
             db_slice_.emplace_back(std::make_shared<DB>(&mr_));
         }
 
@@ -27,8 +27,8 @@ public:
     Shard(const Shard&)                    = delete;
     auto operator=(const Shard&) -> Shard& = delete;
 
-    auto id() const -> ShardId { return id_; }
-    auto db_at(size_t index) -> std::shared_ptr<DB> {
+    auto Id() const -> ShardId { return id_; }
+    auto DbAt(size_t index) -> std::shared_ptr<DB> {
         CHECK_LT(index, db_slice_.size());
         return db_slice_[index];
     }

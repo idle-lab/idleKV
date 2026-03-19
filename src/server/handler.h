@@ -13,7 +13,7 @@ namespace idlekv {
 
 namespace detail {
 
-inline auto make_tcp_endpoint(const std::string& ip, uint16_t port) -> asio::ip::tcp::endpoint {
+inline auto MakeTcpEndpoint(const std::string& ip, uint16_t port) -> asio::ip::tcp::endpoint {
     std::error_code ec;
     auto            addr = asio::ip::make_address(ip, ec);
     if (ec) {
@@ -30,17 +30,17 @@ class Handler {
 public:
     Handler(asio::ip::tcp::endpoint ep) : ep_(ep) {}
 
-    Handler(const std::string& ip, uint16_t port) : ep_(detail::make_tcp_endpoint(ip, port)) {}
+    Handler(const std::string& ip, uint16_t port) : ep_(detail::MakeTcpEndpoint(ip, port)) {}
 
-    virtual auto init(EventLoop* el) -> void = 0;
+    virtual auto Init(EventLoop* el) -> void = 0;
 
-    virtual auto handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> = 0;
+    virtual auto Handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> = 0;
 
-    virtual void stop() = 0;
+    virtual void Stop() = 0;
 
-    virtual auto endpoint() -> asio::ip::tcp::endpoint { return ep_; }
+    virtual auto Endpoint() -> asio::ip::tcp::endpoint { return ep_; }
 
-    virtual std::string name() { return "Unknow Handler"; }
+    virtual std::string Name() { return "Unknow Handler"; }
 
     virtual ~Handler() = default;
 

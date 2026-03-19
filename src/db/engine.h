@@ -22,18 +22,18 @@ class IdleEngine {
 public:
     IdleEngine(const Config& cfg);
 
-    auto init(EventLoopPool* elp) -> void;
-    auto calculate_shard_id(std::string_view key) -> ShardId;
-    auto dispatch_cmd(Connection*, const std::vector<std::string>& args) noexcept -> ExecResult;
+    auto Init(EventLoopPool* elp) -> void;
+    auto CalculateShardId(std::string_view key) -> ShardId;
+    auto DispatchCmd(Connection*, const std::vector<std::string>& args) noexcept -> ExecResult;
 
-    auto db_num() const -> size_t { return db_num_; }
-    auto get_cmd(const std::string& name) -> Cmd*;
-    auto register_cmd(const std::string& name, int32_t arity, int32_t first_key, int32_t last_key,
-                      Exector exector, Prepare prepare,
-                      CmdFlags flags = CmdFlags::None) -> void;
+    auto DbNum() const -> size_t { return db_num_; }
+    auto GetCmd(const std::string& name) -> Cmd*;
+    auto RegisterCmd(const std::string& name, int32_t arity, int32_t FirstKey, int32_t LastKey,
+                     Exector exector, Prepare prepare,
+                     CmdFlags flags = CmdFlags::None) -> void;
 
 private:
-    auto init_command() -> void;
+    auto InitCommand() -> void;
 
     size_t db_num_;
     // read-only
@@ -44,9 +44,9 @@ private:
 
 extern std::unique_ptr<IdleEngine> engine;
 
-auto init_systemcmd(IdleEngine*) -> void;
-auto init_strings(IdleEngine*) -> void;
-auto init_hash(IdleEngine*) -> void;
-auto init_list(IdleEngine*) -> void;
+auto InitSystemCmd(IdleEngine*) -> void;
+auto InitStrings(IdleEngine*) -> void;
+auto InitHash(IdleEngine*) -> void;
+auto InitList(IdleEngine*) -> void;
 
 } // namespace idlekv

@@ -14,7 +14,7 @@ namespace idlekv {
 
 namespace {
 
-auto single_read_key(const std::vector<std::string>& args)
+auto SingleReadKey(const std::vector<std::string>& args)
     -> std::pair<std::vector<std::string>, std::vector<std::string>> {
     if (args.size() < 2) {
         return {};
@@ -22,7 +22,7 @@ auto single_read_key(const std::vector<std::string>& args)
     return {{}, {args[1]}};
 }
 
-auto single_write_key(const std::vector<std::string>& args)
+auto SingleWriteKey(const std::vector<std::string>& args)
     -> std::pair<std::vector<std::string>, std::vector<std::string>> {
     if (args.size() < 2) {
         return {};
@@ -32,46 +32,46 @@ auto single_write_key(const std::vector<std::string>& args)
 
 } // namespace
 
-auto set(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
-    auto res = ctx->db()->set(args[1], DataEntity::from_string(std::move(args[2])));
-    if (!res.ok()) {
-        return ExecResult::error(kStandardErr);
+auto Set(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
+    auto res = ctx->GetDb()->Set(args[1], DataEntity::FromString(std::move(args[2])));
+    if (!res.Ok()) {
+        return ExecResult::Error(kStandardErr);
     }
 
-    return ExecResult::ok();
+    return ExecResult::Ok();
 }
 
-auto get(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
-    auto res = ctx->db()->get(args[1]);
+auto Get(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
+    auto res = ctx->GetDb()->Get(args[1]);
     if (res == OpStatus::NoSuchKey) {
-        return ExecResult::null();
+        return ExecResult::Null();
     }
 
-    const auto& value = res.get();
+    const auto& value = res.Get();
     if (!value) {
-        return ExecResult::null();
+        return ExecResult::Null();
     }
 
-    if (!value->is_string()) {
-        return ExecResult::error(kWrongTypeErr);
+    if (!value->IsString()) {
+        return ExecResult::Error(kWrongTypeErr);
     }
 
-    return ExecResult::bulk_string(value);
+    return ExecResult::BulkString(value);
 }
 
-auto del(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
-    auto res = ctx->db()->del(args[1]);
+auto Del(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
+    auto res = ctx->GetDb()->Del(args[1]);
     if (res == OpStatus::NoSuchKey) {
-        return ExecResult::integer(0);
+        return ExecResult::Integer(0);
     }
 
-    return ExecResult::integer(res.get() ? 1 : 0);
+    return ExecResult::Integer(res.Get() ? 1 : 0);
 }
 
-auto init_strings(IdleEngine* eng) -> void {
-    eng->register_cmd("set", 3, 1, 1, set, single_write_key);
-    eng->register_cmd("get", 2, 1, 1, get, single_read_key);
-    eng->register_cmd("del", 2, 1, 1, del, single_write_key);
+auto InitStrings(IdleEngine* eng) -> void {
+    eng->RegisterCmd("set", 3, 1, 1, Set, SingleWriteKey);
+    eng->RegisterCmd("get", 2, 1, 1, Get, SingleReadKey);
+    eng->RegisterCmd("del", 2, 1, 1, Del, SingleWriteKey);
 }
 
 } // namespace idlekv

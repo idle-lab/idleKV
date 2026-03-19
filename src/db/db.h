@@ -21,13 +21,13 @@ public:
 
     explicit DB(std::pmr::memory_resource* mr);
 
-    auto locks(const std::vector<std::string>& ws, const std::vector<std::string>& rs) -> bool;
+    auto Locks(const std::vector<std::string>& ws, const std::vector<std::string>& rs) -> bool;
 
-    auto set(std::string key, DataEntity value) -> Result<bool>;
+    auto Set(std::string key, DataEntity value) -> Result<bool>;
 
-    auto get(const std::string& key) -> Result<std::shared_ptr<DataEntity>>;
+    auto Get(const std::string& key) -> Result<std::shared_ptr<DataEntity>>;
 
-    auto del(const std::string& key) -> Result<bool>;
+    auto Del(const std::string& key) -> Result<bool>;
 
 private:
     StoreType prime_;

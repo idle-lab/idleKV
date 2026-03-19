@@ -11,7 +11,7 @@
 
 namespace idlekv {
 
-std::shared_ptr<spdlog::logger> make_default_logger();
+std::shared_ptr<spdlog::logger> MakeDefaultLogger();
 
 #define LOG(level, ...) spdlog::level(__VA_ARGS__)
 
@@ -21,7 +21,7 @@ template <class T>
 concept CheckStreamInsertable = requires(std::ostream& os, const T& value) { os << value; };
 
 template <class T>
-inline auto check_to_string(const T& value) -> std::string {
+inline auto CheckToString(const T& value) -> std::string {
     if constexpr (CheckStreamInsertable<T>) {
         std::ostringstream oss;
         oss << std::boolalpha << value;
@@ -68,14 +68,14 @@ private:
 };
 
 template <class L, class R, class Pred>
-inline auto make_check_cmp(L&& lhs, R&& rhs, const char* file, int line, std::string_view lhs_expr,
-                           std::string_view rhs_expr, std::string_view op, Pred pred)
+inline auto MakeCheckCmp(L&& lhs, R&& rhs, const char* file, int line, std::string_view lhs_expr,
+                         std::string_view rhs_expr, std::string_view op, Pred pred)
     -> CheckFailure {
     bool         ok = pred(lhs, rhs);
     CheckFailure check(ok, file, line, "");
     if (!ok) {
-        check << lhs_expr << " " << op << " " << rhs_expr << " (lhs=" << check_to_string(lhs)
-              << ", rhs=" << check_to_string(rhs) << ")";
+        check << lhs_expr << " " << op << " " << rhs_expr << " (lhs=" << CheckToString(lhs)
+              << ", rhs=" << CheckToString(rhs) << ")";
     }
     return check;
 }
@@ -88,7 +88,7 @@ inline auto make_check_cmp(L&& lhs, R&& rhs, const char* file, int line, std::st
     ::idlekv::detail::CheckFailure(static_cast<bool>(condition), __FILE__, __LINE__, #condition)
 
 #define IDLEKV_CHECK_OP(op, lhs, rhs)                                                              \
-    ::idlekv::detail::make_check_cmp(                                                              \
+    ::idlekv::detail::MakeCheckCmp(                                                                \
         (lhs), (rhs), __FILE__, __LINE__, #lhs, #rhs, #op,                                         \
         [](const auto& idlekv_l, const auto& idlekv_r) { return idlekv_l op idlekv_r; })
 

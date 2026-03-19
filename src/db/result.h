@@ -28,44 +28,44 @@ public:
 
     ExecResult() = default;
 
-    static auto pong() -> ExecResult { return ExecResult(kPong); }
-    static auto ok() -> ExecResult { return ExecResult(kOk); }
+    static auto Pong() -> ExecResult { return ExecResult(kPong); }
+    static auto Ok() -> ExecResult { return ExecResult(kOk); }
 
-    static auto simple_string(std::string value) -> ExecResult {
+    static auto SimpleString(std::string value) -> ExecResult {
         return ExecResult(kSimpleString, std::move(value));
     }
 
-    static auto bulk_string(std::string value) -> ExecResult {
+    static auto BulkString(std::string value) -> ExecResult {
         return ExecResult(kBulkString, std::move(value));
     }
 
-    static auto bulk_string(const std::shared_ptr<DataEntity>& data) -> ExecResult {
+    static auto BulkString(const std::shared_ptr<DataEntity>& data) -> ExecResult {
         return ExecResult(kBulkString, data);
     }
 
 
-    static auto bulk_string(std::string_view value) -> ExecResult {
+    static auto BulkString(std::string_view value) -> ExecResult {
         return ExecResult(kBulkString, std::string(value));
     }
 
-    static auto null() -> ExecResult { return ExecResult(kNull); }
+    static auto Null() -> ExecResult { return ExecResult(kNull); }
 
-    static auto integer(int64_t value) -> ExecResult { return ExecResult(kInteger, value); }
+    static auto Integer(int64_t value) -> ExecResult { return ExecResult(kInteger, value); }
 
-    static auto error(std::string value) -> ExecResult {
+    static auto Error(std::string value) -> ExecResult {
         return ExecResult(kError, std::move(value));
     }
 
-    auto type() const -> Type { return type_; }
+    auto GetType() const -> Type { return type_; }
 
-    auto is_ok() const -> bool { return type_ == kOk; }
+    auto IsOk() const -> bool { return type_ == kOk; }
 
-    auto string() const -> std::string_view { return string_; }
+    auto GetString() const -> std::string_view { return string_; }
 
-    auto data() -> const std::shared_ptr<DataEntity>& { return data_; }
-    auto data() const -> const std::shared_ptr<DataEntity>& { return data_; }
+    auto GetData() -> const std::shared_ptr<DataEntity>& { return data_; }
+    auto GetData() const -> const std::shared_ptr<DataEntity>& { return data_; }
 
-    auto integer() const -> int64_t { return integer_; }
+    auto GetInteger() const -> int64_t { return integer_; }
 
 private:
     explicit ExecResult(Type type) : type_(type) {}

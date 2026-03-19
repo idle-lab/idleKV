@@ -2,6 +2,6 @@
 
 namespace idlekv {
 
-auto init_list(IdleEngine* eng) -> void {}
+auto InitList(IdleEngine* eng) -> void {}
 
 } // namespace idlekv

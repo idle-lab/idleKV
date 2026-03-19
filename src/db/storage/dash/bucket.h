@@ -17,10 +17,10 @@ struct Record {
 
     template <class K, class V>
     Record(uint64_t h, uint16_t home, K&& k, V&& v)
-        : hash(h), home_bucket(home), key(std::forward<K>(k)), value(std::forward<V>(v)) {}
+        : hash(h), HomeBucket(home), key(std::forward<K>(k)), value(std::forward<V>(v)) {}
 
     uint64_t hash        = 0;
-    uint16_t home_bucket = 0;
+    uint16_t HomeBucket = 0;
     Key      key;
     Value    value;
 };
@@ -36,13 +36,13 @@ public:
     Bucket(const Bucket&)                    = delete;
     auto operator=(const Bucket&) -> Bucket& = delete;
 
-    auto read_snapshot() const -> uint64_t { return version_.load(std::memory_order_acquire); }
+    auto ReadSnapshot() const -> uint64_t { return version_.load(std::memory_order_acquire); }
 
-    auto validate_read(uint64_t snapshot) const -> bool {
+    auto ValidateRead(uint64_t snapshot) const -> bool {
         return !(snapshot & 1U) && version_.load(std::memory_order_acquire) == snapshot;
     }
 
-    auto snapshot_slots() const -> std::array<RecordPtr, SlotCount> {
+    auto SnapshotSlots() const -> std::array<RecordPtr, SlotCount> {
         std::array<RecordPtr, SlotCount> res{};
         for (size_t i = 0; i < SlotCount; ++i) {
             res[i] = std::atomic_load_explicit(&slots_[i], std::memory_order_acquire);
@@ -50,36 +50,36 @@ public:
         return res;
     }
 
-    auto load(size_t slot) const -> RecordPtr {
+    auto Load(size_t slot) const -> RecordPtr {
         return std::atomic_load_explicit(&slots_[slot], std::memory_order_acquire);
     }
 
-    auto occupancy() const -> size_t {
+    auto Occupancy() const -> size_t {
         size_t used = 0;
         for (size_t i = 0; i < SlotCount; ++i) {
-            used += static_cast<bool>(load(i));
+            used += static_cast<bool>(Load(i));
         }
         return used;
     }
 
-    auto first_empty_slot() const -> int {
+    auto FirstEmptySlot() const -> int {
         for (size_t i = 0; i < SlotCount; ++i) {
-            if (!load(i)) {
+            if (!Load(i)) {
                 return static_cast<int>(i);
             }
         }
         return -1;
     }
 
-    void store(size_t slot, RecordPtr ptr) {
+    void Store(size_t slot, RecordPtr ptr) {
         std::atomic_store_explicit(&slots_[slot], std::move(ptr), std::memory_order_release);
     }
 
-    void reset(size_t slot) {
+    void Reset(size_t slot) {
         std::atomic_store_explicit(&slots_[slot], RecordPtr{}, std::memory_order_release);
     }
 
-    void lock() {
+    void Lock() {
         uint64_t expected = version_.load(std::memory_order_relaxed);
         while (true) {
             if (expected & 1U) {
@@ -94,7 +94,7 @@ public:
         }
     }
 
-    void unlock() { version_.fetch_add(1, std::memory_order_release); }
+    void Unlock() { version_.fetch_add(1, std::memory_order_release); }
 
 private:
     mutable std::atomic<uint64_t>            version_{0};

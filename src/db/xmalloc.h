@@ -11,9 +11,9 @@ class XAllocator : public std::pmr::memory_resource {
 public:
     explicit XAllocator(mi_heap_t* heap) : heap_(heap) {}
 
-    auto heap() -> mi_heap_t* { return heap_; }
+    auto Heap() -> mi_heap_t* { return heap_; }
 
-    auto used() const -> size_t { return used_; }
+    auto Used() const -> size_t { return used_; }
 
 private:
     void* do_allocate(std::size_t size, std::size_t align) final;
