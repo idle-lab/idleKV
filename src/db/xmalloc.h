@@ -6,7 +6,7 @@
 
 namespace idlekv {
 
-// TODO: support jemalloc/tcmalloc?
+// wrapper of mimalloc to count memory usage.
 class XAllocator : public std::pmr::memory_resource {
 public:
     explicit XAllocator(mi_heap_t* heap) : heap_(heap) {}

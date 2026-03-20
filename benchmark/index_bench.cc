@@ -1,929 +1,1265 @@
-#include "db/storage/dash/dash.h"
+#include "db/storage/art/art.h"
 
-#include "third_part/CLI11/CLI11.hpp"
+#include <absl/container/flat_hash_map.h>
+#include <CLI11/CLI11.hpp>
 
 #include <algorithm>
-#include <array>
-#include <atomic>
-#include <barrier>
-#include <chrono>
-#include <cstddef>
+#include <cmath>
+#include <cctype>
 #include <cstdint>
-#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
-#include <memory>
+#include <memory_resource>
 #include <numeric>
 #include <optional>
+#include <random>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
-#include <thread>
+#include <time.h>
+#include <unistd.h>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include <sys/resource.h>
-#include <unistd.h>
-
-namespace idlekv::benchmark {
-
 namespace {
 
-using Clock = std::chrono::steady_clock;
+using idlekv::Art;
+using idlekv::ArtKey;
+using idlekv::InsertMode;
+using idlekv::InsertResutl;
 
-enum class Scenario {
-    kLoad,
-    kRead,
-    kMixed,
-    kAll,
+constexpr double kMiB = 1024.0 * 1024.0;
+constexpr std::string_view kAlphabet =
+    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+constexpr size_t kNpos = std::numeric_limits<size_t>::max();
+
+struct Options {
+    size_t      key_count = 2000000;
+    size_t      op_count = 2000000;
+    uint64_t    seed = 0xC0FFEEULL;
+    std::string datasets = "shared_prefix,wide_fanout,mixed";
+    std::string indexes = "art,std_unordered_map,absl_flat_hash_map";
+    std::string csv_out;
 };
 
-enum class OutputFormat {
-    kText,
-    kCsv,
-};
-
-enum class OperationKind : size_t {
-    kRead = 0,
-    kUpsert,
-    kErase,
-};
-
-constexpr std::array<OperationKind, 3> kOperationKinds{
-    OperationKind::kRead,
-    OperationKind::kUpsert,
-    OperationKind::kErase,
-};
-
-auto to_string(OperationKind kind) -> std::string_view {
-    switch (kind) {
-    case OperationKind::kRead:
-        return "read";
-    case OperationKind::kUpsert:
-        return "upsert";
-    case OperationKind::kErase:
-        return "erase";
-    }
-    return "unknown";
-}
-
-auto to_string(Scenario scenario) -> std::string_view {
-    switch (scenario) {
-    case Scenario::kLoad:
-        return "load";
-    case Scenario::kRead:
-        return "read";
-    case Scenario::kMixed:
-        return "mixed";
-    case Scenario::kAll:
-        return "all";
-    }
-    return "unknown";
-}
-
-auto operation_index(OperationKind kind) -> size_t {
-    return static_cast<size_t>(kind);
-}
-
-struct BenchmarkConfig {
-    std::string index_name             = "dash";
-    Scenario    scenario               = Scenario::kAll;
-    OutputFormat format                = OutputFormat::kText;
-    size_t      threads                = 4;
-    uint64_t    initial_keys           = 1U << 20U;
-    uint64_t    operations             = 1U << 20U;
-    uint64_t    key_space              = 0;
-    uint64_t    seed                   = 42;
-    double      read_ratio             = 0.80;
-    double      upsert_ratio           = 0.15;
-    double      erase_ratio            = 0.05;
-    double      read_miss_ratio        = 0.10;
-    uint64_t    sample_rate            = 1024;
-    uint64_t    memory_sample_interval = 2;
-    size_t      dash_initial_depth     = 1;
-    double      dash_merge_threshold   = 0.20;
-};
-
-class IIndex {
+class TrackingMemoryResource : public std::pmr::memory_resource {
 public:
-    virtual ~IIndex() = default;
+    explicit TrackingMemoryResource(std::pmr::memory_resource* upstream) : upstream_(upstream) {}
 
-    virtual auto name() const -> std::string_view = 0;
-    virtual auto upsert(uint64_t key, uint64_t value) -> bool = 0;
-    virtual auto find(uint64_t key) -> std::optional<uint64_t> = 0;
-    virtual auto erase(uint64_t key) -> bool = 0;
-    virtual auto size() const -> size_t = 0;
-    virtual auto metrics() const -> std::vector<std::pair<std::string, std::string>> = 0;
-};
+    auto CurrentBytes() const -> size_t { return current_bytes_; }
+    auto PeakBytes() const -> size_t { return peak_bytes_; }
+    auto TotalAllocatedBytes() const -> size_t { return total_allocated_bytes_; }
+    auto AllocCalls() const -> size_t { return alloc_calls_; }
+    auto DeallocCalls() const -> size_t { return dealloc_calls_; }
 
-class DashIndex final : public IIndex {
-public:
-    explicit DashIndex(const BenchmarkConfig& config)
-        : table_({.initial_global_depth = config.dash_initial_depth,
-                  .merge_threshold      = config.dash_merge_threshold}) {}
+protected:
+    auto do_allocate(size_t bytes, size_t alignment) -> void* override {
+        void* ptr = upstream_->allocate(bytes, alignment);
+        current_bytes_ += bytes;
+        peak_bytes_ = std::max(peak_bytes_, current_bytes_);
+        total_allocated_bytes_ += bytes;
+        ++alloc_calls_;
+        return ptr;
+    }
 
-    auto name() const -> std::string_view override { return "dash"; }
-
-    auto upsert(uint64_t key, uint64_t value) -> bool override {
-        while (true) {
-            if (table_.insert(key, value)) {
-                return true;
-            }
-            if (table_.erase(key)) {
-                continue;
-            }
+    auto do_deallocate(void* p, size_t bytes, size_t alignment) -> void override {
+        if (bytes > current_bytes_) {
+            throw std::runtime_error("tracking allocator underflow");
         }
+        current_bytes_ -= bytes;
+        ++dealloc_calls_;
+        upstream_->deallocate(p, bytes, alignment);
     }
 
-    auto find(uint64_t key) -> std::optional<uint64_t> override { return table_.find(key); }
-
-    auto erase(uint64_t key) -> bool override { return table_.erase(key); }
-
-    auto size() const -> size_t override { return table_.size(); }
-
-    auto metrics() const -> std::vector<std::pair<std::string, std::string>> override {
-        const auto stats = table_.stats();
-        return {
-            {"directory_depth", std::to_string(table_.directory_depth())},
-            {"directory_size", std::to_string(table_.directory_size())},
-            {"unique_segments", std::to_string(table_.unique_segments())},
-            {"split_count", std::to_string(stats.split_count)},
-            {"merge_count", std::to_string(stats.merge_count)},
-            {"directory_growth_count", std::to_string(stats.directory_growth_count)},
-            {"directory_shrink_count", std::to_string(stats.directory_shrink_count)},
-        };
+    auto do_is_equal(const std::pmr::memory_resource& other) const noexcept -> bool override {
+        return this == &other;
     }
 
 private:
-    dash::DashEH<uint64_t, uint64_t> table_;
+    std::pmr::memory_resource* upstream_;
+    size_t current_bytes_{0};
+    size_t peak_bytes_{0};
+    size_t total_allocated_bytes_{0};
+    size_t alloc_calls_{0};
+    size_t dealloc_calls_{0};
 };
 
-using IndexFactory = std::unique_ptr<IIndex> (*)(const BenchmarkConfig&);
+using PmrString = std::pmr::string;
 
-struct IndexDescriptor {
-    std::string_view name;
-    std::string_view description;
-    IndexFactory     factory = nullptr;
-};
+auto ToStringView(std::string_view value) -> std::string_view { return value; } 
 
-auto make_dash_index(const BenchmarkConfig& config) -> std::unique_ptr<IIndex> {
-    return std::make_unique<DashIndex>(config);
+auto ToStringView(const std::string& value) -> std::string_view {
+    return std::string_view(value.data(), value.size());
 }
 
-auto build_registry() -> std::vector<IndexDescriptor> {
-    return {
-        {
-            .name        = "dash",
-            .description = "DASH extendible hash",
-            .factory     = make_dash_index,
-        },
-    };
+auto ToStringView(const PmrString& value) -> std::string_view {
+    return std::string_view(value.data(), value.size());
 }
 
-auto find_descriptor(std::string_view name, const std::vector<IndexDescriptor>& registry)
-    -> const IndexDescriptor* {
-    for (const auto& descriptor : registry) {
-        if (descriptor.name == name) {
-            return &descriptor;
-        }
+struct TransparentStringHash {
+    using is_transparent = void;
+
+    auto operator()(std::string_view value) const -> size_t {
+        return std::hash<std::string_view>{}(value);
     }
-    return nullptr;
-}
 
-auto splitmix64(uint64_t x) -> uint64_t {
-    x += 0x9e3779b97f4a7c15ULL;
-    x = (x ^ (x >> 30U)) * 0xbf58476d1ce4e5b9ULL;
-    x = (x ^ (x >> 27U)) * 0x94d049bb133111ebULL;
-    return x ^ (x >> 31U);
-}
+    auto operator()(const std::string& value) const -> size_t { return (*this)(ToStringView(value)); }
+    auto operator()(const PmrString& value) const -> size_t { return (*this)(ToStringView(value)); }
+};
 
-class FastRandom {
+struct TransparentStringEqual {
+    using is_transparent = void;
+
+    template<class L, class R>
+    auto operator()(const L& lhs, const R& rhs) const -> bool {
+        return ToStringView(lhs) == ToStringView(rhs);
+    }
+};
+
+class ArtIndex {
 public:
-    explicit FastRandom(uint64_t seed) : state_(seed) {}
+    static constexpr std::string_view kName = "art";
 
-    auto next() -> uint64_t {
-        state_ = splitmix64(state_);
-        return state_;
+    auto Name() const -> std::string_view { return kName; }
+    auto Tracker() const -> const TrackingMemoryResource& { return tracker_; }
+
+    auto PrepareForBulkLoad(size_t) -> void {}
+
+    auto Insert(std::string_view key, uint64_t value) -> InsertResutl {
+        auto art_key = ArtKey::BuildFromString(key);
+        return art_.Insert(art_key, value);
     }
 
-    auto uniform(uint64_t upper_bound) -> uint64_t {
-        if (upper_bound <= 1) {
+    auto Upsert(std::string_view key, uint64_t value) -> InsertResutl {
+        auto art_key = ArtKey::BuildFromString(key);
+        return art_.Insert(art_key, value, InsertMode::Upsert);
+    }
+
+    auto Lookup(std::string_view key) -> std::optional<uint64_t> {
+        auto art_key = ArtKey::BuildFromString(key);
+        return art_.Lookup(art_key);
+    }
+
+    auto Erase(std::string_view key) -> size_t {
+        auto art_key = ArtKey::BuildFromString(key);
+        return art_.Erase(art_key);
+    }
+
+private:
+    std::pmr::unsynchronized_pool_resource arena_{std::pmr::new_delete_resource()};
+    TrackingMemoryResource                 tracker_{&arena_};
+    Art<uint64_t>                          art_{&tracker_};
+};
+
+class StdUnorderedMapIndex {
+public:
+    static constexpr std::string_view kName = "std::unordered_map";
+    using Allocator = std::pmr::polymorphic_allocator<std::pair<const PmrString, uint64_t>>;
+    using Map = std::unordered_map<PmrString,
+                                   uint64_t,
+                                   TransparentStringHash,
+                                   TransparentStringEqual,
+                                   Allocator>;
+
+    StdUnorderedMapIndex()
+        : map_(0, TransparentStringHash{}, TransparentStringEqual{}, Allocator{&tracker_}) {}
+
+    auto Name() const -> std::string_view { return kName; }
+    auto Tracker() const -> const TrackingMemoryResource& { return tracker_; }
+
+    auto PrepareForBulkLoad(size_t count) -> void { map_.reserve(count); }
+
+    auto Insert(std::string_view key, uint64_t value) -> InsertResutl {
+        auto [it, inserted] = map_.emplace(MakeOwnedKey(key), value);
+        return inserted ? InsertResutl::OK : InsertResutl::DuplicateKey;
+    }
+
+    auto Upsert(std::string_view key, uint64_t value) -> InsertResutl {
+        auto it = map_.find(key);
+        if (it != map_.end()) {
+            it->second = value;
+            return InsertResutl::UpsertValue;
+        }
+        auto [inserted_it, inserted] = map_.emplace(MakeOwnedKey(key), value);
+        (void)inserted_it;
+        return inserted ? InsertResutl::OK : InsertResutl::DuplicateKey;
+    }
+
+    auto Lookup(std::string_view key) -> std::optional<uint64_t> {
+        auto it = map_.find(key);
+        if (it == map_.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+
+    auto Erase(std::string_view key) -> size_t {
+        auto it = map_.find(key);
+        if (it == map_.end()) {
             return 0;
         }
-        return next() % upper_bound;
+        map_.erase(it);
+        return 1;
     }
 
 private:
-    uint64_t state_;
+    auto MakeOwnedKey(std::string_view key) -> PmrString {
+        return PmrString(key.begin(), key.end(), std::pmr::polymorphic_allocator<char>{&tracker_});
+    }
+
+    std::pmr::unsynchronized_pool_resource arena_{std::pmr::new_delete_resource()};
+    TrackingMemoryResource                 tracker_{&arena_};
+    Map                                    map_;
 };
 
-auto read_current_rss_bytes() -> uint64_t {
-    std::ifstream input("/proc/self/statm");
-    uint64_t      total_pages    = 0;
-    uint64_t      resident_pages = 0;
-    input >> total_pages >> resident_pages;
-    (void)total_pages;
-    if (!input) {
-        return 0;
-    }
-    const auto page_size = static_cast<uint64_t>(::sysconf(_SC_PAGESIZE));
-    return resident_pages * page_size;
-}
-
-auto read_peak_rss_bytes() -> uint64_t {
-    struct rusage usage {
-    };
-    if (::getrusage(RUSAGE_SELF, &usage) != 0) {
-        return 0;
-    }
-    return static_cast<uint64_t>(usage.ru_maxrss) * 1024ULL;
-}
-
-class MemorySampler {
+class AbslFlatHashMapIndex {
 public:
-    explicit MemorySampler(std::chrono::milliseconds interval) : interval_(interval) {}
+    static constexpr std::string_view kName = "absl::flat_hash_map";
+    using Allocator = std::pmr::polymorphic_allocator<std::pair<const PmrString, uint64_t>>;
+    using Map = absl::flat_hash_map<PmrString,
+                                    uint64_t,
+                                    TransparentStringHash,
+                                    TransparentStringEqual,
+                                    Allocator>;
 
-    void start() {
-        stop_.store(false, std::memory_order_release);
-        peak_bytes_.store(read_current_rss_bytes(), std::memory_order_release);
-        worker_ = std::thread([this] {
-            while (!stop_.load(std::memory_order_acquire)) {
-                update_peak(read_current_rss_bytes());
-                std::this_thread::sleep_for(interval_);
-            }
-            update_peak(read_current_rss_bytes());
-        });
+    AbslFlatHashMapIndex()
+        : map_(0, TransparentStringHash{}, TransparentStringEqual{}, Allocator{&tracker_}) {}
+
+    auto Name() const -> std::string_view { return kName; }
+    auto Tracker() const -> const TrackingMemoryResource& { return tracker_; }
+
+    auto PrepareForBulkLoad(size_t count) -> void { map_.reserve(count); }
+
+    auto Insert(std::string_view key, uint64_t value) -> InsertResutl {
+        auto [it, inserted] = map_.emplace(MakeOwnedKey(key), value);
+        return inserted ? InsertResutl::OK : InsertResutl::DuplicateKey;
     }
 
-    auto stop() -> uint64_t {
-        stop_.store(true, std::memory_order_release);
-        if (worker_.joinable()) {
-            worker_.join();
+    auto Upsert(std::string_view key, uint64_t value) -> InsertResutl {
+        auto it = map_.find(key);
+        if (it != map_.end()) {
+            it->second = value;
+            return InsertResutl::UpsertValue;
         }
-        return peak_bytes_.load(std::memory_order_acquire);
+        auto [inserted_it, inserted] = map_.emplace(MakeOwnedKey(key), value);
+        (void)inserted_it;
+        return inserted ? InsertResutl::OK : InsertResutl::DuplicateKey;
+    }
+
+    auto Lookup(std::string_view key) -> std::optional<uint64_t> {
+        auto it = map_.find(key);
+        if (it == map_.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+
+    auto Erase(std::string_view key) -> size_t {
+        auto it = map_.find(key);
+        if (it == map_.end()) {
+            return 0;
+        }
+        map_.erase(it);
+        return 1;
     }
 
 private:
-    void update_peak(uint64_t rss_bytes) {
-        auto current = peak_bytes_.load(std::memory_order_relaxed);
-        while (rss_bytes > current &&
-               !peak_bytes_.compare_exchange_weak(current, rss_bytes,
-                                                  std::memory_order_release,
-                                                  std::memory_order_relaxed)) {
+    auto MakeOwnedKey(std::string_view key) -> PmrString {
+        return PmrString(key.begin(), key.end(), std::pmr::polymorphic_allocator<char>{&tracker_});
+    }
+
+    std::pmr::unsynchronized_pool_resource arena_{std::pmr::new_delete_resource()};
+    TrackingMemoryResource                 tracker_{&arena_};
+    Map                                    map_;
+};
+
+struct Dataset {
+    std::string              name;
+    std::vector<std::string> keys;
+    std::vector<std::string> missing_keys;
+    size_t                   raw_key_bytes{0};
+    size_t                   raw_payload_bytes{0};
+    double                   avg_key_len{0.0};
+    size_t                   max_key_len{0};
+};
+
+struct LatencyStats {
+    uint64_t min_ns{0};
+    uint64_t max_ns{0};
+    uint64_t p50_ns{0};
+    uint64_t p95_ns{0};
+    uint64_t p99_ns{0};
+    uint64_t p999_ns{0};
+    double   avg_ns{0.0};
+};
+
+struct BenchmarkReport {
+    std::string               index_name;
+    std::string               dataset_name;
+    std::string               operation_name;
+    size_t                    op_count{0};
+    double                    seconds{0.0};
+    double                    qps{0.0};
+    double                    throughput_mib_per_sec{0.0};
+    double                    hit_rate{0.0};
+    double                    miss_rate{0.0};
+    LatencyStats              latency;
+    size_t                    start_live_bytes{0};
+    size_t                    end_live_bytes{0};
+    size_t                    peak_live_bytes{0};
+    size_t                    phase_allocated_bytes{0};
+    size_t                    phase_alloc_calls{0};
+    size_t                    phase_dealloc_calls{0};
+    size_t                    rss_before_setup_bytes{0};
+    size_t                    rss_after_setup_bytes{0};
+    size_t                    rss_after_ops_bytes{0};
+    size_t                    reference_payload_bytes{0};
+    size_t                    resident_key_count{0};
+    std::optional<std::string> note;
+};
+
+struct SampleMeta {
+    size_t key_bytes{0};
+    bool   hit{false};
+    bool   miss{false};
+};
+
+struct DenseIndexSet {
+    explicit DenseIndexSet(size_t capacity) : positions(capacity, kNpos) {}
+
+    auto Empty() const -> bool { return values.empty(); }
+    auto Size() const -> size_t { return values.size(); }
+
+    auto Insert(size_t index) -> void {
+        if (positions[index] != kNpos) {
+            return;
         }
+        positions[index] = values.size();
+        values.push_back(index);
     }
 
-    std::chrono::milliseconds interval_;
-    std::atomic<bool>         stop_{false};
-    std::atomic<uint64_t>     peak_bytes_{0};
-    std::thread               worker_;
-};
-
-auto format_bytes(uint64_t bytes) -> std::string {
-    constexpr std::array<std::string_view, 5> kUnits{"B", "KiB", "MiB", "GiB", "TiB"};
-
-    double value = static_cast<double>(bytes);
-    size_t unit  = 0;
-    while (value >= 1024.0 && unit + 1 < kUnits.size()) {
-        value /= 1024.0;
-        ++unit;
+    auto Erase(size_t index) -> void {
+        const size_t pos = positions[index];
+        if (pos == kNpos) {
+            return;
+        }
+        const size_t last = values.back();
+        values[pos] = last;
+        positions[last] = pos;
+        values.pop_back();
+        positions[index] = kNpos;
     }
 
-    std::ostringstream out;
-    out << std::fixed << std::setprecision(unit == 0 ? 0 : 2) << value << ' ' << kUnits[unit];
-    return out.str();
-}
-
-auto format_rate(double ops_per_sec) -> std::string {
-    std::ostringstream out;
-    out << std::fixed << std::setprecision(2) << ops_per_sec;
-    return out.str();
-}
-
-auto format_latency(double ns) -> std::string {
-    std::ostringstream out;
-    out << std::fixed;
-    if (ns >= 1'000'000.0) {
-        out << std::setprecision(2) << (ns / 1'000'000.0) << " ms";
-    } else if (ns >= 1'000.0) {
-        out << std::setprecision(2) << (ns / 1'000.0) << " us";
-    } else {
-        out << std::setprecision(2) << ns << " ns";
+    auto Random(std::mt19937_64& rng) const -> size_t {
+        std::uniform_int_distribution<size_t> dist(0, values.size() - 1);
+        return values[dist(rng)];
     }
-    return out.str();
+
+    std::vector<size_t> values;
+    std::vector<size_t> positions;
+};
+
+auto NowNs() -> uint64_t {
+    timespec ts{};
+    ::clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000000ULL + static_cast<uint64_t>(ts.tv_nsec);
 }
 
-struct LatencySummary {
-    uint64_t sample_count = 0;
-    double   mean_ns      = 0.0;
-    uint64_t min_ns       = 0;
-    uint64_t p50_ns       = 0;
-    uint64_t p95_ns       = 0;
-    uint64_t p99_ns       = 0;
-    uint64_t max_ns       = 0;
-};
-
-struct OperationStats {
-    uint64_t              count   = 0;
-    uint64_t              success = 0;
-    uint64_t              fail    = 0;
-    std::vector<uint64_t> latency_samples_ns;
-};
-
-struct ThreadStats {
-    std::array<OperationStats, kOperationKinds.size()> operations;
-};
-
-struct OperationSummary {
-    OperationKind  kind = OperationKind::kRead;
-    uint64_t       count = 0;
-    uint64_t       success = 0;
-    uint64_t       fail = 0;
-    LatencySummary latency;
-};
-
-struct PhaseReport {
-    std::string                                     phase_name;
-    double                                          duration_seconds      = 0.0;
-    double                                          throughput_ops_per_sec = 0.0;
-    uint64_t                                        rss_before_bytes       = 0;
-    uint64_t                                        rss_after_bytes        = 0;
-    uint64_t                                        rss_peak_bytes         = 0;
-    uint64_t                                        process_peak_bytes     = 0;
-    size_t                                          final_size             = 0;
-    std::array<OperationSummary, kOperationKinds.size()> operation_summaries{};
-    std::vector<std::pair<std::string, std::string>> index_metrics;
-};
-
-auto percentile(const std::vector<uint64_t>& sorted, double q) -> uint64_t {
-    if (sorted.empty()) {
+auto GetCurrentRssBytes() -> size_t {
+    std::ifstream statm("/proc/self/statm");
+    size_t        total_pages = 0;
+    size_t        resident_pages = 0;
+    statm >> total_pages >> resident_pages;
+    if (!statm) {
         return 0;
     }
-    if (sorted.size() == 1) {
-        return sorted.front();
-    }
-
-    const double position = q * static_cast<double>(sorted.size() - 1);
-    const auto   low      = static_cast<size_t>(position);
-    const auto   high     = std::min(low + 1, sorted.size() - 1);
-    const double weight   = position - static_cast<double>(low);
-
-    const double blended =
-        static_cast<double>(sorted[low]) * (1.0 - weight) + static_cast<double>(sorted[high]) * weight;
-    return static_cast<uint64_t>(blended);
+    const long page_size = ::sysconf(_SC_PAGESIZE);
+    return resident_pages * static_cast<size_t>(page_size > 0 ? page_size : 4096);
 }
 
-auto summarize_latency(std::vector<uint64_t> samples) -> LatencySummary {
-    if (samples.empty()) {
+auto FormatBytes(size_t bytes) -> std::string {
+    std::ostringstream oss;
+    if (bytes >= static_cast<size_t>(kMiB)) {
+        oss << std::fixed << std::setprecision(2) << (static_cast<double>(bytes) / kMiB) << " MiB";
+    } else if (bytes >= 1024) {
+        oss << std::fixed << std::setprecision(2) << (static_cast<double>(bytes) / 1024.0) << " KiB";
+    } else {
+        oss << bytes << " B";
+    }
+    return oss.str();
+}
+
+auto FormatPercent(double value) -> std::string {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2) << (value * 100.0) << "%";
+    return oss.str();
+}
+
+auto FormatRate(double value) -> std::string {
+    std::ostringstream oss;
+    if (value >= 1000000.0) {
+        oss << std::fixed << std::setprecision(2) << (value / 1000000.0) << " Mops/s";
+    } else if (value >= 1000.0) {
+        oss << std::fixed << std::setprecision(2) << (value / 1000.0) << " Kops/s";
+    } else {
+        oss << std::fixed << std::setprecision(2) << value << " ops/s";
+    }
+    return oss.str();
+}
+
+auto FormatDouble(double value, int precision = 2) -> std::string {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(precision) << value;
+    return oss.str();
+}
+
+auto EncodeBase62(uint64_t value, size_t min_width = 1) -> std::string {
+    std::string encoded;
+    do {
+        encoded.push_back(kAlphabet[value % kAlphabet.size()]);
+        value /= kAlphabet.size();
+    } while (value != 0);
+
+    while (encoded.size() < min_width) {
+        encoded.push_back(kAlphabet[0]);
+    }
+
+    std::reverse(encoded.begin(), encoded.end());
+    return encoded;
+}
+
+auto MakeSharedPrefixKeys(size_t count, size_t start, std::string_view prefix)
+    -> std::vector<std::string> {
+    std::vector<std::string> keys;
+    keys.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        keys.push_back(std::string(prefix) + EncodeBase62(start + i, 8));
+    }
+    return keys;
+}
+
+auto MakeWideFanoutKeys(size_t count, size_t start) -> std::vector<std::string> {
+    std::vector<std::string> keys;
+    keys.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        const uint64_t sequence = start + i;
+        std::string    key;
+        key.push_back(kAlphabet[sequence % kAlphabet.size()]);
+        key.push_back('/');
+        key.append(EncodeBase62(sequence / kAlphabet.size(), 10));
+        keys.push_back(std::move(key));
+    }
+    return keys;
+}
+
+auto MakeMixedKeys(size_t count, size_t start) -> std::vector<std::string> {
+    std::vector<std::string> keys;
+    keys.reserve(count);
+
+    const size_t first = count / 3;
+    const size_t second = count / 3;
+    const size_t third = count - first - second;
+
+    auto shared = MakeSharedPrefixKeys(first, start, "tenant:region:svc:");
+    auto wide = MakeWideFanoutKeys(second, start);
+
+    keys.insert(keys.end(),
+                std::make_move_iterator(shared.begin()),
+                std::make_move_iterator(shared.end()));
+    keys.insert(keys.end(), std::make_move_iterator(wide.begin()), std::make_move_iterator(wide.end()));
+
+    for (size_t i = 0; i < third; ++i) {
+        const uint64_t sequence = start + first + second + i;
+        std::string    key = "tree/";
+        key.push_back(kAlphabet[sequence % kAlphabet.size()]);
+        key.push_back('/');
+        key.append(EncodeBase62(sequence / kAlphabet.size(), 6));
+        key.push_back('/');
+        key.append(EncodeBase62(sequence * 17 + 13, 4));
+        keys.push_back(std::move(key));
+    }
+
+    return keys;
+}
+
+auto NormalizeName(std::string name) -> std::string {
+    for (char& ch : name) {
+        if (ch == '-') {
+            ch = '_';
+            continue;
+        }
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return name;
+}
+
+auto SplitCsv(std::string_view csv) -> std::vector<std::string> {
+    std::vector<std::string> items;
+    size_t                   begin = 0;
+    while (begin < csv.size()) {
+        const size_t end = csv.find(',', begin);
+        const size_t len = (end == std::string_view::npos) ? csv.size() - begin : end - begin;
+        std::string  item(csv.substr(begin, len));
+        const size_t first = item.find_first_not_of(" \t");
+        if (first == std::string::npos) {
+            if (end == std::string_view::npos) {
+                break;
+            }
+            begin = end + 1;
+            continue;
+        }
+        item.erase(0, first);
+        item.erase(item.find_last_not_of(" \t") + 1);
+        if (!item.empty()) {
+            items.push_back(NormalizeName(item));
+        }
+        if (end == std::string_view::npos) {
+            break;
+        }
+        begin = end + 1;
+    }
+    return items;
+}
+
+auto BuildDataset(std::string_view name, size_t count) -> Dataset {
+    Dataset data;
+    data.name = std::string(name);
+
+    const std::string normalized = NormalizeName(std::string(name));
+    if (normalized == "shared_prefix") {
+        data.keys = MakeSharedPrefixKeys(count, 0, "tenant:region:svc:");
+        data.missing_keys = MakeSharedPrefixKeys(count, count * 4, "tenant:region:svc:");
+    } else if (normalized == "wide_fanout") {
+        data.keys = MakeWideFanoutKeys(count, 0);
+        data.missing_keys = MakeWideFanoutKeys(count, count * 4);
+    } else if (normalized == "mixed") {
+        data.keys = MakeMixedKeys(count, 0);
+        data.missing_keys = MakeMixedKeys(count, count * 4);
+    } else {
+        throw std::runtime_error("unknown dataset: " + std::string(name));
+    }
+
+    for (const std::string& key : data.keys) {
+        data.raw_key_bytes += key.size();
+        data.max_key_len = std::max(data.max_key_len, key.size());
+    }
+
+    data.raw_payload_bytes = data.raw_key_bytes + data.keys.size() * sizeof(uint64_t);
+    data.avg_key_len = data.keys.empty()
+                           ? 0.0
+                           : static_cast<double>(data.raw_key_bytes) / static_cast<double>(data.keys.size());
+    return data;
+}
+
+template<class T>
+auto ShuffleIndices(size_t count, T seed) -> std::vector<size_t> {
+    std::vector<size_t> indices(count);
+    std::iota(indices.begin(), indices.end(), 0);
+    std::mt19937_64 rng(seed);
+    std::shuffle(indices.begin(), indices.end(), rng);
+    return indices;
+}
+
+auto Require(bool condition, std::string_view message) -> void {
+    if (!condition) {
+        throw std::runtime_error(std::string(message));
+    }
+}
+
+auto ComputeLatencyStats(std::vector<uint64_t> latencies) -> LatencyStats {
+    if (latencies.empty()) {
         return {};
     }
 
-    std::sort(samples.begin(), samples.end());
+    const double sum =
+        std::accumulate(latencies.begin(), latencies.end(), 0.0, [](double acc, uint64_t ns) {
+            return acc + static_cast<double>(ns);
+        });
 
-    const auto sum = std::accumulate(samples.begin(), samples.end(), 0.0);
-    return {
-        .sample_count = static_cast<uint64_t>(samples.size()),
-        .mean_ns      = sum / static_cast<double>(samples.size()),
-        .min_ns       = samples.front(),
-        .p50_ns       = percentile(samples, 0.50),
-        .p95_ns       = percentile(samples, 0.95),
-        .p99_ns       = percentile(samples, 0.99),
-        .max_ns       = samples.back(),
+    std::sort(latencies.begin(), latencies.end());
+
+    auto percentile = [&](double ratio) -> uint64_t {
+        const size_t index = static_cast<size_t>(
+            std::ceil(ratio * static_cast<double>(latencies.size())) - 1.0);
+        return latencies[std::min(index, latencies.size() - 1)];
     };
+
+    LatencyStats stats;
+    stats.min_ns = latencies.front();
+    stats.max_ns = latencies.back();
+    stats.p50_ns = percentile(0.50);
+    stats.p95_ns = percentile(0.95);
+    stats.p99_ns = percentile(0.99);
+    stats.p999_ns = percentile(0.999);
+    stats.avg_ns = sum / static_cast<double>(latencies.size());
+    return stats;
 }
 
-template <class Worker>
-auto run_parallel_phase(const BenchmarkConfig& config, std::string phase_name, Worker&& worker)
-    -> PhaseReport {
-    std::vector<std::thread> workers;
-    workers.reserve(config.threads);
+template<class Fn>
+auto TraceOperationSamples(size_t op_count, Fn&& fn)
+    -> std::tuple<std::vector<uint64_t>, uint64_t, uint64_t, size_t, size_t> {
+    std::vector<uint64_t> latencies;
+    latencies.reserve(op_count);
 
-    std::vector<ThreadStats> thread_stats(config.threads);
-    std::barrier             sync_point(static_cast<std::ptrdiff_t>(config.threads + 1));
+    uint64_t key_bytes = 0;
+    size_t   hit_count = 0;
+    size_t   miss_count = 0;
+    const uint64_t start_ns = NowNs();
+    for (size_t i = 0; i < op_count; ++i) {
+        const uint64_t before_ns = NowNs();
+        const SampleMeta sample = fn(i);
+        const uint64_t after_ns = NowNs();
+        latencies.push_back(after_ns - before_ns);
+        key_bytes += sample.key_bytes;
+        hit_count += sample.hit ? 1U : 0U;
+        miss_count += sample.miss ? 1U : 0U;
+    }
+    const uint64_t elapsed_ns = NowNs() - start_ns;
+    return {std::move(latencies), elapsed_ns, key_bytes, hit_count, miss_count};
+}
 
-    for (size_t thread_id = 0; thread_id < config.threads; ++thread_id) {
-        workers.emplace_back([&, thread_id] {
-            worker(thread_id, thread_stats[thread_id], sync_point);
+template<class Index>
+auto BuildIndex(Index& index,
+                const std::vector<std::string>& keys,
+                uint64_t seed,
+                uint64_t value_offset = 0) -> void {
+    index.PrepareForBulkLoad(keys.size());
+    const auto order = ShuffleIndices(keys.size(), seed);
+    for (size_t idx : order) {
+        const auto res = index.Insert(keys[idx], value_offset + idx);
+        Require(res == InsertResutl::OK, "index preload insert failed");
+    }
+}
+
+auto BytesPerKey(const BenchmarkReport& report) -> double {
+    return report.resident_key_count > 0
+               ? static_cast<double>(report.end_live_bytes) / static_cast<double>(report.resident_key_count)
+               : 0.0;
+}
+
+auto Amplification(const BenchmarkReport& report) -> double {
+    return report.reference_payload_bytes > 0
+               ? static_cast<double>(report.end_live_bytes) /
+                     static_cast<double>(report.reference_payload_bytes)
+               : 0.0;
+}
+
+auto AllocCallsPerOp(const BenchmarkReport& report) -> double {
+    return report.op_count > 0
+               ? static_cast<double>(report.phase_alloc_calls) / static_cast<double>(report.op_count)
+               : 0.0;
+}
+
+auto FinalizeReport(std::string_view index_name,
+                    const Dataset& data,
+                    std::string operation_name,
+                    size_t resident_key_count,
+                    size_t op_count,
+                    uint64_t elapsed_ns,
+                    uint64_t key_bytes_processed,
+                    size_t hit_count,
+                    size_t miss_count,
+                    const std::vector<uint64_t>& latencies,
+                    const TrackingMemoryResource& tracker,
+                    size_t phase_allocated_bytes,
+                    size_t phase_alloc_calls,
+                    size_t phase_dealloc_calls,
+                    size_t rss_before_setup,
+                    size_t rss_after_setup,
+                    size_t rss_after_ops,
+                    size_t start_live_bytes,
+                    size_t end_live_bytes,
+                    std::optional<std::string> note = std::nullopt) -> BenchmarkReport {
+    BenchmarkReport report;
+    report.index_name = std::string(index_name);
+    report.dataset_name = data.name;
+    report.operation_name = std::move(operation_name);
+    report.op_count = op_count;
+    report.seconds = static_cast<double>(elapsed_ns) / 1000000000.0;
+    report.qps = report.seconds > 0.0 ? static_cast<double>(op_count) / report.seconds : 0.0;
+    report.throughput_mib_per_sec =
+        report.seconds > 0.0 ? (static_cast<double>(key_bytes_processed) / report.seconds) / kMiB : 0.0;
+    report.hit_rate = op_count > 0 ? static_cast<double>(hit_count) / static_cast<double>(op_count) : 0.0;
+    report.miss_rate = op_count > 0 ? static_cast<double>(miss_count) / static_cast<double>(op_count) : 0.0;
+    report.latency = ComputeLatencyStats(latencies);
+    report.start_live_bytes = start_live_bytes;
+    report.end_live_bytes = end_live_bytes;
+    report.peak_live_bytes = tracker.PeakBytes();
+    report.phase_allocated_bytes = phase_allocated_bytes;
+    report.phase_alloc_calls = phase_alloc_calls;
+    report.phase_dealloc_calls = phase_dealloc_calls;
+    report.rss_before_setup_bytes = rss_before_setup;
+    report.rss_after_setup_bytes = rss_after_setup;
+    report.rss_after_ops_bytes = rss_after_ops;
+    report.reference_payload_bytes =
+        resident_key_count == data.keys.size()
+            ? data.raw_payload_bytes
+            : static_cast<size_t>(std::llround(data.avg_key_len * resident_key_count)) +
+                  resident_key_count * sizeof(uint64_t);
+    report.resident_key_count = resident_key_count;
+    report.note = std::move(note);
+    return report;
+}
+
+template<class Index>
+auto RunInsertUniqueBenchmark(const Dataset& data, uint64_t seed) -> BenchmarkReport {
+    Index       index;
+    const auto& tracker = index.Tracker();
+    const auto  order = ShuffleIndices(data.keys.size(), seed ^ 0x11ULL);
+
+    const size_t rss_before_setup = GetCurrentRssBytes();
+    index.PrepareForBulkLoad(data.keys.size());
+    const size_t rss_after_setup = GetCurrentRssBytes();
+    const size_t start_live_bytes = tracker.CurrentBytes();
+    const size_t alloc_bytes_before_ops = tracker.TotalAllocatedBytes();
+    const size_t alloc_calls_before_ops = tracker.AllocCalls();
+    const size_t dealloc_calls_before_ops = tracker.DeallocCalls();
+
+    auto [latencies, elapsed_ns, key_bytes_processed, hit_count, miss_count] =
+        TraceOperationSamples(order.size(), [&](size_t i) -> SampleMeta {
+            const size_t index_id = order[i];
+            const auto   res = index.Insert(data.keys[index_id], index_id);
+            Require(res == InsertResutl::OK, "insert benchmark encountered duplicate");
+            return {.key_bytes = data.keys[index_id].size(), .hit = true, .miss = false};
         });
+
+    const size_t end_live_bytes = tracker.CurrentBytes();
+    const size_t rss_after_ops = GetCurrentRssBytes();
+    return FinalizeReport(index.Name(),
+                          data,
+                          "InsertUnique",
+                          data.keys.size(),
+                          order.size(),
+                          elapsed_ns,
+                          key_bytes_processed,
+                          hit_count,
+                          miss_count,
+                          latencies,
+                          tracker,
+                          tracker.TotalAllocatedBytes() - alloc_bytes_before_ops,
+                          tracker.AllocCalls() - alloc_calls_before_ops,
+                          tracker.DeallocCalls() - dealloc_calls_before_ops,
+                          rss_before_setup,
+                          rss_after_setup,
+                          rss_after_ops,
+                          start_live_bytes,
+                          end_live_bytes);
+}
+
+template<class Index>
+auto RunLookupHitBenchmark(const Dataset& data, size_t op_count, uint64_t seed) -> BenchmarkReport {
+    Index       index;
+    const auto& tracker = index.Tracker();
+    const size_t rss_before_setup = GetCurrentRssBytes();
+    BuildIndex(index, data.keys, seed ^ 0x21ULL);
+    const size_t rss_after_setup = GetCurrentRssBytes();
+    const size_t start_live_bytes = tracker.CurrentBytes();
+    const size_t alloc_bytes_before_ops = tracker.TotalAllocatedBytes();
+    const size_t alloc_calls_before_ops = tracker.AllocCalls();
+    const size_t dealloc_calls_before_ops = tracker.DeallocCalls();
+
+    std::mt19937_64 rng(seed ^ 0x22ULL);
+    std::uniform_int_distribution<size_t> dist(0, data.keys.size() - 1);
+
+    auto [latencies, elapsed_ns, key_bytes_processed, hit_count, miss_count] =
+        TraceOperationSamples(op_count, [&](size_t) -> SampleMeta {
+            const size_t index_id = dist(rng);
+            const auto   value = index.Lookup(data.keys[index_id]);
+            Require(value.has_value() && *value == index_id,
+                    "lookup-hit benchmark returned wrong value");
+            return {.key_bytes = data.keys[index_id].size(), .hit = true, .miss = false};
+        });
+
+    const size_t end_live_bytes = tracker.CurrentBytes();
+    const size_t rss_after_ops = GetCurrentRssBytes();
+    return FinalizeReport(index.Name(),
+                          data,
+                          "LookupHit",
+                          data.keys.size(),
+                          op_count,
+                          elapsed_ns,
+                          key_bytes_processed,
+                          hit_count,
+                          miss_count,
+                          latencies,
+                          tracker,
+                          tracker.TotalAllocatedBytes() - alloc_bytes_before_ops,
+                          tracker.AllocCalls() - alloc_calls_before_ops,
+                          tracker.DeallocCalls() - dealloc_calls_before_ops,
+                          rss_before_setup,
+                          rss_after_setup,
+                          rss_after_ops,
+                          start_live_bytes,
+                          end_live_bytes);
+}
+
+template<class Index>
+auto RunLookupMissBenchmark(const Dataset& data, size_t op_count, uint64_t seed) -> BenchmarkReport {
+    Index       index;
+    const auto& tracker = index.Tracker();
+    const size_t rss_before_setup = GetCurrentRssBytes();
+    BuildIndex(index, data.keys, seed ^ 0x31ULL);
+    const size_t rss_after_setup = GetCurrentRssBytes();
+    const size_t start_live_bytes = tracker.CurrentBytes();
+    const size_t alloc_bytes_before_ops = tracker.TotalAllocatedBytes();
+    const size_t alloc_calls_before_ops = tracker.AllocCalls();
+    const size_t dealloc_calls_before_ops = tracker.DeallocCalls();
+
+    std::mt19937_64 rng(seed ^ 0x32ULL);
+    std::uniform_int_distribution<size_t> dist(0, data.missing_keys.size() - 1);
+
+    auto [latencies, elapsed_ns, key_bytes_processed, hit_count, miss_count] =
+        TraceOperationSamples(op_count, [&](size_t) -> SampleMeta {
+            const size_t index_id = dist(rng);
+            const auto   value = index.Lookup(data.missing_keys[index_id]);
+            Require(!value.has_value(), "lookup-miss benchmark unexpectedly hit");
+            return {.key_bytes = data.missing_keys[index_id].size(), .hit = false, .miss = true};
+        });
+
+    const size_t end_live_bytes = tracker.CurrentBytes();
+    const size_t rss_after_ops = GetCurrentRssBytes();
+    return FinalizeReport(index.Name(),
+                          data,
+                          "LookupMiss",
+                          data.keys.size(),
+                          op_count,
+                          elapsed_ns,
+                          key_bytes_processed,
+                          hit_count,
+                          miss_count,
+                          latencies,
+                          tracker,
+                          tracker.TotalAllocatedBytes() - alloc_bytes_before_ops,
+                          tracker.AllocCalls() - alloc_calls_before_ops,
+                          tracker.DeallocCalls() - dealloc_calls_before_ops,
+                          rss_before_setup,
+                          rss_after_setup,
+                          rss_after_ops,
+                          start_live_bytes,
+                          end_live_bytes);
+}
+
+template<class Index>
+auto RunUpsertHitBenchmark(const Dataset& data, size_t op_count, uint64_t seed) -> BenchmarkReport {
+    Index       index;
+    const auto& tracker = index.Tracker();
+    const size_t rss_before_setup = GetCurrentRssBytes();
+    BuildIndex(index, data.keys, seed ^ 0x41ULL);
+    const size_t rss_after_setup = GetCurrentRssBytes();
+    const size_t start_live_bytes = tracker.CurrentBytes();
+    const size_t alloc_bytes_before_ops = tracker.TotalAllocatedBytes();
+    const size_t alloc_calls_before_ops = tracker.AllocCalls();
+    const size_t dealloc_calls_before_ops = tracker.DeallocCalls();
+
+    std::mt19937_64 rng(seed ^ 0x42ULL);
+    std::uniform_int_distribution<size_t> dist(0, data.keys.size() - 1);
+
+    auto [latencies, elapsed_ns, key_bytes_processed, hit_count, miss_count] =
+        TraceOperationSamples(op_count, [&](size_t i) -> SampleMeta {
+            const size_t index_id = dist(rng);
+            const auto   res = index.Upsert(data.keys[index_id], 0xABCD0000ULL + i);
+            Require(res == InsertResutl::UpsertValue, "upsert benchmark failed");
+            return {.key_bytes = data.keys[index_id].size(), .hit = true, .miss = false};
+        });
+
+    const size_t end_live_bytes = tracker.CurrentBytes();
+    const size_t rss_after_ops = GetCurrentRssBytes();
+    return FinalizeReport(index.Name(),
+                          data,
+                          "UpsertHit",
+                          data.keys.size(),
+                          op_count,
+                          elapsed_ns,
+                          key_bytes_processed,
+                          hit_count,
+                          miss_count,
+                          latencies,
+                          tracker,
+                          tracker.TotalAllocatedBytes() - alloc_bytes_before_ops,
+                          tracker.AllocCalls() - alloc_calls_before_ops,
+                          tracker.DeallocCalls() - dealloc_calls_before_ops,
+                          rss_before_setup,
+                          rss_after_setup,
+                          rss_after_ops,
+                          start_live_bytes,
+                          end_live_bytes);
+}
+
+template<class Index>
+auto RunEraseHitBenchmark(const Dataset& data, uint64_t seed) -> BenchmarkReport {
+    Index       index;
+    const auto& tracker = index.Tracker();
+    const size_t rss_before_setup = GetCurrentRssBytes();
+    BuildIndex(index, data.keys, seed ^ 0x51ULL);
+    const size_t rss_after_setup = GetCurrentRssBytes();
+    const size_t start_live_bytes = tracker.CurrentBytes();
+    const size_t alloc_bytes_before_ops = tracker.TotalAllocatedBytes();
+    const size_t alloc_calls_before_ops = tracker.AllocCalls();
+    const size_t dealloc_calls_before_ops = tracker.DeallocCalls();
+
+    const auto order = ShuffleIndices(data.keys.size(), seed ^ 0x52ULL);
+    auto [latencies, elapsed_ns, key_bytes_processed, hit_count, miss_count] =
+        TraceOperationSamples(order.size(), [&](size_t i) -> SampleMeta {
+            const size_t index_id = order[i];
+            const size_t erased = index.Erase(data.keys[index_id]);
+            Require(erased == 1, "erase benchmark failed to delete an existing key");
+            return {.key_bytes = data.keys[index_id].size(), .hit = true, .miss = false};
+        });
+
+    const size_t end_live_bytes = tracker.CurrentBytes();
+    const size_t rss_after_ops = GetCurrentRssBytes();
+    return FinalizeReport(index.Name(),
+                          data,
+                          "EraseHit",
+                          0,
+                          order.size(),
+                          elapsed_ns,
+                          key_bytes_processed,
+                          hit_count,
+                          miss_count,
+                          latencies,
+                          tracker,
+                          tracker.TotalAllocatedBytes() - alloc_bytes_before_ops,
+                          tracker.AllocCalls() - alloc_calls_before_ops,
+                          tracker.DeallocCalls() - dealloc_calls_before_ops,
+                          rss_before_setup,
+                          rss_after_setup,
+                          rss_after_ops,
+                          start_live_bytes,
+                          end_live_bytes);
+}
+
+template<class Index>
+auto RunMixedReadWriteBenchmark(const Dataset& data, size_t op_count, uint64_t seed) -> BenchmarkReport {
+    Index        index;
+    DenseIndexSet live(data.keys.size());
+    DenseIndexSet absent(data.keys.size());
+    const auto&  tracker = index.Tracker();
+
+    const size_t initial_live = std::max<size_t>(1, (data.keys.size() * 3) / 4);
+    const auto   load_order = ShuffleIndices(data.keys.size(), seed ^ 0x61ULL);
+
+    const size_t rss_before_setup = GetCurrentRssBytes();
+    index.PrepareForBulkLoad(data.keys.size());
+    for (size_t i = 0; i < initial_live; ++i) {
+        const size_t index_id = load_order[i];
+        const auto   res = index.Insert(data.keys[index_id], index_id);
+        Require(res == InsertResutl::OK, "mixed benchmark preload insert failed");
+        live.Insert(index_id);
     }
-
-    const uint64_t rss_before = read_current_rss_bytes();
-    MemorySampler  sampler(std::chrono::milliseconds(config.memory_sample_interval));
-    sampler.start();
-
-    sync_point.arrive_and_wait();
-    const auto start = Clock::now();
-
-    for (auto& worker_thread : workers) {
-        worker_thread.join();
+    for (size_t i = initial_live; i < load_order.size(); ++i) {
+        absent.Insert(load_order[i]);
     }
+    const size_t rss_after_setup = GetCurrentRssBytes();
+    const size_t start_live_bytes = tracker.CurrentBytes();
+    const size_t alloc_bytes_before_ops = tracker.TotalAllocatedBytes();
+    const size_t alloc_calls_before_ops = tracker.AllocCalls();
+    const size_t dealloc_calls_before_ops = tracker.DeallocCalls();
 
-    const auto end = Clock::now();
+    std::mt19937_64 rng(seed ^ 0x62ULL);
+    std::uniform_int_distribution<int> kind_dist(0, 99);
+    std::uniform_int_distribution<size_t> miss_dist(0, data.missing_keys.size() - 1);
 
-    PhaseReport report;
-    report.phase_name          = std::move(phase_name);
-    report.duration_seconds    =
-        std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
-    report.rss_before_bytes    = rss_before;
-    report.rss_after_bytes     = read_current_rss_bytes();
-    report.rss_peak_bytes      = sampler.stop();
-    report.process_peak_bytes  = read_peak_rss_bytes();
+    size_t lookup_hit_ops = 0;
+    size_t lookup_miss_ops = 0;
+    size_t upsert_ops = 0;
+    size_t insert_ops = 0;
+    size_t erase_ops = 0;
 
-    for (size_t op = 0; op < kOperationKinds.size(); ++op) {
-        std::vector<uint64_t> samples;
-        uint64_t             count   = 0;
-        uint64_t             success = 0;
-        uint64_t             fail    = 0;
+    auto [latencies, elapsed_ns, key_bytes_processed, hit_count, miss_count] =
+        TraceOperationSamples(op_count, [&](size_t i) -> SampleMeta {
+            const int op_kind = kind_dist(rng);
 
-        for (auto& stats : thread_stats) {
-            auto& local = stats.operations[op];
-            count += local.count;
-            success += local.success;
-            fail += local.fail;
-            samples.insert(samples.end(), local.latency_samples_ns.begin(),
-                           local.latency_samples_ns.end());
+            if (op_kind < 45 && !live.Empty()) {
+                const size_t index_id = live.Random(rng);
+                const auto   value = index.Lookup(data.keys[index_id]);
+                Require(value.has_value(), "mixed lookup-hit returned miss");
+                ++lookup_hit_ops;
+                return {.key_bytes = data.keys[index_id].size(), .hit = true, .miss = false};
+            }
+
+            if (op_kind < 65) {
+                const size_t index_id = miss_dist(rng);
+                const auto   value = index.Lookup(data.missing_keys[index_id]);
+                Require(!value.has_value(), "mixed lookup-miss unexpectedly hit");
+                ++lookup_miss_ops;
+                return {.key_bytes = data.missing_keys[index_id].size(), .hit = false, .miss = true};
+            }
+
+            if (op_kind < 82 && !live.Empty()) {
+                const size_t index_id = live.Random(rng);
+                const auto   res = index.Upsert(data.keys[index_id], 0xDD000000ULL + i);
+                Require(res == InsertResutl::UpsertValue, "mixed upsert failed");
+                ++upsert_ops;
+                return {.key_bytes = data.keys[index_id].size(), .hit = true, .miss = false};
+            }
+
+            if (op_kind < 91 && !absent.Empty()) {
+                const size_t index_id = absent.Random(rng);
+                const auto   res = index.Insert(data.keys[index_id], 0xEE000000ULL + i);
+                Require(res == InsertResutl::OK, "mixed insert failed");
+                absent.Erase(index_id);
+                live.Insert(index_id);
+                ++insert_ops;
+                return {.key_bytes = data.keys[index_id].size(), .hit = true, .miss = false};
+            }
+
+            if (!live.Empty()) {
+                const size_t index_id = live.Random(rng);
+                const size_t erased = index.Erase(data.keys[index_id]);
+                Require(erased == 1, "mixed erase failed");
+                live.Erase(index_id);
+                absent.Insert(index_id);
+                ++erase_ops;
+                return {.key_bytes = data.keys[index_id].size(), .hit = true, .miss = false};
+            }
+
+            const size_t index_id = miss_dist(rng);
+            const auto   value = index.Lookup(data.missing_keys[index_id]);
+            Require(!value.has_value(), "mixed fallback miss unexpectedly hit");
+            ++lookup_miss_ops;
+            return {.key_bytes = data.missing_keys[index_id].size(), .hit = false, .miss = true};
+        });
+
+    const size_t end_live_bytes = tracker.CurrentBytes();
+    const size_t rss_after_ops = GetCurrentRssBytes();
+
+    std::ostringstream note;
+    note << "mix breakdown: lookup_hit=" << lookup_hit_ops << ", lookup_miss=" << lookup_miss_ops
+         << ", upsert=" << upsert_ops << ", insert=" << insert_ops << ", erase=" << erase_ops
+         << ", resident_keys_end=" << live.Size();
+
+    return FinalizeReport(index.Name(),
+                          data,
+                          "MixedReadWrite",
+                          live.Size(),
+                          op_count,
+                          elapsed_ns,
+                          key_bytes_processed,
+                          hit_count,
+                          miss_count,
+                          latencies,
+                          tracker,
+                          tracker.TotalAllocatedBytes() - alloc_bytes_before_ops,
+                          tracker.AllocCalls() - alloc_calls_before_ops,
+                          tracker.DeallocCalls() - dealloc_calls_before_ops,
+                          rss_before_setup,
+                          rss_after_setup,
+                          rss_after_ops,
+                          start_live_bytes,
+                          end_live_bytes,
+                          note.str());
+}
+
+template<class Index>
+auto RunAllBenchmarksForIndex(const Dataset& data, const Options& options)
+    -> std::vector<BenchmarkReport> {
+    std::vector<BenchmarkReport> reports;
+    reports.reserve(6);
+    reports.push_back(RunInsertUniqueBenchmark<Index>(data, options.seed));
+    reports.push_back(RunLookupHitBenchmark<Index>(data, options.op_count, options.seed));
+    reports.push_back(RunLookupMissBenchmark<Index>(data, options.op_count, options.seed));
+    reports.push_back(RunUpsertHitBenchmark<Index>(data, options.op_count, options.seed));
+    reports.push_back(RunEraseHitBenchmark<Index>(data, options.seed));
+    reports.push_back(RunMixedReadWriteBenchmark<Index>(data, options.op_count, options.seed));
+    return reports;
+}
+
+auto RunAllBenchmarksForIndexName(std::string_view index_name,
+                                  const Dataset& data,
+                                  const Options& options) -> std::vector<BenchmarkReport> {
+    const std::string normalized = NormalizeName(std::string(index_name));
+    if (normalized == "art") {
+        return RunAllBenchmarksForIndex<ArtIndex>(data, options);
+    }
+    if (normalized == "std_unordered_map" || normalized == "unordered_map") {
+        return RunAllBenchmarksForIndex<StdUnorderedMapIndex>(data, options);
+    }
+    if (normalized == "absl_flat_hash_map" || normalized == "flat_hash_map") {
+        return RunAllBenchmarksForIndex<AbslFlatHashMapIndex>(data, options);
+    }
+    throw std::runtime_error("unknown index: " + std::string(index_name));
+}
+
+auto PrintDatasetSummary(const Dataset& data) -> void {
+    std::cout << "Dataset: " << data.name << '\n';
+    std::cout << "  keys=" << data.keys.size() << ", avg_key_len=" << FormatDouble(data.avg_key_len, 2)
+              << ", max_key_len=" << data.max_key_len
+              << ", raw_payload=" << FormatBytes(data.raw_payload_bytes) << '\n';
+}
+
+auto PrintReport(const BenchmarkReport& report) -> void {
+    std::cout << "  Index: " << report.index_name << " [" << report.operation_name << "]\n";
+    std::cout << "    qps=" << FormatRate(report.qps) << ", throughput="
+              << FormatDouble(report.throughput_mib_per_sec, 2) << " MiB/s"
+              << ", hits=" << FormatPercent(report.hit_rate)
+              << ", misses=" << FormatPercent(report.miss_rate) << '\n';
+    std::cout << "    latency avg=" << FormatDouble(report.latency.avg_ns, 1) << " ns"
+              << ", p50=" << report.latency.p50_ns << " ns"
+              << ", p95=" << report.latency.p95_ns << " ns"
+              << ", p99=" << report.latency.p99_ns << " ns"
+              << ", p999=" << report.latency.p999_ns << " ns"
+              << ", max=" << report.latency.max_ns << " ns" << '\n';
+    std::cout << "    memory live(start/end/peak)=" << FormatBytes(report.start_live_bytes) << " / "
+              << FormatBytes(report.end_live_bytes) << " / " << FormatBytes(report.peak_live_bytes)
+              << ", rss(before/setup/after)=" << FormatBytes(report.rss_before_setup_bytes) << " / "
+              << FormatBytes(report.rss_after_setup_bytes) << " / "
+              << FormatBytes(report.rss_after_ops_bytes) << '\n';
+    std::cout << "    index bytes/key=" << FormatDouble(BytesPerKey(report), 2)
+              << ", amplification=" << FormatDouble(Amplification(report), 2)
+              << ", alloc_calls/op=" << FormatDouble(AllocCallsPerOp(report), 3)
+              << ", phase_allocated=" << FormatBytes(report.phase_allocated_bytes)
+              << ", allocs=" << report.phase_alloc_calls << ", deallocs=" << report.phase_dealloc_calls
+              << '\n';
+    if (report.note.has_value()) {
+        std::cout << "    note: " << *report.note << '\n';
+    }
+}
+
+auto CsvEscape(std::string_view field) -> std::string {
+    bool need_quotes = false;
+    for (char ch : field) {
+        if (ch == ',' || ch == '"' || ch == '\n') {
+            need_quotes = true;
+            break;
         }
-
-        report.operation_summaries[op] = {
-            .kind    = kOperationKinds[op],
-            .count   = count,
-            .success = success,
-            .fail    = fail,
-            .latency = summarize_latency(std::move(samples)),
-        };
-        report.throughput_ops_per_sec += static_cast<double>(count);
+    }
+    if (!need_quotes) {
+        return std::string(field);
     }
 
-    if (report.duration_seconds > 0.0) {
-        report.throughput_ops_per_sec /= report.duration_seconds;
-    }
-
-    return report;
-}
-
-void maybe_record_latency(OperationStats& stats, uint64_t sample_rate, uint64_t latency_ns) {
-    if (sample_rate == 1 || stats.count % sample_rate == 0) {
-        stats.latency_samples_ns.push_back(latency_ns);
-    }
-}
-
-auto compose_value(uint64_t key, uint64_t salt) -> uint64_t {
-    return splitmix64(key ^ salt);
-}
-
-void execute_upsert(IIndex& index, OperationStats& stats, uint64_t key, uint64_t value,
-                    uint64_t sample_rate) {
-    const bool should_sample = sample_rate == 1 || stats.count % sample_rate == 0;
-    bool       success       = false;
-
-    if (should_sample) {
-        const auto start = Clock::now();
-        success          = index.upsert(key, value);
-        const auto end   = Clock::now();
-        maybe_record_latency(
-            stats, sample_rate,
-            static_cast<uint64_t>(
-                std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()));
-    } else {
-        success = index.upsert(key, value);
-    }
-
-    ++stats.count;
-    if (success) {
-        ++stats.success;
-    } else {
-        ++stats.fail;
-    }
-}
-
-void execute_read(IIndex& index, OperationStats& stats, uint64_t key, uint64_t sample_rate) {
-    const bool should_sample = sample_rate == 1 || stats.count % sample_rate == 0;
-    std::optional<uint64_t> value;
-
-    if (should_sample) {
-        const auto start = Clock::now();
-        value            = index.find(key);
-        const auto end   = Clock::now();
-        maybe_record_latency(
-            stats, sample_rate,
-            static_cast<uint64_t>(
-                std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()));
-    } else {
-        value = index.find(key);
-    }
-
-    ++stats.count;
-    if (value.has_value()) {
-        ++stats.success;
-    } else {
-        ++stats.fail;
-    }
-}
-
-void execute_erase(IIndex& index, OperationStats& stats, uint64_t key, uint64_t sample_rate) {
-    const bool should_sample = sample_rate == 1 || stats.count % sample_rate == 0;
-    bool       erased        = false;
-
-    if (should_sample) {
-        const auto start = Clock::now();
-        erased           = index.erase(key);
-        const auto end   = Clock::now();
-        maybe_record_latency(
-            stats, sample_rate,
-            static_cast<uint64_t>(
-                std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()));
-    } else {
-        erased = index.erase(key);
-    }
-
-    ++stats.count;
-    if (erased) {
-        ++stats.success;
-    } else {
-        ++stats.fail;
-    }
-}
-
-auto shard_range(uint64_t total, size_t shards, size_t shard_id) -> std::pair<uint64_t, uint64_t> {
-    const auto base      = total / shards;
-    const auto remainder = total % shards;
-    const auto begin     = base * shard_id + std::min<uint64_t>(shard_id, remainder);
-    const auto count     = base + (static_cast<uint64_t>(shard_id) < remainder ? 1U : 0U);
-    return {begin, count};
-}
-
-auto run_load_phase(IIndex& index, const BenchmarkConfig& config) -> PhaseReport {
-    auto report = run_parallel_phase(
-        config, "load",
-        [&](size_t thread_id, ThreadStats& stats, std::barrier<>& sync_point) {
-            auto& upsert_stats = stats.operations[operation_index(OperationKind::kUpsert)];
-            const auto [begin, count] = shard_range(config.initial_keys, config.threads, thread_id);
-
-            sync_point.arrive_and_wait();
-
-            for (uint64_t offset = 0; offset < count; ++offset) {
-                const auto key = begin + offset;
-                execute_upsert(index, upsert_stats, key, compose_value(key, config.seed),
-                               config.sample_rate);
-            }
-        });
-
-    report.final_size     = index.size();
-    report.index_metrics  = index.metrics();
-    return report;
-}
-
-auto run_read_phase(IIndex& index, const BenchmarkConfig& config) -> PhaseReport {
-    const auto miss_threshold =
-        static_cast<uint64_t>(config.read_miss_ratio * static_cast<double>(std::numeric_limits<uint64_t>::max()));
-
-    auto report = run_parallel_phase(
-        config, "read",
-        [&](size_t thread_id, ThreadStats& stats, std::barrier<>& sync_point) {
-            auto&      read_stats       = stats.operations[operation_index(OperationKind::kRead)];
-            const auto [ignored_begin, count] =
-                shard_range(config.operations, config.threads, thread_id);
-            (void)ignored_begin;
-            FastRandom rng(splitmix64(config.seed ^ (0x100000001b3ULL + thread_id)));
-
-            sync_point.arrive_and_wait();
-
-            for (uint64_t i = 0; i < count; ++i) {
-                const bool miss = rng.next() < miss_threshold;
-                const auto key  = miss ? (config.key_space + rng.uniform(config.initial_keys))
-                                       : rng.uniform(config.initial_keys);
-                execute_read(index, read_stats, key, config.sample_rate);
-            }
-        });
-
-    report.final_size     = index.size();
-    report.index_metrics  = index.metrics();
-    return report;
-}
-
-auto pick_operation(FastRandom& rng, const BenchmarkConfig& config) -> OperationKind {
-    const double total_ratio = config.read_ratio + config.upsert_ratio + config.erase_ratio;
-    const double read_cutoff = config.read_ratio / total_ratio;
-    const double write_cutoff = (config.read_ratio + config.upsert_ratio) / total_ratio;
-    const double unit = static_cast<double>(rng.next()) /
-                        static_cast<double>(std::numeric_limits<uint64_t>::max());
-
-    if (unit < read_cutoff) {
-        return OperationKind::kRead;
-    }
-    if (unit < write_cutoff) {
-        return OperationKind::kUpsert;
-    }
-    return OperationKind::kErase;
-}
-
-auto run_mixed_phase(IIndex& index, const BenchmarkConfig& config) -> PhaseReport {
-    const auto miss_threshold =
-        static_cast<uint64_t>(config.read_miss_ratio * static_cast<double>(std::numeric_limits<uint64_t>::max()));
-    const uint64_t mutable_begin = config.initial_keys;
-    const uint64_t mutable_span  = std::max<uint64_t>(1, config.key_space - config.initial_keys);
-
-    auto report = run_parallel_phase(
-        config, "mixed",
-        [&](size_t thread_id, ThreadStats& stats, std::barrier<>& sync_point) {
-            auto&      read_stats   = stats.operations[operation_index(OperationKind::kRead)];
-            auto&      upsert_stats = stats.operations[operation_index(OperationKind::kUpsert)];
-            auto&      erase_stats  = stats.operations[operation_index(OperationKind::kErase)];
-            const auto [ignored_begin, count] =
-                shard_range(config.operations, config.threads, thread_id);
-            (void)ignored_begin;
-            FastRandom rng(splitmix64(config.seed ^ (0x9e3779b97f4a7c15ULL + thread_id)));
-
-            sync_point.arrive_and_wait();
-
-            for (uint64_t i = 0; i < count; ++i) {
-                const auto operation = pick_operation(rng, config);
-                switch (operation) {
-                case OperationKind::kRead: {
-                    const bool miss = rng.next() < miss_threshold;
-                    const auto key  = miss ? (config.key_space + rng.uniform(config.initial_keys))
-                                           : rng.uniform(config.initial_keys);
-                    execute_read(index, read_stats, key, config.sample_rate);
-                    break;
-                }
-                case OperationKind::kUpsert: {
-                    const auto key = mutable_begin + rng.uniform(mutable_span);
-                    execute_upsert(index, upsert_stats, key,
-                                   compose_value(key, config.seed ^ (thread_id + i + 1)),
-                                   config.sample_rate);
-                    break;
-                }
-                case OperationKind::kErase: {
-                    const auto key = mutable_begin + rng.uniform(mutable_span);
-                    execute_erase(index, erase_stats, key, config.sample_rate);
-                    break;
-                }
-                }
-            }
-        });
-
-    report.final_size     = index.size();
-    report.index_metrics  = index.metrics();
-    return report;
-}
-
-void print_text_header(const BenchmarkConfig& config, const IIndex& index) {
-    std::cout << "index=" << index.name() << " scenario=" << to_string(config.scenario)
-              << " threads=" << config.threads << " initial_keys=" << config.initial_keys
-              << " operations=" << config.operations << " key_space=" << config.key_space
-              << " sample_rate=" << config.sample_rate << " seed=" << config.seed << '\n';
-}
-
-void print_phase_text(const PhaseReport& report) {
-    std::cout << '\n' << '[' << report.phase_name << ']' << '\n';
-    std::cout << "duration: " << std::fixed << std::setprecision(6) << report.duration_seconds
-              << " s\n";
-    std::cout << "throughput: " << format_rate(report.throughput_ops_per_sec) << " ops/s\n";
-    std::cout << "rss_before: " << format_bytes(report.rss_before_bytes) << '\n';
-    std::cout << "rss_after: " << format_bytes(report.rss_after_bytes) << '\n';
-    std::cout << "rss_peak_phase: " << format_bytes(report.rss_peak_bytes) << '\n';
-    std::cout << "rss_peak_process: " << format_bytes(report.process_peak_bytes) << '\n';
-    std::cout << "final_size: " << report.final_size << '\n';
-    if (report.final_size != 0) {
-        const auto bytes_per_entry =
-            static_cast<double>(report.rss_after_bytes) / static_cast<double>(report.final_size);
-        std::cout << "bytes_per_entry: " << std::fixed << std::setprecision(2) << bytes_per_entry
-                  << '\n';
-    }
-
-    for (const auto& operation : report.operation_summaries) {
-        if (operation.count == 0) {
-            continue;
+    std::string escaped;
+    escaped.reserve(field.size() + 2);
+    escaped.push_back('"');
+    for (char ch : field) {
+        if (ch == '"') {
+            escaped.push_back('"');
         }
+        escaped.push_back(ch);
+    }
+    escaped.push_back('"');
+    return escaped;
+}
 
-        std::cout << "op=" << to_string(operation.kind) << " count=" << operation.count
-                  << " success=" << operation.success << " fail=" << operation.fail
-                  << " sampled=" << operation.latency.sample_count;
+auto MaybeWriteCsv(const std::vector<BenchmarkReport>& reports, const std::string& path) -> void {
+    if (path.empty()) {
+        return;
+    }
 
-        if (operation.latency.sample_count != 0) {
-            std::cout << " mean=" << format_latency(operation.latency.mean_ns)
-                      << " p50=" << format_latency(static_cast<double>(operation.latency.p50_ns))
-                      << " p95=" << format_latency(static_cast<double>(operation.latency.p95_ns))
-                      << " p99=" << format_latency(static_cast<double>(operation.latency.p99_ns))
-                      << " max=" << format_latency(static_cast<double>(operation.latency.max_ns));
+    const std::filesystem::path out_path(path);
+    if (out_path.has_parent_path()) {
+        std::filesystem::create_directories(out_path.parent_path());
+    }
+
+    std::ofstream out(out_path);
+    if (!out) {
+        throw std::runtime_error("failed to open csv output: " + path);
+    }
+
+    out << "index,dataset,operation,op_count,seconds,qps,throughput_mib_per_sec,hit_rate,miss_rate,"
+           "latency_avg_ns,latency_p50_ns,latency_p95_ns,latency_p99_ns,latency_p999_ns,latency_max_ns,"
+           "start_live_bytes,end_live_bytes,peak_live_bytes,phase_allocated_bytes,phase_alloc_calls,"
+           "phase_dealloc_calls,rss_before_setup_bytes,rss_after_setup_bytes,rss_after_ops_bytes,"
+           "reference_payload_bytes,resident_key_count,bytes_per_key,amplification,alloc_calls_per_op,note\n";
+
+    for (const auto& report : reports) {
+        out << CsvEscape(report.index_name) << ','
+            << CsvEscape(report.dataset_name) << ','
+            << CsvEscape(report.operation_name) << ','
+            << report.op_count << ','
+            << std::fixed << std::setprecision(9) << report.seconds << ','
+            << std::fixed << std::setprecision(6) << report.qps << ','
+            << std::fixed << std::setprecision(6) << report.throughput_mib_per_sec << ','
+            << std::fixed << std::setprecision(6) << report.hit_rate << ','
+            << std::fixed << std::setprecision(6) << report.miss_rate << ','
+            << std::fixed << std::setprecision(3) << report.latency.avg_ns << ','
+            << report.latency.p50_ns << ','
+            << report.latency.p95_ns << ','
+            << report.latency.p99_ns << ','
+            << report.latency.p999_ns << ','
+            << report.latency.max_ns << ','
+            << report.start_live_bytes << ','
+            << report.end_live_bytes << ','
+            << report.peak_live_bytes << ','
+            << report.phase_allocated_bytes << ','
+            << report.phase_alloc_calls << ','
+            << report.phase_dealloc_calls << ','
+            << report.rss_before_setup_bytes << ','
+            << report.rss_after_setup_bytes << ','
+            << report.rss_after_ops_bytes << ','
+            << report.reference_payload_bytes << ','
+            << report.resident_key_count << ','
+            << std::fixed << std::setprecision(6) << BytesPerKey(report) << ','
+            << std::fixed << std::setprecision(6) << Amplification(report) << ','
+            << std::fixed << std::setprecision(6) << AllocCallsPerOp(report) << ','
+            << CsvEscape(report.note.value_or("")) << '\n';
+    }
+}
+
+auto main_impl(int argc, char** argv) -> int {
+    Options options;
+
+    CLI::App app("Single-thread index benchmark for idlekv");
+    app.add_option("--keys", options.key_count, "Number of unique keys per dataset");
+    app.add_option("--ops", options.op_count, "Operation count for point workloads");
+    app.add_option("--seed", options.seed, "Random seed");
+    app.add_option("--datasets",
+                   options.datasets,
+                   "Comma-separated dataset names: shared_prefix,wide_fanout,mixed");
+    app.add_option("--indexes",
+                   options.indexes,
+                   "Comma-separated index names: art,std_unordered_map,absl_flat_hash_map");
+    app.add_option("--csv-out", options.csv_out, "Optional CSV output path");
+    CLI11_PARSE(app, argc, argv);
+
+    const auto dataset_names = SplitCsv(options.datasets);
+    const auto index_names = SplitCsv(options.indexes);
+    Require(!dataset_names.empty(), "at least one dataset is required");
+    Require(!index_names.empty(), "at least one index is required");
+    Require(options.key_count > 0, "--keys must be greater than 0");
+    Require(options.op_count > 0, "--ops must be greater than 0");
+
+    std::vector<BenchmarkReport> all_reports;
+
+    std::cout << "idlekv index benchmark\n";
+    std::cout << "  key_count=" << options.key_count << ", op_count=" << options.op_count
+              << ", seed=" << options.seed << "\n";
+    std::cout << "  indexes=" << options.indexes << "\n\n";
+
+    for (const auto& dataset_name : dataset_names) {
+        const Dataset data = BuildDataset(dataset_name, options.key_count);
+        PrintDatasetSummary(data);
+
+        for (const auto& index_name : index_names) {
+            const auto reports = RunAllBenchmarksForIndexName(index_name, data, options);
+            for (const auto& report : reports) {
+                PrintReport(report);
+                all_reports.push_back(report);
+            }
         }
         std::cout << '\n';
     }
 
-    if (!report.index_metrics.empty()) {
-        std::cout << "metrics:";
-        bool first = true;
-        for (const auto& [key, value] : report.index_metrics) {
-            std::cout << (first ? ' ' : ',') << key << '=' << value;
-            first = false;
-        }
-        std::cout << '\n';
+    MaybeWriteCsv(all_reports, options.csv_out);
+    if (!options.csv_out.empty()) {
+        std::cout << "CSV written to: " << options.csv_out << '\n';
     }
-}
-
-void print_phase_csv_header() {
-    std::cout << "index,phase,threads,duration_s,throughput_ops_s,rss_before_bytes,"
-                 "rss_after_bytes,rss_peak_phase_bytes,rss_peak_process_bytes,final_size,"
-                 "op_kind,count,success,fail,sampled,mean_ns,p50_ns,p95_ns,p99_ns,max_ns\n";
-}
-
-void print_phase_csv(const BenchmarkConfig& config, const IIndex& index, const PhaseReport& report) {
-    for (const auto& operation : report.operation_summaries) {
-        if (operation.count == 0) {
-            continue;
-        }
-
-        std::cout << index.name() << ',' << report.phase_name << ',' << config.threads << ','
-                  << std::fixed << std::setprecision(6) << report.duration_seconds << ','
-                  << std::fixed << std::setprecision(2) << report.throughput_ops_per_sec << ','
-                  << report.rss_before_bytes << ',' << report.rss_after_bytes << ','
-                  << report.rss_peak_bytes << ',' << report.process_peak_bytes << ','
-                  << report.final_size << ',' << to_string(operation.kind) << ','
-                  << operation.count << ',' << operation.success << ',' << operation.fail << ','
-                  << operation.latency.sample_count << ',' << std::fixed << std::setprecision(2)
-                  << operation.latency.mean_ns << ',' << operation.latency.p50_ns << ','
-                  << operation.latency.p95_ns << ',' << operation.latency.p99_ns << ','
-                  << operation.latency.max_ns << '\n';
-    }
-}
-
-void normalize_config(BenchmarkConfig& config) {
-    config.threads     = std::max<size_t>(1, config.threads);
-    config.initial_keys = std::max<uint64_t>(1, config.initial_keys);
-    config.operations   = std::max<uint64_t>(1, config.operations);
-    config.sample_rate  = std::max<uint64_t>(1, config.sample_rate);
-    config.memory_sample_interval =
-        std::max<uint64_t>(1, config.memory_sample_interval);
-    config.key_space = std::max<uint64_t>(
-        config.key_space == 0 ? config.initial_keys * 2 : config.key_space,
-        config.initial_keys + 1);
-
-    const double total_ratio = config.read_ratio + config.upsert_ratio + config.erase_ratio;
-    if (total_ratio <= 0.0) {
-        throw CLI::ValidationError("--read-ratio/--upsert-ratio/--erase-ratio",
-                                   "mixed workload ratios must sum to a positive value");
-    }
-
-    config.read_ratio /= total_ratio;
-    config.upsert_ratio /= total_ratio;
-    config.erase_ratio /= total_ratio;
-
-    if (config.read_miss_ratio < 0.0 || config.read_miss_ratio > 1.0) {
-        throw CLI::ValidationError("--read-miss-ratio", "must be within [0, 1]");
-    }
-    if (config.dash_merge_threshold <= 0.0 || config.dash_merge_threshold >= 1.0) {
-        throw CLI::ValidationError("--dash-merge-threshold", "must be within (0, 1)");
-    }
-}
-
-auto parse_scenario(std::string_view value) -> Scenario {
-    if (value == "load") {
-        return Scenario::kLoad;
-    }
-    if (value == "read") {
-        return Scenario::kRead;
-    }
-    if (value == "mixed") {
-        return Scenario::kMixed;
-    }
-    if (value == "all") {
-        return Scenario::kAll;
-    }
-    throw CLI::ConversionError("scenario", std::string(value));
-}
-
-auto parse_format(std::string_view value) -> OutputFormat {
-    if (value == "text") {
-        return OutputFormat::kText;
-    }
-    if (value == "csv") {
-        return OutputFormat::kCsv;
-    }
-    throw CLI::ConversionError("format", std::string(value));
-}
-
-void print_registry(const std::vector<IndexDescriptor>& registry) {
-    for (const auto& descriptor : registry) {
-        std::cout << descriptor.name << " - " << descriptor.description << '\n';
-    }
+    return EXIT_SUCCESS;
 }
 
 } // namespace
 
-auto run(int argc, char** argv) -> int {
-    BenchmarkConfig config;
-    const auto      registry = build_registry();
-
-    bool        list_indexes = false;
-    std::string scenario     = "all";
-    std::string format       = "text";
-
-    size_t default_threads = std::thread::hardware_concurrency();
-    if (default_threads == 0) {
-        default_threads = 4;
-    }
-    config.threads = std::min<size_t>(default_threads, 8);
-
-    CLI::App app{"idleKV index benchmark"};
-    app.add_flag("--list", list_indexes, "list registered indexes and exit");
-    app.add_option("--index", config.index_name, "index adapter to benchmark")->default_val(config.index_name);
-    app.add_option("--scenario", scenario, "benchmark scenario: load, read, mixed, all")
-        ->default_val(scenario);
-    app.add_option("--format", format, "report format: text, csv")->default_val(format);
-    app.add_option("--threads", config.threads, "worker threads")->default_val(config.threads);
-    app.add_option("--initial-keys", config.initial_keys, "number of keys loaded before the measured phase")
-        ->default_val(config.initial_keys);
-    app.add_option("--operations", config.operations, "measured operations for read/mixed phases")
-        ->default_val(config.operations);
-    app.add_option("--key-space", config.key_space, "key universe for mutable workload, 0 means auto")
-        ->default_val(config.key_space);
-    app.add_option("--seed", config.seed, "benchmark seed")->default_val(config.seed);
-    app.add_option("--read-ratio", config.read_ratio, "mixed workload read ratio")
-        ->default_val(config.read_ratio);
-    app.add_option("--upsert-ratio", config.upsert_ratio, "mixed workload upsert ratio")
-        ->default_val(config.upsert_ratio);
-    app.add_option("--erase-ratio", config.erase_ratio, "mixed workload erase ratio")
-        ->default_val(config.erase_ratio);
-    app.add_option("--read-miss-ratio", config.read_miss_ratio, "miss ratio for read and mixed read operations")
-        ->default_val(config.read_miss_ratio);
-    app.add_option("--sample-rate", config.sample_rate, "record 1 latency sample every N operations")
-        ->default_val(config.sample_rate);
-    app.add_option("--memory-sample-interval-ms", config.memory_sample_interval,
-                   "RSS sampling interval in milliseconds")->default_val(config.memory_sample_interval);
-    app.add_option("--dash-initial-depth", config.dash_initial_depth, "Dash initial global depth")
-        ->default_val(config.dash_initial_depth);
-    app.add_option("--dash-merge-threshold", config.dash_merge_threshold, "Dash merge threshold")
-        ->default_val(config.dash_merge_threshold);
-
-    try {
-        app.parse(argc, argv);
-    } catch (const CLI::ParseError& error) {
-        return app.exit(error);
-    }
-
-    if (list_indexes) {
-        print_registry(registry);
-        return 0;
-    }
-
-    config.scenario = parse_scenario(scenario);
-    config.format   = parse_format(format);
-    normalize_config(config);
-
-    const auto* descriptor = find_descriptor(config.index_name, registry);
-    if (descriptor == nullptr) {
-        std::cerr << "unknown index: " << config.index_name << '\n';
-        print_registry(registry);
-        return 1;
-    }
-
-    auto index = descriptor->factory(config);
-
-    if (config.format == OutputFormat::kText) {
-        print_text_header(config, *index);
-    } else {
-        print_phase_csv_header();
-    }
-
-    const auto emit_report = [&](const PhaseReport& report) {
-        if (config.format == OutputFormat::kText) {
-            print_phase_text(report);
-        } else {
-            print_phase_csv(config, *index, report);
-        }
-    };
-
-    switch (config.scenario) {
-    case Scenario::kLoad:
-        emit_report(run_load_phase(*index, config));
-        break;
-    case Scenario::kRead:
-        run_load_phase(*index, config);
-        emit_report(run_read_phase(*index, config));
-        break;
-    case Scenario::kMixed:
-        run_load_phase(*index, config);
-        emit_report(run_mixed_phase(*index, config));
-        break;
-    case Scenario::kAll:
-        emit_report(run_load_phase(*index, config));
-        emit_report(run_read_phase(*index, config));
-        emit_report(run_mixed_phase(*index, config));
-        break;
-    }
-
-    return 0;
-}
-
-} // namespace idlekv::benchmark
-
 auto main(int argc, char** argv) -> int {
     try {
-        return idlekv::benchmark::run(argc, argv);
-    } catch (const std::exception& error) {
-        std::cerr << "benchmark failed: " << error.what() << '\n';
-        return 1;
+        return main_impl(argc, argv);
+    } catch (const std::exception& ex) {
+        std::cerr << "benchmark failed: " << ex.what() << '\n';
+        return EXIT_FAILURE;
     }
 }

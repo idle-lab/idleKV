@@ -1,68 +1,104 @@
 # Index Benchmark
 
-`benchmark/index_bench` is a reusable harness for measuring index implementations in idleKV.
+这个目录下提供了 `idlekv` 当前索引实现的单线程基准程序，当前支持：
 
-It currently registers:
+- `art`
+- `std::unordered_map`
+- `absl::flat_hash_map`
 
-- `dash`: `idlekv::dash::DashEH<uint64_t, uint64_t>`
+重点关注：
 
-It reports:
+- 吞吐量：`QPS`
+- 延迟：`avg / p50 / p95 / p99 / p999 / max`
+- 内存：`live / peak / bytes per key / amplification / RSS`
+- 其他指标：`MiB/s`、`alloc_calls/op`
 
-- load/read/mixed throughput
-- sampled latency percentiles (`p50`, `p95`, `p99`, `max`)
-- current and peak RSS during each phase
-- bytes per resident entry
-- index-specific metrics such as DASH split/merge counters
-
-## Build
+## 构建
 
 ```bash
-cmake -S . -B build -DENABLE_BENCHMARK=ON -DENABLE_TEST=OFF -DENABLE_ASIO_IO_URING=OFF
+cmake -S . -B build -DENABLE_BENCHMARK=ON
 cmake --build build --target index_bench -j
 ```
 
-## Examples
-
-Single-thread latency-oriented run:
+## 运行
 
 ```bash
-./build/benchmark/index_bench --index dash --threads 1 --initial-keys 200000 --operations 200000
+./build/benchmark/index_bench --keys 200000 --ops 200000
 ```
 
-Multi-thread throughput run:
+也可以只跑部分 key 分布：
 
 ```bash
-./build/benchmark/index_bench --index dash --threads 8 --initial-keys 1000000 --operations 2000000
+./build/benchmark/index_bench --datasets shared_prefix
+./build/benchmark/index_bench --datasets wide_fanout,mixed
 ```
 
-CSV output for scripts:
+也可以只跑部分索引，并导出 CSV：
 
 ```bash
-./build/benchmark/index_bench --index dash --format csv
+./build/benchmark/index_bench \
+  --indexes art,std_unordered_map,absl_flat_hash_map \
+  --csv-out benchmark/results/index_compare.csv
 ```
 
-## Workload Model
+## 画图
 
-- `load`: bulk upsert of `initial-keys` sequential keys
-- `read`: random lookups against the preloaded stable key range with configurable miss ratio
-- `mixed`: YCSB-like mix of `read`, `upsert`, and `erase`
+```bash
+MPLCONFIGDIR=/tmp/matplotlib-cache \
+python3 benchmark/plot_index_bench.py \
+  --input benchmark/results/index_compare.csv \
+  --output-dir benchmark/results/plots
+```
 
-For `read` and `mixed`, the benchmark preloads the index first. `all` runs `load`, `read`, and `mixed` sequentially on the same index instance.
+默认会生成：
 
-## Extending To New Indexes
+- `qps_by_operation.png`
+- `p99_latency_by_operation.png`
+- `bytes_per_key.png`
+- `amplification.png`
+- `alloc_calls_per_op.png`
 
-To benchmark a new index implementation:
+## Key 分布
 
-1. Add a new adapter class in `benchmark/index_bench.cc` that implements the `IIndex` interface.
-2. Register it in `build_registry()`.
-3. Rebuild `index_bench`.
+- `shared_prefix`
+  大量 key 共享长前缀，更容易触发 ART 的路径压缩优势。
+- `wide_fanout`
+  前缀分散，更多考验高扇出节点访问。
+- `mixed`
+  混合 shared-prefix、wide-fanout 和层级型 key，更接近通用索引场景。
 
-The adapter only needs to implement:
+## Workload
 
-- `upsert(key, value)`
-- `find(key)`
-- `erase(key)`
-- `size()`
-- optional `metrics()` for index-specific counters
+- `InsertUnique`
+- `LookupHit`
+- `LookupMiss`
+- `UpsertHit`
+- `EraseHit`
+- `MixedReadWrite`
 
-For reliable memory comparisons, run one index per process instead of comparing multiple implementations inside the same process.
+`MixedReadWrite` 默认组合了命中查找、未命中查找、upsert、insert、erase，会在输出里额外打印实际操作分布。
+
+对 hash map 类索引，bulk load 场景下会先 `reserve(key_count)`，避免把多次 rehash 成本混进主要 workload。
+
+## 指标说明
+
+- `live(start/end/peak)`
+  通过自定义 `pmr::memory_resource` 统计的索引逻辑存活字节数和峰值。
+- `rss(before/setup/after)`
+  进程 RSS 的近似观测值，受分配器缓存影响，适合作为辅助指标，不建议单独用它判断索引真实占用。
+- `bytes/key`
+  当前逻辑存活字节数除以当前 resident key 数。
+- `amplification`
+  当前逻辑存活字节数与原始 `(key bytes + value bytes)` 负载的比值。
+- `alloc_calls/op`
+  只统计 benchmark phase 本身，每个操作平均触发的索引分配次数。
+- `phase_allocated`
+  只统计 benchmark phase 本身累计向索引请求过的字节数。
+- `bytes_per_key / amplification`
+  这些指标对三种索引都统一从导出的 CSV 里计算，便于直接横向比较。
+
+## 注意
+
+- 这是单线程 benchmark，主要用于看索引结构本身的访问成本。
+- value 类型固定为 `uint64_t`，目的是尽量减少大 value 对索引测试结果的干扰。
+- 如果你想测更贴近业务的数据形态，可以直接在 `index_bench.cc` 里扩展 dataset generator。 

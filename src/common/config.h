@@ -15,6 +15,28 @@ constexpr uint64_t GB = 1024 * MB;
 
 #define DISCARD_RESULT(expr) void(expr);
 
+#if defined(__GNUC__) || defined(__clang__)
+#define UNREACHABLE() __builtin_unreachable()
+#elif defined(_MSC_VER)
+#define UNREACHABLE() __assume(0)
+#else
+#define UNREACHABLE() ((void)0)
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+  #define LIKELY(x)   (__builtin_expect(!!(x), 1))
+  #define UNLIKELY(x) (__builtin_expect(!!(x), 0))
+#else
+  #define LIKELY(x)   (!!(x))
+  #define UNLIKELY(x) (!!(x))
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#define PREFETCH(p) __builtin_prefetch(p)
+#else
+#define PREFETCH(p)
+#endif
+
 namespace idlekv {
 
 class Config {

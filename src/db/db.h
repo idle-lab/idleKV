@@ -29,6 +29,9 @@ public:
 
     auto Del(const std::string& key) -> Result<bool>;
 
+    // TODO(cyb)
+    auto MemoryUsage() -> size_t;
+
 private:
     StoreType prime_;
 };
