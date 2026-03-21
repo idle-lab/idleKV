@@ -527,6 +527,44 @@ auto SplitCsv(std::string_view csv) -> std::vector<std::string> {
     return items;
 }
 
+struct ResolvedIndexNames {
+    std::vector<std::string> names;
+    bool                     remapped_bench_art{false};
+    bool                     dropped_duplicates{false};
+};
+
+auto JoinCsv(const std::vector<std::string>& items) -> std::string {
+    std::ostringstream oss;
+    for (size_t i = 0; i < items.size(); ++i) {
+        if (i != 0) {
+            oss << ',';
+        }
+        oss << items[i];
+    }
+    return oss.str();
+}
+
+auto ResolveIndexNames(const std::vector<std::string>& requested) -> ResolvedIndexNames {
+    ResolvedIndexNames resolved;
+    resolved.names.reserve(requested.size());
+
+    for (const std::string& name : requested) {
+        std::string effective = name;
+        if (name == "bench_art" || name == "external_bench_art") {
+            effective = "art";
+            resolved.remapped_bench_art = true;
+        }
+
+        if (std::find(resolved.names.begin(), resolved.names.end(), effective) != resolved.names.end()) {
+            resolved.dropped_duplicates = true;
+            continue;
+        }
+        resolved.names.push_back(std::move(effective));
+    }
+
+    return resolved;
+}
+
 auto BuildDataset(std::string_view name, size_t count) -> Dataset {
     Dataset data;
     data.name = std::string(name);
@@ -1074,7 +1112,10 @@ auto RunAllBenchmarksForIndex(const Dataset& data, const Options& options)
 auto RunAllBenchmarksForIndexName(std::string_view index_name,
                                   const Dataset& data,
                                   const Options& options) -> std::vector<BenchmarkReport> {
-    const std::string normalized = NormalizeName(std::string(index_name));
+    std::string normalized = NormalizeName(std::string(index_name));
+    if (normalized == "bench_art" || normalized == "external_bench_art") {
+        normalized = "art";
+    }
     if (normalized == "art") {
         return RunAllBenchmarksForIndex<ArtIndex>(data, options);
     }
@@ -1219,7 +1260,9 @@ auto main_impl(int argc, char** argv) -> int {
     CLI11_PARSE(app, argc, argv);
 
     const auto dataset_names = SplitCsv(options.datasets);
-    const auto index_names = SplitCsv(options.indexes);
+    const auto requested_index_names = SplitCsv(options.indexes);
+    const auto resolved_index_names = ResolveIndexNames(requested_index_names);
+    const auto& index_names = resolved_index_names.names;
     Require(!dataset_names.empty(), "at least one dataset is required");
     Require(!index_names.empty(), "at least one index is required");
     Require(options.key_count > 0, "--keys must be greater than 0");
@@ -1230,7 +1273,14 @@ auto main_impl(int argc, char** argv) -> int {
     std::cout << "idlekv index benchmark\n";
     std::cout << "  key_count=" << options.key_count << ", op_count=" << options.op_count
               << ", seed=" << options.seed << "\n";
-    std::cout << "  indexes=" << options.indexes << "\n\n";
+    std::cout << "  indexes=" << JoinCsv(index_names) << "\n";
+    if (resolved_index_names.remapped_bench_art) {
+        std::cout << "  note: requested 'bench_art' is mapped to 'art' for compatibility\n";
+    }
+    if (resolved_index_names.dropped_duplicates) {
+        std::cout << "  note: duplicate indexes were removed after normalization\n";
+    }
+    std::cout << '\n';
 
     for (const auto& dataset_name : dataset_names) {
         const Dataset data = BuildDataset(dataset_name, options.key_count);

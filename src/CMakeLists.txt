@@ -31,6 +31,13 @@ target_compile_definitions(idlekv_core
         IDLEKV_ENABLE_CORO_TRACKING=1
 )
 
+if (DISABLE_CHECK)
+    target_compile_definitions(idlekv_core
+        PUBLIC
+            DISABLE_CHECK=1
+    )
+endif()
+
 option(ENABLE_ASIO_IO_URING "Enable Asio io_uring backend" ON)
 
 if (ENABLE_ASIO_IO_URING)

@@ -28,9 +28,9 @@ public:
     auto operator=(const Shard&) -> Shard& = delete;
 
     auto Id() const -> ShardId { return id_; }
-    auto DbAt(size_t index) -> std::shared_ptr<DB> {
+    auto DbAt(size_t index) -> DB* {
         CHECK_LT(index, db_slice_.size());
-        return db_slice_[index];
+        return db_slice_[index].get();
     }
 
 private:

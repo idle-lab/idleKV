@@ -1,7 +1,8 @@
 #pragma once
 
 #include "absl/container/flat_hash_map.h"
-#include "db/storage/dash/dash.h"
+#include "db/storage/art/art.h"
+#include "db/storage/art/art_key.h"
 #include "db/storage/result.h"
 #include "result.h"
 
@@ -11,6 +12,8 @@
 #include <memory_resource>
 #include <mutex>
 #include <optional>
+#include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <xxhash.h>
@@ -136,51 +139,110 @@ private:
     ShardHash<32> data_;
 };
 
-template <class Key, class Value, class Hash = std::hash<Key>,
-          class KeyEqual = std::equal_to<Key>>
-class DashImpl {
+
+template <class Key, class Value>
+class ArtImpl {
 public:
     using KeyType = Key;
     using ValueType = Value;
-    using TableType   = dash::DashEH<Key, Value, Hash, KeyEqual>;
 
-    explicit DashImpl(std::pmr::memory_resource* mr) : mr_(mr) {}
+    using TableType = Art<ValueType>;
+
+    explicit ArtImpl(std::pmr::memory_resource* mr) : mr_(mr) {}
+
 
     template <class U, class V>
     auto SetImpl(U&& key, V&& value) -> Result<bool> {
-        Key   owned_key(std::forward<U>(key));
-        Value owned_value(std::forward<V>(value));
-
-        while (true) {
-            if (data_.Insert(owned_key, owned_value)) {
-                return {OpStatus::OK, true};
-            }
-
-            auto erased = data_.Erase(owned_key);
-            if (!erased) {
-                continue;
-            }
+        ArtKey art_key = BuildArtKey(key);
+        InsertResutl res = tree_.Insert(art_key, std::forward<V>(value), InsertMode::Upsert);
+        switch (res) {
+        case InsertResutl::OK:
+        case InsertResutl::UpsertValue:
+            return {OpStatus::OK, true};
+        case InsertResutl::DuplicateKey:
+            return {OpStatus::DupKey, false};
+        default:
+            return {OpStatus::Unknown, false};
         }
     }
 
     template <class U>
-    auto GetImpl(U&& key) -> Result<Value> {
-        auto record = data_.FindRecord(Key(std::forward<U>(key)));
-        if (!record) {
-            return {OpStatus::OK, Value{}};
+    auto GetImpl(U&& key) -> Result<ValueType> {
+        ArtKey art_key = BuildArtKey(key);
+        auto record = tree_.Lookup(art_key);
+        if (!record.has_value()) {
+            return {OpStatus::NoSuchKey, ValueType{}};
         }
-
-        return {OpStatus::OK, record->value};
+        return {OpStatus::OK, record.value()};
     }
 
     template <class U>
     auto DelImpl(U&& key) -> Result<bool> {
-        return {OpStatus::OK, data_.Erase(Key(std::forward<U>(key)))};
+        ArtKey art_key = BuildArtKey(key);
+        size_t erased = tree_.Erase(art_key);
+        if (erased == 0) {
+            return {OpStatus::NoSuchKey, true};
+        }
+        return {OpStatus::OK, true};
     }
 
 private:
-    TableType                  data_;
-    std::pmr::memory_resource* mr_ = nullptr;
+    template <class U>
+    static auto BuildArtKey(U&& key) -> ArtKey {
+        static_assert(std::is_constructible_v<std::string_view, U&&>,
+                      "ArtImpl only supports string-like keys.");
+        return ArtKey::BuildFromString(std::string_view(std::forward<U>(key)));
+    }
+
+    std::pmr::memory_resource* mr_;
+    TableType tree_;
 };
+
+// template <class Key, class Value, class Hash = std::hash<Key>,
+//           class KeyEqual = std::equal_to<Key>>
+// class DashImpl {
+// public:
+//     using KeyType = Key;
+//     using ValueType = Value;
+//     using TableType   = dash::DashEH<Key, Value, Hash, KeyEqual>;
+
+//     explicit DashImpl(std::pmr::memory_resource* mr) : mr_(mr) {}
+
+//     template <class U, class V>
+//     auto SetImpl(U&& key, V&& value) -> Result<bool> {
+//         Key   owned_key(std::forward<U>(key));
+//         Value owned_value(std::forward<V>(value));
+
+//         while (true) {
+//             if (data_.Insert(owned_key, owned_value)) {
+//                 return {OpStatus::OK, true};
+//             }
+
+//             auto erased = data_.Erase(owned_key);
+//             if (!erased) {
+//                 continue;
+//             }
+//         }
+//     }
+
+//     template <class U>
+//     auto GetImpl(U&& key) -> Result<Value> {
+//         auto record = data_.FindRecord(Key(std::forward<U>(key)));
+//         if (!record) {
+//             return {OpStatus::OK, Value{}};
+//         }
+
+//         return {OpStatus::OK, record->value};
+//     }
+
+//     template <class U>
+//     auto DelImpl(U&& key) -> Result<bool> {
+//         return {OpStatus::OK, data_.Erase(Key(std::forward<U>(key)))};
+//     }
+
+// private:
+//     TableType                  data_;
+//     std::pmr::memory_resource* mr_ = nullptr;
+// };
 
 } // namespace idlekv

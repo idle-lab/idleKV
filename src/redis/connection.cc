@@ -103,7 +103,7 @@ auto ExecResultName(const ExecResult& res) -> std::string_view {
 
 } // namespace
 
-auto Connection::ReadImpl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> {
+auto Connection::ReadImpl(char* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> {
     if (IsClosed()) {
         co_return ResultT<size_t>(asio::error::not_connected);
     }
@@ -150,7 +150,7 @@ auto Connection::ReadvImpl(const std::vector<Buf>& bufs) noexcept
     co_return ResultT{ec, size_t(n)};
 }
 
-auto Connection::WriteImpl(const byte* data, size_t size) noexcept
+auto Connection::WriteImpl(const char* data, size_t size) noexcept
     -> asio::awaitable<ResultT<size_t>> {
     if (IsClosed()) {
         co_return ResultT<size_t>(asio::error::not_connected);

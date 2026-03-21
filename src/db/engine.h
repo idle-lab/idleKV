@@ -2,7 +2,6 @@
 
 #include "common/config.h"
 #include "db/command.h"
-#include "db/db.h"
 #include "db/result.h"
 #include "db/shard.h"
 #include "redis/connection.h"

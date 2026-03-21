@@ -3,6 +3,7 @@ project(idlekv)
 
 option(ENABLE_TEST "是否编译单元测试" ON)
 option(ENABLE_BENCHMARK "是否编译基准测试" ON)
+option(DISABLE_CHECK "Disable runtime CHECK macros" ON)
 
 include(cmake/utils.cmake)
 

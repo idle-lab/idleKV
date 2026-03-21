@@ -1,23 +1,28 @@
 #include "db/storage/art/node.h"
 #include "common/logger.h"
+#include <algorithm>
 #include <cstddef>
-
-#if defined(__i386__) || defined(__amd64__)
-#include <emmintrin.h>
-#endif
-
+#include <cstdint>
+#include <iostream>
 
 namespace idlekv {
 
-auto Node::CheckPerfix(const byte* data, size_t size) -> size_t {
-    if (prefix_) {
-        size_t p = 0;
-        size_t mi = std::min<size_t>(size, prefix_len_);
-        while (p < mi && data[p] == prefix_[p]) p++;
-        return p;
+namespace {
+
+// debug func
+[[maybe_unused]] auto PrintBitmap(uint64_t bitmap) {
+    for(int i = 47;i >= 0;i--) {
+        std::cout << ((bitmap >> i) & 1);
     }
-    return 0;
+    std::cout << '\n';
 }
+
+}
+
+auto Node::CheckPerfix(const byte* data) -> size_t {
+    return prefix_ ? std::mismatch(prefix_, prefix_ + prefix_len_, data).second - data : 0;
+}
+
 
 auto Node4::FindNext(byte key) -> Node** {
     for (int i = 0;i < size_;i++) {
@@ -99,14 +104,12 @@ auto Node48::FindNext(byte key) -> Node** {
 }
 
 auto Node48::SetNext(byte key, Node* next) -> void {
-    for (int i = 0; i < 48; ++i) {
-        if (next_[i] == nullptr) {
-            keys_[key] = static_cast<byte>(i + 1);
-            next_[i] = next;
-            ++size_;
-            return;
-        }
-    }
+    int idx = std::countr_zero(bitmap_);
+    CHECK_EQ(next_[idx], nullptr);
+    keys_[key] = idx + 1;
+    next_[idx] = next;
+    bitmap_ ^= 1ULL << idx;
+    size_++;
 }
 
 auto Node48::DelNext(byte key) -> Node* {
@@ -118,9 +121,11 @@ auto Node48::DelNext(byte key) -> Node* {
     keys_[key] = Nothing;
     Node* child_to_delete = next_[slot - 1];
     next_[slot - 1] = nullptr;
+    bitmap_ ^= 1ULL << (slot - 1);
     --size_;
     return child_to_delete;
 }
+
 
 auto Node256::FindNext(byte key) -> Node** {
     return next_[key] == nullptr ? nullptr : &next_[key];

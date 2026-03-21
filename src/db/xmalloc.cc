@@ -21,4 +21,5 @@ void XAllocator::do_deallocate(void* ptr, size_t size, size_t align) {
     used_ -= usable;
     mi_free_size_aligned(ptr, size, align);
 }
+
 } // namespace idlekv

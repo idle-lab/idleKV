@@ -1,21 +1,44 @@
 #pragma once
 
+#include <algorithm>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+
+#if defined(__i386__) || defined(__amd64__)
+#include <emmintrin.h>
+#endif
 
 namespace idlekv {
 
 using byte = unsigned char;
 
 enum struct NodeType : uint8_t {
-    Unknow,
     Node4,
     Node16,
     Node48,
     Node256,
     Leaf,
+    Unknow,
 };
+
+template<typename... Ts>
+struct TypeList {};
+
+template<typename T, typename List>
+struct TypeIndex;
+
+template<typename T, typename... Ts>
+struct TypeIndex<T, TypeList<T, Ts...>> {
+    static constexpr size_t value = 0;
+};
+
+template<typename T, typename U, typename... Ts>
+struct TypeIndex<T, TypeList<U, Ts...>> {
+    static constexpr size_t value = 1 + TypeIndex<T, TypeList<Ts...>>::value;
+};
+
+constexpr size_t kNodeTypeCount = 5;
 
 struct Node {
 public:
@@ -23,11 +46,11 @@ public:
     Node(NodeType type) : type_(type) {}
 
     // return the macthed perfix len.
-    auto CheckPerfix(const byte* data, size_t size) -> size_t;
+    auto CheckPerfix(const byte* data) -> size_t;
 
-    NodeType type_{NodeType::Unknow};
     byte* prefix_{nullptr};
-    uint32_t prefix_len_{0};
+    uint16_t prefix_len_{0};
+    NodeType type_{NodeType::Unknow};
 };
 
 class InnerNode : public Node {
@@ -65,13 +88,14 @@ public:
     auto IsFull() const -> bool { return size_ == 16; }
     auto UnderFull() const -> bool { return size_ == 3; }
 
-    byte keys_[16]{};
     Node* next_[16]{};
+    byte keys_[16]{};
 };
 
 class Node48 : public InnerNode {
 public:
     static constexpr const size_t Nothing = 0;
+    static constexpr uint64_t VALID_MASK = (1ULL << 48) - 1;
 
     Node48() : InnerNode(NodeType::Node48) {}
 
@@ -83,7 +107,9 @@ public:
 
     byte keys_[256]{};
     Node* next_[48]{};
+    uint64_t bitmap_{VALID_MASK}; // 1 means no next, 0 means has a next.
 };
+
 
 class Node256 : public InnerNode {
 public:

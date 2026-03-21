@@ -3,6 +3,7 @@
 
 #include "db/storage/art/node.h"
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 namespace idlekv {
 
@@ -15,6 +16,7 @@ public:
     // now ArtKey not support string with '\0' character.
     static auto BuildFromString(std::string_view s) -> ArtKey;
 
+    static auto BuildFromUint32(uint32_t& n) -> ArtKey;
     // you can extend other types of art keys here(i.e. IEEE float, integer)
 
 

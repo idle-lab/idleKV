@@ -6,7 +6,6 @@
 #include "common/result.h"
 #include "db/storage/data_entity.h"
 
-#include <array>
 #include <asio/asio.hpp>
 #include <asio/awaitable.hpp>
 #include <asio/detail/is_buffer_sequence.hpp>
@@ -36,7 +35,6 @@ constexpr size_t kDefaultReadBufferSize = 4096;
 constexpr size_t kDefaultWriteBufferSize = 2048;
 constexpr size_t kMaxReplyFlushCount    = IOV_MAX - 2;
 constexpr size_t kMaxReplyFlushBytes    = 64 * KB;
-using byte                              = char;
 
 constexpr const char* CRLF                 = "\r\n";
 constexpr const char* SIMPLE_STRING_PREFIX = "+";
@@ -58,51 +56,51 @@ auto operator==(DataType dt, char prefix) -> bool;
 class Buf {
 public:
     Buf() = default;
-    Buf(byte* data, size_t size) : data_(data), size_(size) {}
+    Buf(char* data, size_t size) : data_(data), size_(size) {}
 
     Buf(Buf&&)                         = default;
     Buf(const Buf&)                    = default;
     auto operator=(Buf&&) -> Buf&      = default;
     auto operator=(const Buf&) -> Buf& = default;
 
-    auto Begin() -> byte* { return data_; }
-    auto End() -> byte* { return data_ + size_; }
-    auto Data() -> byte* { return const_cast<byte*>(data_); }
+    auto Begin() -> char* { return data_; }
+    auto End() -> char* { return data_ + size_; }
+    auto Data() -> char* { return const_cast<char*>(data_); }
     auto Size() const -> size_t { return size_; }
     operator asio::mutable_buffer() const noexcept { return asio::mutable_buffer(data_, size_); }
     operator asio::const_buffer() const noexcept { return asio::const_buffer(data_, size_); }
 
 private:
-    byte* data_;
+    char* data_;
     size_t      size_;  
 };
 
 class BufView {
 public:
     BufView() = default;
-    BufView(const byte* data, size_t size) : data_(data), size_(size) {}
+    BufView(const char* data, size_t size) : data_(data), size_(size) {}
 
     BufView(BufView&&)                         = default;
     BufView(const BufView&)                    = default;
     auto operator=(BufView&&) -> BufView&      = default;
     auto operator=(const BufView&) -> BufView& = default;
 
-    auto Begin() const -> const byte* { return data_; }
-    auto End() const -> const byte* { return data_ + size_; }
-    auto Data() -> byte* { return const_cast<byte*>(data_); }
-    auto Data() const -> const byte* { return data_; }
+    auto Begin() const -> const char* { return data_; }
+    auto End() const -> const char* { return data_ + size_; }
+    auto Data() -> char* { return const_cast<char*>(data_); }
+    auto Data() const -> const char* { return data_; }
     auto Size() const -> size_t { return size_; }
     operator asio::const_buffer() const noexcept { return asio::const_buffer(data_, size_); }
 
 private:
-    const byte* data_;
+    const char* data_;
     size_t      size_;
 };
 
 class IOBuf {
 public:
     IOBuf(size_t cap) : owner_(true) { Reserve(cap); }
-    IOBuf(byte* data, size_t size) : buf_(data), cap_(size), owner_(false) {}
+    IOBuf(char* data, size_t size) : buf_(data), cap_(size), owner_(false) {}
     IOBuf(const IOBuf&)                    = delete;
     auto operator=(const IOBuf&) -> IOBuf& = delete;
 
@@ -147,8 +145,8 @@ public:
         w_ = 0;
     }
 
-    auto Data() -> byte* { return buf_; }
-    auto Data() const -> const byte* { return buf_; }
+    auto Data() -> char* { return buf_; }
+    auto Data() const -> const char* { return buf_; }
 
     auto Reserve(size_t sz) -> void {
         CHECK(owner_);
@@ -156,7 +154,7 @@ public:
             return;
 
         sz       = std::bit_ceil(sz);
-        byte* nb = new (std::align_val_t{alignment_}) byte[sz];
+        char* nb = new (std::align_val_t{alignment_}) char[sz];
         if (buf_) {
             if (w_ > r_) {
                 memcpy(nb, buf_ + r_, w_ - r_);
@@ -193,7 +191,7 @@ private:
         owner_ = std::exchange(other.owner_, false);
     }
 
-    byte*  buf_{nullptr};
+    char*  buf_{nullptr};
     size_t cap_{0};
     size_t alignment_{8};
     size_t r_{0}, w_{0};
@@ -203,11 +201,11 @@ private:
 class Reader {
 public:
     Reader(size_t cap) : buf_(cap) {}
-    Reader(byte* data, size_t size) : buf_(data, size) {}
-    Reader(asio::mutable_registered_buffer buf) : buf_(static_cast<byte*>(buf.data()), buf.size()), reg_buf_(buf) {}
+    Reader(char* data, size_t size) : buf_(data, size) {}
+    Reader(asio::mutable_registered_buffer buf) : buf_(static_cast<char*>(buf.data()), buf.size()), reg_buf_(buf) {}
 
     auto ReadLineView() noexcept -> asio::awaitable<ResultT<std::string_view>>;
-    auto ReadBytesTo(byte* buf, size_t len) noexcept -> asio::awaitable<ResultT<std::monostate>>;
+    auto ReadBytesTo(char* buf, size_t len) noexcept -> asio::awaitable<ResultT<std::monostate>>;
 
     auto Fill() -> asio::awaitable<std::error_code>;
     auto HasMore() -> bool;
@@ -215,7 +213,7 @@ public:
 
     virtual ~Reader() = default;
 protected:
-    virtual auto ReadImpl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
+    virtual auto ReadImpl(char* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
     virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
     virtual auto ReadvImpl(const std::vector<Buf>& bufs) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
 
@@ -257,7 +255,7 @@ public:
 
     virtual ~Writer() = default;
 protected:
-    virtual auto WriteImpl(const byte* data, size_t size) noexcept
+    virtual auto WriteImpl(const char* data, size_t size) noexcept
         -> asio::awaitable<ResultT<size_t>> = 0;
     virtual auto WritevImpl(const std::vector<BufView>& bufs) noexcept
         -> asio::awaitable<ResultT<size_t>> = 0;
@@ -274,12 +272,12 @@ private:
                  !std::same_as<std::remove_cvref_t<T>, bool>)
     auto WritePieceSize(T value) const -> size_t;
 
-    auto WritePiece(byte*& out, std::string_view piece) -> void;
+    auto WritePiece(char*& out, std::string_view piece) -> void;
 
     template <typename T>
         requires(std::integral<std::remove_cvref_t<T>> &&
                  !std::same_as<std::remove_cvref_t<T>, bool>)
-    auto WritePiece(byte*& out, T value) -> void;
+    auto WritePiece(char*& out, T value) -> void;
 
     IOBuf buf_;
     std::vector<BufView> vecs_;
@@ -307,8 +305,8 @@ auto Writer::WritePieces(Ts&&... pieces) -> asio::awaitable<std::error_code> {
     }
 
     const size_t offset = buf_.Buffered();
-    byte* begin = buf_.Data() + offset;
-    byte* out   = begin;
+    char* begin = buf_.Data() + offset;
+    char* out   = begin;
     (WritePiece(out, std::forward<Ts>(pieces)), ...);
 
     queued_size_ += total_size;
@@ -331,7 +329,7 @@ auto Writer::WritePieceSize(T value) const -> size_t {
     return static_cast<size_t>(ptr - tmp);
 }
 
-inline auto Writer::WritePiece(byte*& out, std::string_view piece) -> void {
+inline auto Writer::WritePiece(char*& out, std::string_view piece) -> void {
     if (!piece.empty()) {
         std::memcpy(out, piece.data(), piece.size());
         out += piece.size();
@@ -341,7 +339,7 @@ inline auto Writer::WritePiece(byte*& out, std::string_view piece) -> void {
 template <typename T>
     requires(std::integral<std::remove_cvref_t<T>> &&
              !std::same_as<std::remove_cvref_t<T>, bool>)
-auto Writer::WritePiece(byte*& out, T value) -> void {
+auto Writer::WritePiece(char*& out, T value) -> void {
     using Value = std::remove_cvref_t<T>;
 
     char tmp[std::numeric_limits<Value>::digits10 + 3];

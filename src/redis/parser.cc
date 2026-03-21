@@ -2,14 +2,11 @@
 
 #include "common/logger.h"
 #include "common/result.h"
-#include "db/storage/kvstore.h"
-#include "redis/error.h"
 
 #include <algorithm>
 #include <asio/awaitable.hpp>
 #include <asio/buffer_registration.hpp>
 #include <charconv>
-#include <chrono>
 #include <climits>
 #include <cstddef>
 #include <cstdint>
@@ -104,7 +101,7 @@ auto Reader::ReadLineView() noexcept -> asio::awaitable<ResultT<std::string_view
     }
 }
 
-auto Reader::ReadBytesTo(byte* buf, size_t len) noexcept
+auto Reader::ReadBytesTo(char* buf, size_t len) noexcept
     -> asio::awaitable<ResultT<std::monostate>> {
     size_t offset = 0;
 
@@ -200,7 +197,7 @@ auto Writer::Write(std::string_view s) -> asio::awaitable<std::error_code> {
     }
 
     const size_t offset = buf_.Buffered();
-    byte*        begin  = buf_.Data() + offset;
+    char*        begin  = buf_.Data() + offset;
     std::memcpy(begin, s.data(), s.size());
 
     queued_size_ += s.size();

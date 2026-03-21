@@ -77,19 +77,19 @@ auto IdleEngine::DispatchCmd(Connection* conn, const std::vector<std::string>& a
         return cmd->Exec(&cmdctx, args);
     }
 
-    ShardId shard_id = id;
+    // ShardId shard_id = id;
 
-    if (cmd->FirstKey() != -1) {
-        // now only support single-key command, so directly check if the first key is a key
-        if (args.size() <= static_cast<size_t>(cmd->FirstKey())) {
-            return ExecResult::Error(fmt::format(kArgNumErrFmt, cmd->Name()));
-        }
+    // if (cmd->FirstKey() != -1) {
+    //     // now only support single-key command, so directly check if the first key is a key
+    //     if (args.size() <= static_cast<size_t>(cmd->FirstKey())) {
+    //         return ExecResult::Error(fmt::format(kArgNumErrFmt, cmd->Name()));
+    //     }
 
-        shard_id = CalculateShardId(args[cmd->FirstKey()]);
-    }
+    //     shard_id = CalculateShardId(args[cmd->FirstKey()]);
+    // }
 
-    auto db_ptr = shard_set_[shard_id]->DbAt(conn->DbIndex()); // keep shared_ptr alive
-    CmdContext cmdctx(conn, db_ptr.get(), 0);
+    auto db_ptr = shard_set_[0]->DbAt(conn->DbIndex());
+    CmdContext cmdctx(conn, db_ptr, 0);
     return cmd->Exec(&cmdctx, args);
 }
 

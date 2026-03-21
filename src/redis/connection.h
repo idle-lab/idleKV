@@ -48,14 +48,14 @@ public:
         }
     }
 
-    virtual auto ReadImpl(byte* buf, size_t size) noexcept
+    virtual auto ReadImpl(char* buf, size_t size) noexcept
         -> asio::awaitable<ResultT<size_t>> override;
     virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept
         -> asio::awaitable<ResultT<size_t>> override;
     virtual auto ReadvImpl(const std::vector<Buf>& bufs) noexcept
         -> asio::awaitable<ResultT<size_t>> override;
 
-    virtual auto WriteImpl(const byte* data, size_t size) noexcept
+    virtual auto WriteImpl(const char* data, size_t size) noexcept
         -> asio::awaitable<ResultT<size_t>> override;
     virtual auto WritevImpl(const std::vector<BufView>& bufs) noexcept
         -> asio::awaitable<ResultT<size_t>> override;

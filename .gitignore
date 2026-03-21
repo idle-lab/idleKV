@@ -10,5 +10,6 @@ snapshots/
 *.log
 .vs
 .cache
+*results/
 
 __pycache__/

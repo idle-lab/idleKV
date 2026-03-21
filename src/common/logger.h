@@ -17,6 +17,14 @@ std::shared_ptr<spdlog::logger> MakeDefaultLogger();
 
 namespace detail {
 
+class NullCheck {
+public:
+    template <class T>
+    constexpr auto operator<<(const T&) noexcept -> NullCheck& {
+        return *this;
+    }
+};
+
 template <class T>
 concept CheckStreamInsertable = requires(std::ostream& os, const T& value) { os << value; };
 
@@ -84,6 +92,7 @@ inline auto MakeCheckCmp(L&& lhs, R&& rhs, const char* file, int line, std::stri
 
 } // namespace idlekv
 
+#ifndef DISABLE_CHECK
 #define CHECK(condition)                                                                           \
     ::idlekv::detail::CheckFailure(static_cast<bool>(condition), __FILE__, __LINE__, #condition)
 
@@ -98,3 +107,15 @@ inline auto MakeCheckCmp(L&& lhs, R&& rhs, const char* file, int line, std::stri
 #define CHECK_NE(lhs, rhs) IDLEKV_CHECK_OP(!=, lhs, rhs)
 #define CHECK_GE(lhs, rhs) IDLEKV_CHECK_OP(>=, lhs, rhs)
 #define CHECK_LE(lhs, rhs) IDLEKV_CHECK_OP(<=, lhs, rhs)
+#else
+#define CHECK(condition) ((void)sizeof(static_cast<bool>(condition)), ::idlekv::detail::NullCheck())
+#define IDLEKV_CHECK_OP(op, lhs, rhs)                                                            \
+    ((void)sizeof((lhs) op (rhs)), (void)sizeof(lhs), (void)sizeof(rhs), ::idlekv::detail::NullCheck())
+
+#define CHECK_GT(lhs, rhs) IDLEKV_CHECK_OP(>, lhs, rhs)
+#define CHECK_LT(lhs, rhs) IDLEKV_CHECK_OP(<, lhs, rhs)
+#define CHECK_EQ(lhs, rhs) IDLEKV_CHECK_OP(==, lhs, rhs)
+#define CHECK_NE(lhs, rhs) IDLEKV_CHECK_OP(!=, lhs, rhs)
+#define CHECK_GE(lhs, rhs) IDLEKV_CHECK_OP(>=, lhs, rhs)
+#define CHECK_LE(lhs, rhs) IDLEKV_CHECK_OP(<=, lhs, rhs)
+#endif
