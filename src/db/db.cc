@@ -1,11 +1,10 @@
 #include "db/db.h"
 
 #include <memory>
-#include <memory_resource>
 
 namespace idlekv {
 
-DB::DB(std::pmr::memory_resource* mr) : prime_(mr) {}
+DB::DB() : prime_() {}
 
 auto DB::Locks(const std::vector<std::string>& ws, const std::vector<std::string>& rs) -> bool {
     (void)ws;

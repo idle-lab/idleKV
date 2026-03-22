@@ -17,9 +17,9 @@ namespace idlekv {
 // DB stores data and execute user's commands
 class DB {
 public:
-    using StoreType = KvStore<ArtImpl<std::string, std::shared_ptr<DataEntity>>>;
+    using StoreType = KvStore<DummyImpl<std::string, std::shared_ptr<DataEntity>>>;
 
-    explicit DB(std::pmr::memory_resource* mr);
+    explicit DB();
 
     auto Locks(const std::vector<std::string>& ws, const std::vector<std::string>& rs) -> bool;
 

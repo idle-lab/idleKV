@@ -7,21 +7,5 @@
 
 VLL or MVCC？
 
-## 2. 内存池
-
-jemalloc or tcmalloc？
-
-## 3. 索引
-
-- masstree
-
-- skiplist
-
-- hashtable
-
-## 4. wal/snapshot
-
-
-
 
 

@@ -17,7 +17,7 @@ auto NoKeys(const std::vector<std::string>& args)
     return {};
 }
 
-auto Ping(CmdContext*, const std::vector<std::string>& args) -> ExecResult {
+auto Ping(CmdContext*, std::vector<std::string>& args) -> ExecResult {
     switch (args.size()) {
     case 1:
         return ExecResult::Pong();
@@ -28,7 +28,7 @@ auto Ping(CmdContext*, const std::vector<std::string>& args) -> ExecResult {
     }
 }
 
-auto Select(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
+auto Select(CmdContext* ctx, std::vector<std::string>& args) -> ExecResult {
     size_t      DbIndex = 0;
     const auto* begin    = args[1].data();
     const auto* end      = begin + args[1].size();

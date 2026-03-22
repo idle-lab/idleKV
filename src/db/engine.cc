@@ -1,11 +1,9 @@
 #include "db/engine.h"
 
 #include "common/asio_no_exceptions.h"
-#include "common/logger.h"
 #include "db/command.h"
 #include "db/result.h"
-#include "db/shard.h"
-#include "metric/request_stage.h"
+#include "db/storage/alloctor.h"
 #include "redis/connection.h"
 #include "redis/error.h"
 #include "server/el_pool.h"
@@ -23,7 +21,6 @@
 #include <cstdint>
 #include <memory>
 #include <spdlog/spdlog.h>
-#include <string_view>
 #include <tuple>
 #include <utility>
 #include <xxhash.h>
@@ -37,15 +34,11 @@ IdleEngine::IdleEngine(const Config& cfg) : db_num_(cfg.db_num_) {}
 auto IdleEngine::Init(EventLoopPool* elp) -> void {
     InitCommand();
 
-    shard_num_ = elp->PoolSize();
-    shard_set_.resize(elp->PoolSize());
-    LOG(info, "init shared set [size:{}]", shard_num_);
-
-    elp->AwaitForeach([this](size_t i, [[maybe_unused]] EventLoop* el) {
-        auto* DataHeap = ThreadState::Tlocal()->DataHeap();
-
-        shard_set_[i] = std::make_unique<Shard>(DataHeap, i, db_num_);
-    });
+    ebr_mgr_ = std::make_unique<EBRManager>();
+    ebr_mgr_->Init(elp);
+    for (size_t i = 0; i < db_num_; ++i) {
+        db_slice_.emplace_back(std::make_shared<DB>());
+    }
 }
 
 auto IdleEngine::InitCommand() -> void {
@@ -55,12 +48,8 @@ auto IdleEngine::InitCommand() -> void {
     InitList(this);
 }
 
-auto IdleEngine::CalculateShardId(std::string_view key) -> ShardId {
-    return XXH64(key.data(), key.size(), 114514) % shard_num_;
-}
 
-auto IdleEngine::DispatchCmd(Connection* conn, const std::vector<std::string>& args) noexcept
-    -> ExecResult {
+auto IdleEngine::DispatchCmd(Connection* conn, std::vector<std::string>& args) noexcept -> ExecResult {
     size_t id = ThreadState::Tlocal()->PoolIndex();
 
     auto cmd = GetCmd(args[0]);
@@ -77,18 +66,7 @@ auto IdleEngine::DispatchCmd(Connection* conn, const std::vector<std::string>& a
         return cmd->Exec(&cmdctx, args);
     }
 
-    // ShardId shard_id = id;
-
-    // if (cmd->FirstKey() != -1) {
-    //     // now only support single-key command, so directly check if the first key is a key
-    //     if (args.size() <= static_cast<size_t>(cmd->FirstKey())) {
-    //         return ExecResult::Error(fmt::format(kArgNumErrFmt, cmd->Name()));
-    //     }
-
-    //     shard_id = CalculateShardId(args[cmd->FirstKey()]);
-    // }
-
-    auto db_ptr = shard_set_[0]->DbAt(conn->DbIndex());
+    auto db_ptr = DbAt(conn->DbIndex());
     CmdContext cmdctx(conn, db_ptr, 0);
     return cmd->Exec(&cmdctx, args);
 }

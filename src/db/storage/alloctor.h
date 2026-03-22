@@ -7,6 +7,8 @@
 #include <cstddef>
 #include <functional>
 #include <memory_resource>
+#include <mimalloc.h>
+#include <new>
 #include <utility>
 #include <vector>
 namespace idlekv {
@@ -109,8 +111,8 @@ public:
 template<class Type, size_t PoolSize = 32>
 class FixMemoryAlloctor : public MemoryAlloctor {
 public:
-    explicit FixMemoryAlloctor(std::pmr::memory_resource* mr) : ebr_mgr_(nullptr), mr_(mr) {}
-    FixMemoryAlloctor(EBRManager* ebr_mgr, std::pmr::memory_resource* mr) : ebr_mgr_(ebr_mgr), mr_(mr) {}
+    explicit FixMemoryAlloctor() : ebr_mgr_(nullptr) {}
+    FixMemoryAlloctor(EBRManager* ebr_mgr) : ebr_mgr_(ebr_mgr) {}
     static constexpr size_t Size = sizeof(Type);
     static constexpr size_t Alignment = alignof(Type);
 
@@ -121,7 +123,13 @@ public:
             return new (ptr) Type(std::forward<Args>(args)...);
         }
 
-        void* ptr = mr_->allocate(Size, Alignment);
+        void* ptr = mi_malloc_aligned(Size, Alignment);
+        if (!ptr) {
+            throw std::bad_alloc{};
+        }
+
+        usage_ += mi_usable_size(ptr);
+
         alloced_++;
         return new (ptr) Type(std::forward<Args>(args)...);
     }
@@ -132,7 +140,8 @@ public:
             if (free_num_ < PoolSize) {
                 free_memory_blocks_[free_num_++] = ptr;
             } else {
-                mr_->deallocate(ptr, Size, Alignment);
+                usage_ -= mi_usable_size(ptr);
+                mi_free_size_aligned(ptr, Size, Alignment);
             }
             return;
         }
@@ -142,26 +151,26 @@ public:
                 free_memory_blocks_[free_num_++] = p;
                 return;
             }
-
-            mr_->deallocate(p, Size, Alignment);
+            usage_ -= mi_usable_size(p);
+            mi_free_size_aligned(p, Size, Alignment);
         });
     }
 
     auto Shrink() -> void {
         for (int i = 0; i< free_num_; i++) {
-            mr_->deallocate(free_memory_blocks_[i], Size, Alignment);
+            mi_free_size_aligned(free_memory_blocks_[i], Size, Alignment);
         }
+        free_num_ = 0;
     }
 
-    auto MemoryUsage() -> size_t { return (free_num_ + alloced_) * Size; }
+    auto MemoryUsage() -> size_t { return usage_; }
 
 private:
     std::array<void*, PoolSize> free_memory_blocks_;
     size_t free_num_{0}, alloced_{0};
+    size_t usage_;
 
     EBRManager* ebr_mgr_;
-
-    std::pmr::memory_resource* mr_;
 };
 
 

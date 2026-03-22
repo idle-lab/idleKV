@@ -1,10 +1,8 @@
 #include "db/command.h"
 #include "db/engine.h"
 #include "db/result.h"
-#include "db/storage/kvstore.h"
 #include "redis/connection.h"
 #include "redis/error.h"
-#include "server/thread_state.h"
 
 #include <string>
 #include <utility>
@@ -32,7 +30,7 @@ auto SingleWriteKey(const std::vector<std::string>& args)
 
 } // namespace
 
-auto Set(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
+auto Set(CmdContext* ctx, std::vector<std::string>& args) -> ExecResult {
     auto res = ctx->GetDb()->Set(args[1], DataEntity::FromString(std::move(args[2])));
     if (!res.Ok()) {
         return ExecResult::Error(kStandardErr);
@@ -41,7 +39,7 @@ auto Set(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
     return ExecResult::Ok();
 }
 
-auto Get(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
+auto Get(CmdContext* ctx, std::vector<std::string>& args) -> ExecResult {
     auto res = ctx->GetDb()->Get(args[1]);
     if (res == OpStatus::NoSuchKey) {
         return ExecResult::Null();
@@ -59,7 +57,7 @@ auto Get(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
     return ExecResult::BulkString(value);
 }
 
-auto Del(CmdContext* ctx, const std::vector<std::string>& args) -> ExecResult {
+auto Del(CmdContext* ctx, std::vector<std::string>& args) -> ExecResult {
     auto res = ctx->GetDb()->Del(args[1]);
     if (res == OpStatus::NoSuchKey) {
         return ExecResult::Integer(0);

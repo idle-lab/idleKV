@@ -3,7 +3,6 @@
 #include "common/config.h"
 #include "db/command.h"
 #include "db/result.h"
-#include "db/shard.h"
 #include "redis/connection.h"
 #include "server/el_pool.h"
 
@@ -22,8 +21,7 @@ public:
     IdleEngine(const Config& cfg);
 
     auto Init(EventLoopPool* elp) -> void;
-    auto CalculateShardId(std::string_view key) -> ShardId;
-    auto DispatchCmd(Connection*, const std::vector<std::string>& args) noexcept -> ExecResult;
+    auto DispatchCmd(Connection*, std::vector<std::string>& args) noexcept -> ExecResult;
 
     auto DbNum() const -> size_t { return db_num_; }
     auto GetCmd(const std::string& name) -> Cmd*;
@@ -31,14 +29,21 @@ public:
                      Exector exector, Prepare prepare,
                      CmdFlags flags = CmdFlags::None) -> void;
 
+    auto DbAt(size_t index) -> DB* {
+        CHECK_LT(index, db_slice_.size());
+        return db_slice_[index].get();
+    }
+
 private:
     auto InitCommand() -> void;
 
-    size_t db_num_;
+    std::vector<std::shared_ptr<DB>> db_slice_;
+
+    std::unique_ptr<EBRManager> ebr_mgr_;
+
     // read-only
     absl::flat_hash_map<std::string, Cmd> cmd_map_;
-    std::vector<std::unique_ptr<Shard>>  shard_set_;
-    size_t                               shard_num_;
+    size_t db_num_;
 };
 
 extern std::unique_ptr<IdleEngine> engine;

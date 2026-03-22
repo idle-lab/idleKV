@@ -63,12 +63,12 @@ public:
                     Node256Alloctor,
                     std::conditional_t<std::is_same_v<T, DataNode>, DataNodeAlloctor, void>>>>>;
 
-    explicit Art(std::pmr::memory_resource* mr = std::pmr::get_default_resource()) : mr_(mr) {
-        alloctor_[TypeIndex<Node4, NodeTypes>::value] = std::make_unique<Node4Alloctor>(mr_);
-        alloctor_[TypeIndex<Node16, NodeTypes>::value] = std::make_unique<Node16Alloctor>(mr_);
-        alloctor_[TypeIndex<Node48, NodeTypes>::value] = std::make_unique<Node48Alloctor>(mr_);
-        alloctor_[TypeIndex<Node256, NodeTypes>::value] = std::make_unique<Node256Alloctor>(mr_);
-        alloctor_[TypeIndex<DataNode, NodeTypes>::value] = std::make_unique<DataNodeAlloctor>(mr_);
+    explicit Art(EBRManager* ebr_mgr) : ebr_mgr_(ebr_mgr)  {
+        alloctor_[TypeIndex<Node4, NodeTypes>::value] = std::make_unique<Node4Alloctor>(ebr_mgr);
+        alloctor_[TypeIndex<Node16, NodeTypes>::value] = std::make_unique<Node16Alloctor>(ebr_mgr);
+        alloctor_[TypeIndex<Node48, NodeTypes>::value] = std::make_unique<Node48Alloctor>(ebr_mgr);
+        alloctor_[TypeIndex<Node256, NodeTypes>::value] = std::make_unique<Node256Alloctor>(ebr_mgr);
+        alloctor_[TypeIndex<DataNode, NodeTypes>::value] = std::make_unique<DataNodeAlloctor>(ebr_mgr);
     }
 
     template<class V>
@@ -524,6 +524,7 @@ private:
 
     Node* root_{nullptr};
     size_t size_{0};
+    EBRManager* ebr_mgr_;
     std::array<std::unique_ptr<MemoryAlloctor>, kNodeTypeCount> alloctor_;
     std::pmr::memory_resource* mr_{std::pmr::get_default_resource()};
 };

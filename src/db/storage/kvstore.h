@@ -25,7 +25,7 @@ class KvStore {
 public:
     using ValueType  = typename Impl::ValueType;
 
-    KvStore(std::pmr::memory_resource* mr) : data_(mr), mr_(mr) {}
+    KvStore()  {}
 
     template <class U, class V>
     auto Set(U&& key, V&& value) -> Result<bool> {
@@ -42,12 +42,12 @@ public:
         return data_.DelImpl(key);
     }
 
+    auto MemoryUsage() -> size_t;
+
     virtual ~KvStore() = default;
 
 private:
     Impl data_;
-
-    std::pmr::memory_resource* mr_;
 };
 
 template <class Key, class Value>
@@ -60,14 +60,10 @@ public:
     class ShardHash {
     public:
     using MapType =
-        absl::flat_hash_map<KeyType, ValueType, std::hash<KeyType>, std::equal_to<KeyType>, 
-                            std::pmr::polymorphic_allocator<std::pair<const KeyType, ValueType>>>;
-    explicit ShardHash(std::pmr::memory_resource* mr_) {
-        for (auto& shard : shards_) {
-            shard = MapType(mr_);
-        }
-    }
-    
+        absl::flat_hash_map<KeyType, ValueType, std::hash<KeyType>, std::equal_to<KeyType>>;
+
+    ShardHash() = default;
+
     template <class U, class V>
     auto Insert(U&& key, V&& value) -> void {
         auto shard_id = Hash(key) % ShardNum;
@@ -109,7 +105,6 @@ public:
         std::array<MapType, ShardNum> shards_;
         std::array<std::mutex, ShardNum> locks_;
     };
-    DummyImpl(std::pmr::memory_resource* mr_) : data_(mr_) {}
 
     template <class U, class V>
     auto SetImpl(U&& key, V&& value) -> Result<bool> {
@@ -148,7 +143,7 @@ public:
 
     using TableType = Art<ValueType>;
 
-    explicit ArtImpl(std::pmr::memory_resource* mr) : mr_(mr) {}
+    explicit ArtImpl()  {}
 
 
     template <class U, class V>
@@ -194,7 +189,6 @@ private:
         return ArtKey::BuildFromString(std::string_view(std::forward<U>(key)));
     }
 
-    std::pmr::memory_resource* mr_;
     TableType tree_;
 };
 
