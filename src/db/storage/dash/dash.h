@@ -19,10 +19,11 @@ class DashEH {
     static_assert(std::is_copy_constructible_v<Value>,
                   "DashEH currently requires copyable value types");
 
+
+    
 public:
     using SegmentType = detail::Segment<Key, Value, RegularBuckets, StashBuckets, SlotsPerBucket>;
     using RecordType  = typename SegmentType::RecordType;
-
 };
 
 } // namespace idlekv::dash

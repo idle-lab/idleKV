@@ -20,9 +20,8 @@ namespace {
 }
 
 auto Node::CheckPerfix(const byte* data) -> size_t {
-    return prefix_ ? std::mismatch(prefix_, prefix_ + prefix_len_, data).second - data : 0;
+    return std::mismatch(prefix_.data_, prefix_.data_ + prefix_.len_, data).second - data;
 }
-
 
 auto Node4::FindNext(byte key) -> Node** {
     for (int i = 0;i < size_;i++) {

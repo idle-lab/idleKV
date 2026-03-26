@@ -7,5 +7,12 @@
 
 VLL or MVCC？
 
+3.23 计划：
+
+- The ART of Practical Synchronization 论文
+
+- READ-OPTIMIZED WRITE EXCLUSION 实现
+
+
 
 

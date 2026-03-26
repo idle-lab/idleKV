@@ -15,8 +15,6 @@ target_include_directories(idlekv_core
         ${PROJECT_DIR}/src
 )
 
-find_library(XXHASH_LIBRARY xxhash REQUIRED)
-
 target_link_libraries(idlekv_core
     PUBLIC
         third_part

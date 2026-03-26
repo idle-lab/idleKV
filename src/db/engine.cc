@@ -17,6 +17,7 @@
 #include <asio/use_awaitable.hpp>
 #include <asio/use_future.hpp>
 #include <asiochan/channel.hpp>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -33,7 +34,7 @@ IdleEngine::IdleEngine(const Config& cfg) : db_num_(cfg.db_num_) {}
 
 auto IdleEngine::Init(EventLoopPool* elp) -> void {
     InitCommand();
-
+    works_.Start();
     ebr_mgr_ = std::make_unique<EBRManager>();
     ebr_mgr_->Init(elp);
     for (size_t i = 0; i < db_num_; ++i) {
@@ -66,8 +67,15 @@ auto IdleEngine::DispatchCmd(Connection* conn, std::vector<std::string>& args) n
         return cmd->Exec(&cmdctx, args);
     }
 
+    // asio::steady_timer timer();
+    // timer.expires_at(std::chrono::steady_clock::time_point::max());
+    // works_.Post([&](){
+        // timer.cancel();
+    // });
+
     auto db_ptr = DbAt(conn->DbIndex());
     CmdContext cmdctx(conn, db_ptr, 0);
+
     return cmd->Exec(&cmdctx, args);
 }
 

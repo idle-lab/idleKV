@@ -12,14 +12,6 @@ struct ArtKey {
 public:
     ArtKey(const byte* data, size_t len) : data_(data), len_(len) { }
 
-    // caller should guaranteed lifecycle of @s and @s ends with '\0'.
-    // now ArtKey not support string with '\0' character.
-    static auto BuildFromString(std::string_view s) -> ArtKey;
-
-    static auto BuildFromUint32(uint32_t& n) -> ArtKey;
-    // you can extend other types of art keys here(i.e. IEEE float, integer)
-
-
     auto Cut(size_t n) -> void {
         depth_ += n;
     }

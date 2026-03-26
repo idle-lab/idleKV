@@ -6,7 +6,6 @@
 #include "db/storage/data_entity.h"
 #include "redis/parser.h"
 #include "server/el_pool.h"
-#include "utils/condition_variable/condition_variable.h"
 
 #include <array>
 #include <asio/any_io_executor.hpp>

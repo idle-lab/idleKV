@@ -7,7 +7,6 @@
 
 #include <asio/awaitable.hpp>
 #include <memory>
-#include <memory_resource>
 #include <mimalloc.h>
 #include <string>
 #include <vector>

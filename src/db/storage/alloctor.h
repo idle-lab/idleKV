@@ -1,11 +1,13 @@
 #pragma once
 
 
+#include "common/config.h"
 #include "server/el_pool.h"
 #include <array>
 #include <atomic>
 #include <cstddef>
 #include <functional>
+#include <list>
 #include <memory_resource>
 #include <mimalloc.h>
 #include <new>
@@ -30,36 +32,36 @@ struct alignas(CACHELINE_SIZE) EBRThreadLocal {
     size_t retire_count{0};
 };
 
-extern thread_local EBRThreadLocal* ebr_local;
+inline thread_local EBRThreadLocal ebr_local{};
 
 class EBRManager {
 public:
     auto Init(EventLoopPool* elp) {
-        threads_.resize(elp->PoolSize());
+        // threads_.resize(elp->PoolSize());
 
-        elp->AwaitForeach([this](size_t i, EventLoop* el) {
-            ebr_local = new EBRThreadLocal;
-            threads_[i] = ebr_local;
-        });
+        // elp->AwaitForeach([this](size_t i, EventLoop* el) {
+        //     ebr_local = new EBRThreadLocal;
+        //     threads_[i] = ebr_local;
+        // });
     }
 
     inline void Enter() {
-        ebr_local->local_epoch.store(global_epoch_.load(std::memory_order_acquire),
+        ebr_local.local_epoch.store(global_epoch_.load(std::memory_order_acquire),
                               std::memory_order_relaxed);
-        ebr_local->active.store(true, std::memory_order_release);
+        ebr_local.active.store(true, std::memory_order_release);
     }
 
     inline void Leave() {
-        ebr_local->active.store(false, std::memory_order_release);
+        ebr_local.active.store(false, std::memory_order_release);
     }
 
     inline void Retire(void* ptr, std::function<void(void*)> deleter) {
         uint64_t e = global_epoch_.load(std::memory_order_relaxed);
 
-        ebr_local->buckets[e % 3].emplace_back(ptr, std::move(deleter));
-        ebr_local->retire_count++;
+        ebr_local.buckets[e % 3].emplace_back(ptr, std::move(deleter));
+        ebr_local.retire_count++;
 
-        if (ebr_local->retire_count >= kReclaimThreshold) {
+        if (ebr_local.retire_count >= kReclaimThreshold) {
             TryAdvanceEpoch();
             Reclaim();
         }
@@ -86,12 +88,12 @@ private:
         uint64_t cur = global_epoch_.load(std::memory_order_acquire);
         uint64_t reclaim_epoch = (cur + 1) % 3; // E-2
 
-        auto& bucket = ebr_local->buckets[reclaim_epoch];
+        auto& bucket = ebr_local.buckets[reclaim_epoch];
 
         for (auto& r : bucket) {
             r.deleter(r.ptr);
         }
-        ebr_local->retire_count -= bucket.size();
+        ebr_local.retire_count -= bucket.size();
         bucket.clear();
     }
 
@@ -111,66 +113,81 @@ public:
 template<class Type, size_t PoolSize = 32>
 class FixMemoryAlloctor : public MemoryAlloctor {
 public:
-    explicit FixMemoryAlloctor() : ebr_mgr_(nullptr) {}
-    FixMemoryAlloctor(EBRManager* ebr_mgr) : ebr_mgr_(ebr_mgr) {}
+    FixMemoryAlloctor(std::pmr::memory_resource* mr, EBRManager* ebr_mgr) : ebr_mgr_(ebr_mgr), mr_(mr) {}
     static constexpr size_t Size = sizeof(Type);
     static constexpr size_t Alignment = alignof(Type);
+    static constexpr size_t kMaxSlotNum = 256;
 
     template<class ...Args>
     auto New(Args&&... args) -> Type* {
-        if (free_num_ > 0) {
-            void* ptr = free_memory_blocks_[--free_num_];
-            return new (ptr) Type(std::forward<Args>(args)...);
+        void* ptr = nullptr;
+
+        if (memeory_blocks_.free_list_.empty()) {
+            Block* block = new (mr_->allocate(sizeof(Block), alignof(Block))) Block();
+            usage_ += sizeof(Block);
+            memeory_blocks_.blocks_.push_front(block);
+            for (uint16_t i = 0; i < kMaxSlotNum; i++) {
+                memeory_blocks_.free_list_.emplace_back(block, i);
+            }
         }
 
-        void* ptr = mi_malloc_aligned(Size, Alignment);
-        if (!ptr) {
-            throw std::bad_alloc{};
-        }
+        std::pair<Block*, uint16_t> idx = memeory_blocks_.free_list_.front();
+        memeory_blocks_.free_list_.pop_front();
+        idx.first->allocd++;
+        ptr = static_cast<void*>(idx.first->data + static_cast<ptrdiff_t>(idx.second * Size));
 
-        usage_ += mi_usable_size(ptr);
-
-        alloced_++;
         return new (ptr) Type(std::forward<Args>(args)...);
     }
 
     auto Free(void* ptr) -> void {
         static_cast<Type*>(ptr)->~Type();
         if (ebr_mgr_ == nullptr) {
-            if (free_num_ < PoolSize) {
-                free_memory_blocks_[free_num_++] = ptr;
-            } else {
-                usage_ -= mi_usable_size(ptr);
-                mi_free_size_aligned(ptr, Size, Alignment);
-            }
+            Recycle(ptr);
             return;
         }
 
         ebr_mgr_->Retire(ptr, [this](void* p) {
-            if (free_num_ < PoolSize) {
-                free_memory_blocks_[free_num_++] = p;
-                return;
-            }
-            usage_ -= mi_usable_size(p);
-            mi_free_size_aligned(p, Size, Alignment);
+            Recycle(p);
         });
     }
 
     auto Shrink() -> void {
-        for (int i = 0; i< free_num_; i++) {
-            mi_free_size_aligned(free_memory_blocks_[i], Size, Alignment);
-        }
-        free_num_ = 0;
+        // TODO(cyb): recycle unused block.
     }
 
     auto MemoryUsage() -> size_t { return usage_; }
 
 private:
-    std::array<void*, PoolSize> free_memory_blocks_;
+        auto Recycle(void* ptr) -> void {
+        for (auto it = memeory_blocks_.blocks_.begin(); it != memeory_blocks_.blocks_.end(); it++) {
+            Block* block = *it;
+            if (ptr >= block->data && ptr < static_cast<void*>(block->data + kMaxSlotNum * Size)) {
+                block->allocd--;
+                uint8_t slot_id = static_cast<uint8_t>((static_cast<uint8_t*>(ptr) - block->data) / Size);
+
+                memeory_blocks_.free_list_.emplace_back(block, slot_id);
+                return;
+            }
+        }
+        UNREACHABLE();
+    }
+
+    struct Block {
+        uint8_t data[kMaxSlotNum * Size];
+        uint8_t allocd{0};
+    };
+
+    struct MemoryBlocks {
+        std::list<Block*> blocks_;
+        std::list<std::pair<Block*, uint16_t>> free_list_;
+    };
+    MemoryBlocks memeory_blocks_;
+
     size_t free_num_{0}, alloced_{0};
     size_t usage_;
 
     EBRManager* ebr_mgr_;
+    std::pmr::memory_resource* mr_{std::pmr::get_default_resource()};
 };
 
 

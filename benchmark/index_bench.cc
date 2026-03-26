@@ -1,4 +1,7 @@
+#include "db/storage/alloctor.h"
 #include "db/storage/art/art.h"
+#include "db/storage/art/art_key.h"
+#include "db/storage/art/node.h"
 
 #include <absl/container/flat_hash_map.h>
 #include <CLI11/CLI11.hpp>
@@ -26,13 +29,13 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <xxhash.h>
 
 namespace {
 
 using idlekv::Art;
 using idlekv::ArtKey;
 using idlekv::InsertMode;
-using idlekv::InsertResutl;
 
 constexpr double kMiB = 1024.0 * 1024.0;
 constexpr std::string_view kAlphabet =
@@ -91,6 +94,8 @@ private:
 };
 
 using PmrString = std::pmr::string;
+template<class Tp>
+using PmrVector = std::pmr::vector<Tp>;
 
 auto ToStringView(std::string_view value) -> std::string_view { return value; } 
 
@@ -122,39 +127,106 @@ struct TransparentStringEqual {
     }
 };
 
+enum struct InsertResutl : uint8_t {
+    OK,
+    UpsertValue,
+    DuplicateKey,
+};
+
+// idlekv::EBRManager* ebr_mgr_;
 class ArtIndex {
 public:
     static constexpr std::string_view kName = "art";
+    using Record = std::pair<PmrString, uint64_t>;
 
     auto Name() const -> std::string_view { return kName; }
     auto Tracker() const -> const TrackingMemoryResource& { return tracker_; }
 
     auto PrepareForBulkLoad(size_t) -> void {}
 
+    static constexpr uint64_t kSeed = 0x9E3779B97F4A7C15ULL;
+    inline auto BuildArtKey(std::string_view sv) -> ArtKey {
+        cur_hash_ = XXH32(sv.data(), sv.size(), kSeed);
+        return ArtKey(reinterpret_cast<const idlekv::byte*>(&cur_hash_), 4);
+    }
+
+
     auto Insert(std::string_view key, uint64_t value) -> InsertResutl {
-        auto art_key = ArtKey::BuildFromString(key);
-        return art_.Insert(art_key, value);
+        auto art_key = BuildArtKey(key);
+        Bucket bucket{PmrVector<Record>{&tracker_}};
+        bucket.records.emplace_back(std::make_pair(MakeOwnedKey(key), value));
+        auto res = art_.Insert(art_key, bucket, InsertMode::IfExistGetValue);
+        if (res.value != nullptr) [[unlikely]] {
+            for (auto& record : res.value->records) {
+                if (record.first == key) {
+                    return InsertResutl::DuplicateKey;
+                }
+            }
+            res.value->records.emplace_back(std::move(bucket.records.front()));
+        }
+        return InsertResutl::OK;
     }
 
     auto Upsert(std::string_view key, uint64_t value) -> InsertResutl {
-        auto art_key = ArtKey::BuildFromString(key);
-        return art_.Insert(art_key, value, InsertMode::Upsert);
+        auto art_key = BuildArtKey(key);
+        Bucket bucket{PmrVector<Record>{&tracker_}};
+
+        bucket.records.emplace_back(std::make_pair(MakeOwnedKey(key), value));
+        auto res = art_.Insert(art_key, bucket, InsertMode::IfExistGetValue);
+        if (res.value != nullptr) [[unlikely]] {
+            for (auto& record : res.value->records) {
+                if (record.first == key) {
+                    record.second = value;
+                    return InsertResutl::UpsertValue;
+                }
+            }
+            res.value->records.emplace_back(std::move(bucket.records.front()));
+        }
+        return InsertResutl::OK;
     }
 
     auto Lookup(std::string_view key) -> std::optional<uint64_t> {
-        auto art_key = ArtKey::BuildFromString(key);
-        return art_.Lookup(art_key);
+        auto art_key = BuildArtKey(key);
+        auto bucket = art_.Lookup(art_key);
+        if (bucket == nullptr) {
+            return std::nullopt;
+        }
+        for (auto& record : bucket->records) {
+            if (record.first == key) {
+                return record.second;
+            }
+        }
+        return std::nullopt;
     }
 
     auto Erase(std::string_view key) -> size_t {
-        auto art_key = ArtKey::BuildFromString(key);
-        return art_.Erase(art_key);
+        auto art_key = BuildArtKey(key);
+        auto bucket = art_.Lookup(art_key);
+        if (bucket == nullptr) {
+            return 0;
+        }
+        for (auto& record : bucket->records) {
+            if (record.first == key) {
+                std::swap(record, bucket->records.back());
+                bucket->records.pop_back();
+                return 1;
+            }
+        }
+        return 0;
     }
 
 private:
+    auto MakeOwnedKey(std::string_view key) -> PmrString {
+        return PmrString(key.begin(), key.end(), std::pmr::polymorphic_allocator<char>{&tracker_});
+    }
+    struct Bucket {
+        PmrVector<Record> records;
+    };
+
     std::pmr::unsynchronized_pool_resource arena_{std::pmr::new_delete_resource()};
     TrackingMemoryResource                 tracker_{&arena_};
-    Art<uint64_t>                          art_{&tracker_};
+    Art<Bucket>                          art_{&tracker_};
+    uint32_t cur_hash_;
 };
 
 class StdUnorderedMapIndex {

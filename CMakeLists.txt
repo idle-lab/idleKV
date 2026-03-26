@@ -28,6 +28,7 @@ endif()
 
 # 查找依赖
 find_package(Threads REQUIRED)
+find_library(XXHASH_LIBRARY xxhash REQUIRED)
 
 include(FetchContent)
 

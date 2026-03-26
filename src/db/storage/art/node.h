@@ -19,6 +19,7 @@ enum struct NodeType : uint8_t {
     Node48,
     Node256,
     Leaf,
+    Leaf4,
     Unknow,
 };
 
@@ -39,7 +40,7 @@ struct TypeIndex<T, TypeList<U, Ts...>> {
 };
 
 constexpr size_t kNodeTypeCount = 5;
-
+static constexpr size_t kMaxPrefixBytes = 8;
 struct Node {
 public:
     Node() = default;
@@ -48,8 +49,12 @@ public:
     // return the macthed perfix len.
     auto CheckPerfix(const byte* data) -> size_t;
 
-    byte* prefix_{nullptr};
-    uint16_t prefix_len_{0};
+    struct Prefix {
+        uint8_t len_{0};
+        byte data_[kMaxPrefixBytes]{};
+    };
+
+    Prefix prefix_;
     NodeType type_{NodeType::Unknow};
 };
 
@@ -132,6 +137,26 @@ public:
 
     T value_;
 };
+
+template<class T>
+requires std::default_initializable<T>
+class NodeLeaf4 : public Node {
+public:
+    NodeLeaf4() : Node(NodeType::Leaf) {}
+
+    T values_[4];
+};
+
+
+template<class T>
+requires std::default_initializable<T>
+class NodeLeaf16 : public Node {
+public:
+    NodeLeaf16() : Node(NodeType::Leaf) {}
+
+    T values_[16];
+};
+
 
 auto NodeGrow(Node* node) -> Node* ;
 auto NodeShrink(Node* node) -> Node*;

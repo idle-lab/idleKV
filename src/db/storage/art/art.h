@@ -17,21 +17,18 @@
 
 namespace idlekv {
 
+
 enum struct InsertMode : uint8_t {
     InsertOnly,
     Upsert,
+    IfExistGetValue,
     OOM, // TODO(cyb): support max memory usage.
-};
-
-enum struct InsertResutl : uint8_t {
-    OK,
-    UpsertValue,
-    DuplicateKey,
 };
 
 template<class ValueType, size_t MaxPrefixLen = 16>
 class Art {
 public: 
+
     using DataNode = NodeLeaf<ValueType>;
 
     using Node4Alloctor = FixMemoryAlloctor<Node4>;
@@ -63,21 +60,37 @@ public:
                     Node256Alloctor,
                     std::conditional_t<std::is_same_v<T, DataNode>, DataNodeAlloctor, void>>>>>;
 
-    explicit Art(EBRManager* ebr_mgr) : ebr_mgr_(ebr_mgr)  {
-        alloctor_[TypeIndex<Node4, NodeTypes>::value] = std::make_unique<Node4Alloctor>(ebr_mgr);
-        alloctor_[TypeIndex<Node16, NodeTypes>::value] = std::make_unique<Node16Alloctor>(ebr_mgr);
-        alloctor_[TypeIndex<Node48, NodeTypes>::value] = std::make_unique<Node48Alloctor>(ebr_mgr);
-        alloctor_[TypeIndex<Node256, NodeTypes>::value] = std::make_unique<Node256Alloctor>(ebr_mgr);
-        alloctor_[TypeIndex<DataNode, NodeTypes>::value] = std::make_unique<DataNodeAlloctor>(ebr_mgr);
+    explicit Art(std::pmr::memory_resource* mr, EBRManager* ebr_mgr = nullptr) : ebr_mgr_(ebr_mgr), mr_(mr)  {
+        alloctor_[TypeIndex<Node4, NodeTypes>::value] = std::make_unique<Node4Alloctor>(mr, ebr_mgr);
+        alloctor_[TypeIndex<Node16, NodeTypes>::value] = std::make_unique<Node16Alloctor>(mr, ebr_mgr);
+        alloctor_[TypeIndex<Node48, NodeTypes>::value] = std::make_unique<Node48Alloctor>(mr, ebr_mgr);
+        alloctor_[TypeIndex<Node256, NodeTypes>::value] = std::make_unique<Node256Alloctor>(mr, ebr_mgr);
+        alloctor_[TypeIndex<DataNode, NodeTypes>::value] = std::make_unique<DataNodeAlloctor>(mr, ebr_mgr);
     }
 
+    struct InsertResutl {
+        enum Status {
+            OK,
+            UpsertValue,
+            DuplicateKey,
+        };
+        InsertResutl(Status status) : s(status) {}
+        InsertResutl(ValueType* data) : value(data), s(Status::OK) {}
+
+        auto operator==(Status other) -> bool {
+            return s == other;
+        }
+
+        ValueType* value{nullptr};
+        Status s;
+    };
+
     template<class V>
-    auto Insert(ArtKey& key, V&& value, InsertMode mode = InsertMode::InsertOnly) noexcept -> InsertResutl {
+    auto Insert(ArtKey key, V&& value, InsertMode mode = InsertMode::InsertOnly) noexcept -> InsertResutl {
         if (UNLIKELY(!root_)) [[unlikely]] {
             DataNode* node = AllocateNode<DataNode>();
-            node->prefix_ = static_cast<byte*>(mr_->allocate(key.Len()));
-            node->prefix_len_ = key.Len();
-            std::memcpy(node->prefix_, key.Data(), key.Len());
+            node->prefix_.len_ = key.Len();
+            std::memcpy(node->prefix_.data_, key.Data(), key.Len());
             node->value_ = std::move(value);
             root_ = node;
             size_++;
@@ -92,15 +105,15 @@ public:
     }
 
     // return a copy of value, so you should consider the cost of value copying.
-    auto Lookup(ArtKey& key) noexcept -> std::optional<ValueType> {
+    auto Lookup(ArtKey key) noexcept -> ValueType* {
         if (UNLIKELY(!root_)) [[unlikely]] {
-            return std::nullopt;
+            return nullptr;
         }
         PREFETCH_R(root_, 3);
         return LookupInternal(root_, key);
     }
 
-    auto Erase(ArtKey& key) noexcept -> size_t {
+    auto Erase(ArtKey key) noexcept -> size_t {
         if (UNLIKELY(!root_)) [[unlikely]] {
             return 0;
         }
@@ -122,43 +135,44 @@ private:
         while (true) {
             len = cur->CheckPerfix(key.Data());
 
-            if (len != cur->prefix_len_) {
+            if (len != cur->prefix_.len_) {
                 // prefix mismatch
-                Node4* node = NewNodeWithPerfix<Node4>(cur->prefix_, len);
+                Node4* node = NewNodeWithPerfix<Node4>(cur->prefix_.data_, len);
                 DataNode* leaf = NewNodeWithPerfix<DataNode>(key.Data() + len + 1, key.Len() - len - 1);
                 leaf->value_ = std::move(value);
-                node->SetNext(cur->prefix_[len], cur);
+                node->SetNext(cur->prefix_.data_[len], cur);
                 node->SetNext(key.Data()[len], leaf);
-    
-                if (cur->prefix_len_ > len + 1) {
-                    size_t new_perfix_len = cur->prefix_len_ - len - 1;
-                    byte* new_perfix = static_cast<byte*>(mr_->allocate(new_perfix_len));
-                    std::memmove(new_perfix, cur->prefix_ + len + 1, new_perfix_len);
-                    mr_->deallocate(cur->prefix_, cur->prefix_len_);
-                    cur->prefix_ = new_perfix;
-                    cur->prefix_len_ = new_perfix_len;
+
+                if (cur->prefix_.len_ > len + 1) {
+                    std::memmove(cur->prefix_.data_, cur->prefix_.data_ + len + 1, cur->prefix_.len_ - len - 1);
+                    cur->prefix_.len_ = cur->prefix_.len_ - len - 1;
                 } else {
-                    mr_->deallocate(cur->prefix_, cur->prefix_len_);
-                    cur->prefix_ = nullptr;
-                    cur->prefix_len_ = 0;
+                    cur->prefix_.len_ = 0;
                 }
 
                 *cur_ref = node;
                 return InsertResutl::OK;
             }
 
-            if (key.Len() == cur->prefix_len_) {
+            if (key.Len() == cur->prefix_.len_) {
                 // exact match
                 // cur must be a leaf
                 CHECK_EQ(cur->type_, NodeType::Leaf);
-                if (mode == InsertMode::Upsert) {
+                switch (mode) {
+                case InsertMode::InsertOnly:
+                    return InsertResutl::DuplicateKey;
+                case InsertMode::IfExistGetValue:
+                    PREFETCH_W(&static_cast<DataNode*>(cur)->value_, 1);
+                    return &static_cast<DataNode*>(cur)->value_;
+                case InsertMode::Upsert:{
                     DataNode* node = static_cast<DataNode*>(cur);
                     node->value_ = std::move(value);
 
                     return InsertResutl::UpsertValue;
                 }
-
-                return InsertResutl::DuplicateKey;
+                default:
+                    UNREACHABLE();
+                }
             }
 
             key.Cut(len);
@@ -175,7 +189,6 @@ private:
             }
 
             PREFETCH_W(*next, 2);
-            PREFETCH_W((*next)->prefix_, 2);
             key.Cut(1);
             cur_ref = next;
             cur = *next;
@@ -183,26 +196,26 @@ private:
         UNREACHABLE();
     }
 
-    auto LookupInternal(Node* cur, ArtKey& key) noexcept -> std::optional<ValueType> {
+    auto LookupInternal(Node* cur, ArtKey& key) noexcept -> ValueType* {
         while (true) {
-            if (cur->CheckPerfix(key.Data()) != cur->prefix_len_) {
+            if (cur->CheckPerfix(key.Data()) != cur->prefix_.len_) {
                 // prefix mismatch => key doesn't exist
-                return std::nullopt;
+                return nullptr;
             }
 
-            if (key.Len() == cur->prefix_len_) {
+            if (key.Len() == cur->prefix_.len_) {
                 // exact match
                 CHECK_EQ(cur->type_, NodeType::Leaf);
-                return static_cast<DataNode*>(cur)->value_;
+                PREFETCH_R(&static_cast<DataNode*>(cur)->value_, 1);
+                return &static_cast<DataNode*>(cur)->value_;
             }
 
-            Node** next = FindNext(cur, key.Data()[cur->prefix_len_]);
+            Node** next = FindNext(cur, key.Data()[cur->prefix_.len_]);
             if (next == nullptr) {
-                return std::nullopt;
+                return nullptr;
             }
             PREFETCH_R(*next, 2);
-            PREFETCH_R((*next)->prefix_, 2);
-            key.Cut(cur->prefix_len_ + 1);
+            key.Cut(cur->prefix_.len_ + 1);
             cur = *next;
         }
         UNREACHABLE();
@@ -214,12 +227,12 @@ private:
         byte last_partial_key = 0;
         while (true) {
             size_t len = cur->CheckPerfix(key.Data());
-            if (len != cur->prefix_len_) {
+            if (len != cur->prefix_.len_) {
                 // prefix mismatch => key doesn't exist
                 return 0;
             }
 
-            if (key.Len() == cur->prefix_len_) {
+            if (key.Len() == cur->prefix_.len_) {
                 // exact match
                 // cur must be a leaf node, if not key doesn't exist
                 if (cur->type_ != NodeType::Leaf) {
@@ -247,21 +260,18 @@ private:
                     CHECK_EQ(parent->type_, NodeType::Node4);
                     Node4* n4 = static_cast<Node4*>(parent);
                     Node* next = n4->next_[0];
-                    const byte remaining_edge = n4->keys_[0];
                     // Compress parent prefix + remaining edge + child prefix into child.
-                    size_t total = n4->prefix_len_ + next->prefix_len_ + 1;
-                    byte* new_prefix = static_cast<byte*>(mr_->allocate(total));
-                    if (n4->prefix_len_ > 0) {
-                        std::memmove(new_prefix, n4->prefix_, n4->prefix_len_);
-                    }
-                    new_prefix[n4->prefix_len_] = remaining_edge;
-                    if (next->prefix_len_ > 0) {
-                        std::memmove(new_prefix + n4->prefix_len_ + 1, next->prefix_, next->prefix_len_);
-                        mr_->deallocate(next->prefix_, next->prefix_len_);
-                    }
+                    size_t total = n4->prefix_.len_  + next->prefix_.len_ + 1;
+                    CHECK_LE(total, kMaxPrefixBytes);
 
-                    next->prefix_ = new_prefix;
-                    next->prefix_len_ = total;
+                    if (next->prefix_.len_ > 0) {
+                        std::memmove(next->prefix_.data_ + n4->prefix_.len_ + 1, next->prefix_.data_, next->prefix_.len_);
+                    }
+                    next->prefix_.data_[n4->prefix_.len_] = n4->keys_[0];
+                    if (n4->prefix_.len_ > 0) {
+                        std::memmove(next->prefix_.data_, n4->prefix_.data_, n4->prefix_.len_);
+                    }
+                    next->prefix_.len_ = total;
 
                     DestoryArtNode(parent);
                     *parent_ref = next;
@@ -275,7 +285,6 @@ private:
                 return 0;
             }
             PREFETCH_W(*next, 2);
-            PREFETCH_W((*next)->prefix_, 2);
             last_partial_key = key.Data()[len];
             key.Cut(len + 1);
             parent_ref = cur_ref;
@@ -368,11 +377,7 @@ private:
 
     auto HeaderMove(InnerNode* dest, InnerNode* src) -> void {
         dest->prefix_ = src->prefix_;
-        dest->prefix_len_ = src->prefix_len_;
         dest->size_ = src->size_;
-        src->prefix_ = nullptr;
-        src->prefix_len_ = 0;
-        src->size_ = 0;
     }
 
     auto NodeGrow(Node* node) -> Node* {
@@ -477,11 +482,6 @@ private:
     }
 
     auto DestoryArtNode(Node* node) -> void {
-        if (node->prefix_) {
-            mr_->deallocate(node->prefix_, node->prefix_len_);
-            node->prefix_ = nullptr;
-            node->prefix_len_ = 0;
-        }
         switch (node->type_) {
         case NodeType::Node4:
             return GetAlloctor<Node4>()->Free(node);
@@ -503,9 +503,9 @@ private:
     auto NewNodeWithPerfix(const byte* data, size_t len) -> T* {
         T* node = AllocateNode<T>();
         if (len > 0) {
-            node->prefix_len_ = len;
-            node->prefix_ = static_cast<byte*>(mr_->allocate(len));
-            std::memcpy(node->prefix_, data, len);
+            CHECK_LE(len, kMaxPrefixBytes);
+            node->prefix_.len_ = len;
+            std::memcpy(node->prefix_.data_, data, len);
         }
         return node;
     }

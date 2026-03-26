@@ -5,6 +5,7 @@
 #include "db/result.h"
 #include "redis/connection.h"
 #include "server/el_pool.h"
+#include "utils/thread_pool/thread_pool.h"
 
 #include <cstddef>
 #include <memory>
@@ -40,6 +41,7 @@ private:
     std::vector<std::shared_ptr<DB>> db_slice_;
 
     std::unique_ptr<EBRManager> ebr_mgr_;
+    utils::ThreadPool works_;
 
     // read-only
     absl::flat_hash_map<std::string, Cmd> cmd_map_;
