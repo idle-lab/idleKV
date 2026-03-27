@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <memory>
 #include <spdlog/spdlog.h>
+#include <boost/fiber/buffered_channel.hpp>
 #include <tuple>
 #include <utility>
 #include <xxhash.h>
@@ -41,21 +42,23 @@ auto IdleEngine::InitCommand() -> void {
 }
 
 
-auto IdleEngine::DispatchCmd(Connection* conn, std::vector<std::string>& args) noexcept -> ExecResult {
+auto IdleEngine::DispatchCmd(Connection* conn, std::vector<std::string>& args) noexcept -> void {
     size_t id = ThreadState::Tlocal()->PoolIndex();
+    auto& sender = conn->GetSender();
 
     auto cmd = GetCmd(args[0]);
     if (cmd == nullptr) {
-        return ExecResult::Error(fmt::format(kUnknownCmdErrFmt, args[0]));
+        return sender.SendError(fmt::format(kUnknownCmdErrFmt, args[0]));
     }
 
     if (!cmd->Verification(args)) {
-        return ExecResult::Error(fmt::format(kArgNumErrFmt, cmd->Name()));
+        return sender.SendError(fmt::format(kArgNumErrFmt, cmd->Name()));
     }
 
     if (cmd->CanExecInline()) {
         CmdContext cmdctx(conn, nullptr, id);
-        return cmd->Exec(&cmdctx, args);
+        cmd->Exec(&cmdctx, args);
+        return;
     }
 
     // asio::steady_timer timer();
@@ -64,11 +67,10 @@ auto IdleEngine::DispatchCmd(Connection* conn, std::vector<std::string>& args) n
         // timer.cancel();
     // });
 
-
     auto db_ptr = DbAt(conn->DbIndex());
     CmdContext cmdctx(conn, db_ptr, 0);
 
-    return cmd->Exec(&cmdctx, args);
+    cmd->Exec(&cmdctx, args);
 }
 
 auto IdleEngine::RegisterCmd(const std::string& name, int32_t arity, int32_t FirstKey,

@@ -31,7 +31,7 @@ private:
 };
 
 // ExecFunc is interface for command executor
-using Exector = auto (*)(CmdContext* ctx, std::vector<std::string>& args) -> ExecResult;
+using Exector = auto (*)(CmdContext* ctx, std::vector<std::string>& args) -> void;
 
 // PreFunc analyses command line when queued command to `multi`
 // returns related write keys and read keys
@@ -65,7 +65,7 @@ public:
         : name_(name), arity_(arity), first_key_(FirstKey), last_key_(LastKey), exec_(exector),
           prepare_(prepare), flags_(flags) {}
 
-    auto Exec(CmdContext* ctx, std::vector<std::string>& args) const -> ExecResult {
+    auto Exec(CmdContext* ctx, std::vector<std::string>& args) const -> void {
         return exec_(ctx, args);
     }
 

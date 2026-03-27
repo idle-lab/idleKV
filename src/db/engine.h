@@ -21,7 +21,7 @@ public:
     IdleEngine(const Config& cfg);
 
     auto Init(EventLoopPool* elp) -> void;
-    auto DispatchCmd(Connection*, std::vector<std::string>& args) noexcept -> ExecResult;
+    auto DispatchCmd(Connection*, std::vector<std::string>& args) noexcept -> void;
 
     auto DbNum() const -> size_t { return db_num_; }
     auto GetCmd(const std::string& name) -> Cmd*;

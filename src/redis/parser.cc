@@ -296,18 +296,22 @@ auto Parser::ParseOne(std::vector<std::string>& args) noexcept -> ParserResut {
 }
 
 auto Sender::SendSimpleString(std::string_view s) -> void {
+    BatchGuard bg(this);
     ec_ = wr_->WritePieces(SIMPLE_STRING_PREFIX, s, CRLF);
 }
 
 auto Sender::SendOk() -> void {
+    BatchGuard bg(this);
     ec_ = wr_->WritePieces("+OK\r\n");
 }
 
 auto Sender::SendPong() -> void {
+    BatchGuard bg(this);
     ec_ = wr_->WritePieces("+PONG\r\n");
 }
 
 auto Sender::SendBulkString(std::string_view s) -> void {
+    BatchGuard bg(this);
     ec_ = wr_->WritePieces(BULK_STRING_PREFIX, s.size(), CRLF);
     if (!ec_) {
         ec_ = wr_->WriteView(s);
@@ -318,6 +322,7 @@ auto Sender::SendBulkString(std::string_view s) -> void {
 }
 
 auto Sender::SendBulkString(const std::shared_ptr<const DataEntity>& data) -> void {
+    BatchGuard bg(this);
     if (!data) {
         SendNullBulkString();
         return;
@@ -334,14 +339,17 @@ auto Sender::SendBulkString(const std::shared_ptr<const DataEntity>& data) -> vo
 }
 
 auto Sender::SendNullBulkString() -> void {
+    BatchGuard bg(this);
     ec_ = wr_->WritePieces("$-1\r\n");
 }
 
 auto Sender::SendInteger(int64_t value) -> void {
+    BatchGuard bg(this);
     ec_ = wr_->WritePieces(INTEGER_PREFIX, value, CRLF);
 }
 
 auto Sender::SendError(std::string_view s) -> void {
+    BatchGuard bg(this);
     ec_ = wr_->WritePieces(ERROR_PREFIX, s, CRLF);
 }
 

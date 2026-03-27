@@ -17,32 +17,34 @@ auto NoKeys(const std::vector<std::string>& args)
     return {};
 }
 
-auto Ping(CmdContext*, std::vector<std::string>& args) -> ExecResult {
+auto Ping(CmdContext* ctx, std::vector<std::string>& args) -> void {
+    auto& sender = ctx->GetConnection()->GetSender();
     switch (args.size()) {
     case 1:
-        return ExecResult::Pong();
+        return sender.SendPong();
     case 2:
-        return ExecResult::SimpleString(args[1]);
+        return sender.SendSimpleString(args[1]);
     default:
-        return ExecResult::Error("ERR wrong number of arguments for 'ping' command");
+        return sender.SendError("ERR wrong number of arguments for 'ping' command");
     }
 }
 
-auto Select(CmdContext* ctx, std::vector<std::string>& args) -> ExecResult {
+auto Select(CmdContext* ctx, std::vector<std::string>& args) -> void {
+    auto& sender = ctx->GetConnection()->GetSender();
     size_t      DbIndex = 0;
     const auto* begin    = args[1].data();
     const auto* end      = begin + args[1].size();
     auto [ptr, ec]       = std::from_chars(begin, end, DbIndex);
     if (ec != std::errc{} || ptr != end) {
-        return ExecResult::Error(fmt::format(kProtocolErrFmt, "invalid DB index"));
+        return sender.SendError(fmt::format(kProtocolErrFmt, "invalid DB index"));
     }
 
     if (DbIndex >= engine->DbNum()) {
-        return ExecResult::Error("ERR DB index is out of range");
+        return sender.SendError("ERR DB index is out of range");
     }
 
     ctx->GetConnection()->SetDbIndex(DbIndex);
-    return ExecResult::Ok();
+    sender.SendOk();
 }
 
 } // namespace

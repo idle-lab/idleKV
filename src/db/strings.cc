@@ -30,40 +30,43 @@ auto SingleWriteKey(const std::vector<std::string>& args)
 
 } // namespace
 
-auto Set(CmdContext* ctx, std::vector<std::string>& args) -> ExecResult {
+auto Set(CmdContext* ctx, std::vector<std::string>& args) -> void {
+    auto& sender = ctx->GetConnection()->GetSender();
     auto res = ctx->GetDb()->Set(args[1], DataEntity::FromString(std::move(args[2])));
     if (!res.Ok()) {
-        return ExecResult::Error(kStandardErr);
+        return sender.SendError(res.Message());
     }
 
-    return ExecResult::Ok();
+    sender.SendOk();
 }
 
-auto Get(CmdContext* ctx, std::vector<std::string>& args) -> ExecResult {
+auto Get(CmdContext* ctx, std::vector<std::string>& args) -> void {
+    auto& sender = ctx->GetConnection()->GetSender();
     auto res = ctx->GetDb()->Get(args[1]);
     if (res == OpStatus::NoSuchKey) {
-        return ExecResult::Null();
+        sender.SendNullBulkString();
     }
 
     const auto& value = res.Get();
     if (!value) {
-        return ExecResult::Null();
+        return sender.SendNullBulkString();
     }
 
     if (!value->IsString()) {
-        return ExecResult::Error(kWrongTypeErr);
+        return sender.SendError(kWrongTypeErr);
     }
 
-    return ExecResult::BulkString(value);
+    sender.SendBulkString(value);
 }
 
-auto Del(CmdContext* ctx, std::vector<std::string>& args) -> ExecResult {
+auto Del(CmdContext* ctx, std::vector<std::string>& args) -> void {
+    auto& sender = ctx->GetConnection()->GetSender();
     auto res = ctx->GetDb()->Del(args[1]);
     if (res == OpStatus::NoSuchKey) {
-        return ExecResult::Integer(0);
+        return sender.SendInteger(0);
     }
 
-    return ExecResult::Integer(res.Get() ? 1 : 0);
+    sender.SendInteger(res.Get() ? 1 : 0);
 }
 
 auto InitStrings(IdleEngine* eng) -> void {

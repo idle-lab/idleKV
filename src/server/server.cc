@@ -50,7 +50,6 @@ Server::Server(const Config& cfg) {
     elp_ = std::make_unique<EventLoopPool>();
     elp_->Run();
     elp_->AwaitForeach([](size_t i, EventLoop* el) {
-        std::cout << "exec init ts\n";
         ThreadState::Init(i, el, el->ThreadId());
     });
     // check or create the data directory.
@@ -170,13 +169,11 @@ void Server::ListenAndServe() {
     elp_->AwaitForeach([this]([[maybe_unused]] size_t i, EventLoop* el) {
         for (auto& handler : handlers_) {
             handler->Init(el);
-            std::cout << "exec init heanlde\n";
         }
     });
 
     for (size_t i = 0; i < handlers_.size(); i++) {
         elp_->Dispatch([this, handler = handlers_[i].get()]() {
-            std::cout << "start accept fiber\n";
             DoAccept(handler); 
         });
     }

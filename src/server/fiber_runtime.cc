@@ -3,6 +3,7 @@
 #include "common/logger.h"
 #include "server/el_pool.h"
 #include "server/thread_state.h"
+#include <boost/system/detail/error_code.hpp>
 
 namespace boost {
 namespace fibers {
@@ -25,8 +26,11 @@ auto CurrentIoContext() -> asio::io_context& {
 auto FiberSleepFor(std::chrono::steady_clock::duration dur) -> std::error_code {
     asio::steady_timer timer(CurrentIoContext());
     timer.expires_after(dur);
-    return FiberAwait<std::error_code>(
-        [&](auto handler) { timer.async_wait(std::move(handler)); });
+
+    boost::system::error_code ec;
+    timer.async_wait(boost::fibers::asio::yield[ec]);
+
+    return ec;
 }
 
 } // namespace idlekv

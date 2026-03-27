@@ -215,39 +215,12 @@ auto Connection::HandleRequests() noexcept -> void {
         }
         std::transform(args[0].begin(), args[0].end(), args[0].begin(),
                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        auto res = engine->DispatchCmd(this, args);
-
-        switch (res.GetType()) {
-        case ExecResult::kPong:
-            GetSender().SendPong();
-            break;
-        case ExecResult::kOk:
-            GetSender().SendOk();
-            break;
-        case ExecResult::kSimpleString:
-            GetSender().SendSimpleString(res.GetString());
-            break;
-        case ExecResult::kBulkString:
-            if (res.GetData()) {
-                GetSender().SendBulkString(res.GetData());
-            } else {
-                GetSender().SendBulkString(res.GetString());
-            }
-            break;
-        case ExecResult::kNull:
-            GetSender().SendNullBulkString();
-            break;
-        case ExecResult::kInteger:
-            GetSender().SendInteger(res.GetInteger());
-            break;
-        case ExecResult::kError:
-            GetSender().SendError(res.GetString());
-            break;
-        }
 
         if (parse_res != ParserResut::HAS_MORE) {
-            s_.Flush();
+            s_.SetBatch(false);
         }
+
+        engine->DispatchCmd(this, args);
     }
 }
 

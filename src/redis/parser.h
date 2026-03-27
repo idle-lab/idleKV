@@ -279,7 +279,6 @@ private:
     std::vector<BufView> vecs_;
     std::vector<std::shared_ptr<const void>> keepalive_;
     size_t queued_size_{0};
-    std::chrono::high_resolution_clock::time_point last_ = std::chrono::high_resolution_clock::now();
 };
 
 template <typename... Ts>
@@ -396,7 +395,21 @@ private:
 
 class Sender {
 public:
-    Sender(Writer* wr) : wr_(wr) {}
+    Sender(Writer* wr) : wr_(wr) {
+    }
+
+    DISABLE_COPY_MOVE(Sender);
+
+    struct BatchGuard {
+        BatchGuard(Sender* sender) : sender_(sender) {}
+
+        ~BatchGuard() {
+            if(!sender_->IsBatched()) {
+                sender_->Flush();
+            }
+        }
+        Sender* sender_;
+    };
 
     auto SendSimpleString(std::string_view s) -> void;
     auto SendOk() -> void;
@@ -409,8 +422,9 @@ public:
 
     auto Flush() -> void;
 
+    auto SetBatch(bool batched) { batched_ = batched; }
+    auto IsBatched() const -> bool { return batched_;}
     auto GetError() const -> std::error_code { return ec_; }
-
     auto Clear() -> void {
         ec_                            = std::error_code{};
         wr_->Clear();
@@ -419,6 +433,7 @@ public:
 private:
     std::error_code ec_;
 
+    bool batched_{true};
     Writer* wr_;
 };
 
