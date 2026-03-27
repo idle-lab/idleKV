@@ -8,14 +8,11 @@
 #include "utils/pool/pool.h"
 
 #include <array>
-#include <asio/any_io_executor.hpp>
-#include <asio/awaitable.hpp>
-#include <asio/buffer.hpp>
-#include <asio/buffer_registration.hpp>
-#include <asio/io_context.hpp>
-#include <asio/registered_buffer.hpp>
-#include <asio/steady_timer.hpp>
-#include <asio/this_coro.hpp>
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/buffer_registration.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/registered_buffer.hpp>
 #include <atomic>
 #include <cstddef>
 #include <cstdlib>
@@ -57,7 +54,7 @@ public:
     RedisService(const Config& cfg) : Handler(cfg.ip_, std::atoi(cfg.port_.c_str())) {}
 
     virtual auto Init(EventLoop* el) -> void override;
-    virtual auto Handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> override;
+    virtual auto Handle(asio::ip::tcp::socket socket) -> void override;
 
     static auto Tlocal() -> ServiceTLState* { return tl_; }
 

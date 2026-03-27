@@ -4,27 +4,49 @@
 #include "common/logger.h"
 #include "utils/cpu/basic.h"
 
-#include <asio/co_spawn.hpp>
-#include <asio/use_future.hpp>
 #include <atomic>
+#include <boost/fiber/fiber.hpp>
+#include <boost/fiber/operations.hpp>
+#include <boost/fiber/scheduler.hpp>
 #include <cassert>
-#include <memory>
 #include <pthread.h>
 #include <sched.h>
 #include <spdlog/spdlog.h>
-#include <thread>
 
 namespace idlekv {
 
 auto EventLoop::Run() -> void {
-    // start the io loop on its dedicated worker thread.
-    th_ = std::jthread([this]() mutable { io_.run(); });
+    th_ = std::jthread([this]() mutable {
+        io_.restart();
+        boost::fibers::use_scheduling_algorithm<boost::fibers::asio::round_robin>(io_);
+
+        while (!io_.stopped()) {
+            if (boost::fibers::has_ready_fibers()) {
+                while (io_.poll()) {
+                }
+
+                // yield this fiber to processe pending (ready) fibers.
+                boost::this_fiber::yield();
+            } else {
+                if (!io_.run_one()) {
+                    break;
+                }
+            }
+        }
+    });
 }
 
 auto EventLoop::Stop() -> void {
-    // release the work guard first so io_.run() can exit cleanly.
-    io_.stop();
-    wg_.reset();
+    bool expected = false;
+    if (!stop_requested_.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel, std::memory_order_acquire)) {
+        return;
+    }
+
+    asio::post(io_, [this]() {
+        boost::system::error_code ec;
+        stop_waiter_.cancel(ec);
+    });
 }
 
 auto EventLoopPool::Run() -> void {

@@ -6,11 +6,9 @@
 #include "common/result.h"
 #include "db/storage/data_entity.h"
 
-#include <asio/asio.hpp>
-#include <asio/awaitable.hpp>
-#include <asio/detail/is_buffer_sequence.hpp>
-#include <asio/registered_buffer.hpp>
-#include <asiochan/asiochan.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/detail/is_buffer_sequence.hpp>
+#include <boost/asio/registered_buffer.hpp>
 #include <charconv>
 #include <chrono>
 #include <climits>
@@ -204,18 +202,18 @@ public:
     Reader(char* data, size_t size) : buf_(data, size) {}
     Reader(asio::mutable_registered_buffer buf) : buf_(static_cast<char*>(buf.data()), buf.size()), reg_buf_(buf) {}
 
-    auto ReadLineView() noexcept -> asio::awaitable<ResultT<std::string_view>>;
-    auto ReadBytesTo(char* buf, size_t len) noexcept -> asio::awaitable<ResultT<std::monostate>>;
+    auto ReadLineView() noexcept -> ResultT<std::string_view>;
+    auto ReadBytesTo(char* buf, size_t len) noexcept -> ResultT<std::monostate>;
 
-    auto Fill() -> asio::awaitable<std::error_code>;
+    auto Fill() -> std::error_code;
     auto HasMore() -> bool;
     auto Clear() -> void { buf_.Clear(); }
 
     virtual ~Reader() = default;
 protected:
-    virtual auto ReadImpl(char* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
-    virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
-    virtual auto ReadvImpl(const std::vector<Buf>& bufs) noexcept -> asio::awaitable<ResultT<size_t>> = 0;
+    virtual auto ReadImpl(char* buf, size_t size) noexcept -> ResultT<size_t> = 0;
+    virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept -> ResultT<size_t> = 0;
+    virtual auto ReadvImpl(const std::vector<Buf>& bufs) noexcept -> ResultT<size_t> = 0;
 
 private:
     // buf_ and reg_buf_ refer to the same underlying memory region.
@@ -234,31 +232,29 @@ public:
     // slice to vecs_. When the current buffer cannot fit the whole packet,
     // this coroutine flushes pending output before growing the buffer.
     template <typename... Ts>
-    auto WritePieces(Ts&&... pieces) -> asio::awaitable<std::error_code>;
+    auto WritePieces(Ts&&... pieces) -> std::error_code;
 
     // caller should ensure that s is valid until the next flush.
-    auto WriteView(std::string_view s) -> asio::awaitable<std::error_code>;
+    auto WriteView(std::string_view s) -> std::error_code;
 
     // caller should ensure that s is valid until the next flush.
-    auto Write(std::string_view s) -> asio::awaitable<std::error_code>;
+    auto Write(std::string_view s) -> std::error_code;
 
     // Queue an external slice without copying and keep `holder` alive until the
     // pending reply batch is flushed.
     auto WriteRef(std::string_view s, std::shared_ptr<const void> holder)
-        -> asio::awaitable<std::error_code>;
+        -> std::error_code;
 
     // Flush all queued slices, including both owned buffer slices and
     // externally referenced views added via write().
-    auto Flush() -> asio::awaitable<std::error_code>;
+    auto Flush() -> std::error_code;
 
     auto Clear() -> void { ResetWriteState(); }
 
     virtual ~Writer() = default;
 protected:
-    virtual auto WriteImpl(const char* data, size_t size) noexcept
-        -> asio::awaitable<ResultT<size_t>> = 0;
-    virtual auto WritevImpl(const std::vector<BufView>& bufs) noexcept
-        -> asio::awaitable<ResultT<size_t>> = 0;
+    virtual auto WriteImpl(const char* data, size_t size) noexcept -> ResultT<size_t> = 0;
+    virtual auto WritevImpl(const std::vector<BufView>& bufs) noexcept -> ResultT<size_t> = 0;
 
 private:
     auto ResetWriteState() -> void;
@@ -287,20 +283,20 @@ private:
 };
 
 template <typename... Ts>
-auto Writer::WritePieces(Ts&&... pieces) -> asio::awaitable<std::error_code> {
+auto Writer::WritePieces(Ts&&... pieces) -> std::error_code {
     const size_t total_size =
         (size_t{0} + ... + WritePieceSize(std::forward<Ts>(pieces)));
 
     if (total_size == 0) {
-        co_return std::error_code{};
+        return std::error_code{};
     }
 
     CHECK_LT(total_size, kDefaultWriteBufferSize);
 
     if (buf_.WriteSize() < total_size || queued_size_ + total_size >= kMaxReplyFlushBytes) {
-        auto ec = co_await Flush();
+        auto ec = Flush();
         if (ec) {
-            co_return ec;
+            return ec;
         }
     }
 
@@ -312,7 +308,7 @@ auto Writer::WritePieces(Ts&&... pieces) -> asio::awaitable<std::error_code> {
     queued_size_ += total_size;
     buf_.Commit(total_size);
     vecs_.emplace_back(begin, total_size);
-    co_return std::error_code{};
+    return std::error_code{};
 }
 
 inline auto Writer::WritePieceSize(std::string_view piece) const -> size_t { return piece.size(); }
@@ -390,7 +386,7 @@ public:
     Parser(Reader* rd) : rd_(rd) {}
 
     // parse a Redis command
-    auto ParseOne(std::vector<std::string>& args) noexcept -> asio::awaitable<ParserResut>;
+    auto ParseOne(std::vector<std::string>& args) noexcept -> ParserResut;
 
     auto Clear() -> void { rd_->Clear(); }
 
@@ -402,16 +398,16 @@ class Sender {
 public:
     Sender(Writer* wr) : wr_(wr) {}
 
-    auto SendSimpleString(std::string_view s) -> asio::awaitable<void>;
-    auto SendOk() -> asio::awaitable<void>;
-    auto SendPong() -> asio::awaitable<void>;
-    auto SendBulkString(std::string_view s) -> asio::awaitable<void>;
-    auto SendBulkString(const std::shared_ptr<const DataEntity>& data) -> asio::awaitable<void>;
-    auto SendNullBulkString() -> asio::awaitable<void>;
-    auto SendInteger(int64_t value) -> asio::awaitable<void>;
-    auto SendError(std::string_view s) -> asio::awaitable<void>;
+    auto SendSimpleString(std::string_view s) -> void;
+    auto SendOk() -> void;
+    auto SendPong() -> void;
+    auto SendBulkString(std::string_view s) -> void;
+    auto SendBulkString(const std::shared_ptr<const DataEntity>& data) -> void;
+    auto SendNullBulkString() -> void;
+    auto SendInteger(int64_t value) -> void;
+    auto SendError(std::string_view s) -> void;
 
-    auto Flush() -> asio::awaitable<void>;
+    auto Flush() -> void;
 
     auto GetError() const -> std::error_code { return ec_; }
 

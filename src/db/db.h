@@ -5,7 +5,6 @@
 #include "db/storage/result.h"
 #include "db/storage/data_entity.h"
 
-#include <asio/awaitable.hpp>
 #include <memory>
 #include <mimalloc.h>
 #include <string>

@@ -18,15 +18,12 @@ target_include_directories(idlekv_core
 target_link_libraries(idlekv_core
     PUBLIC
         third_part
+        Boost::fiber
+        Boost::context
+        Boost::system
+        Boost::thread
         ${XXHASH_LIBRARY}
         absl::flat_hash_map
-)
-
-target_compile_definitions(idlekv_core
-    PUBLIC
-        ASIOCHAN_USE_STANDALONE_ASIO=ON
-        ASIO_NO_EXCEPTIONS=1
-        IDLEKV_ENABLE_CORO_TRACKING=1
 )
 
 if (DISABLE_CHECK)
@@ -36,7 +33,7 @@ if (DISABLE_CHECK)
     )
 endif()
 
-option(ENABLE_ASIO_IO_URING "Enable Asio io_uring backend" ON)
+option(ENABLE_ASIO_IO_URING "Enable Asio io_uring backend" OFF)
 
 if (ENABLE_ASIO_IO_URING)
     find_library(LIBURING_LIBRARY uring)
@@ -48,9 +45,9 @@ if (ENABLE_ASIO_IO_URING)
 
     target_compile_definitions(idlekv_core
         PUBLIC
-            ASIO_HAS_IO_URING=1
-            ASIO_DISABLE_EPOLL=1
-            ASIO_HAS_IO_URING_AS_DEFAULT=1
+            BOOST_ASIO_HAS_IO_URING=1
+            BOOST_ASIO_DISABLE_EPOLL=1
+            BOOST_ASIO_HAS_IO_URING_AS_DEFAULT=1
     )
 
     target_link_libraries(idlekv_core
@@ -60,7 +57,7 @@ if (ENABLE_ASIO_IO_URING)
 else()
     target_compile_definitions(idlekv_core
         PUBLIC
-            ASIO_DISABLE_IO_URING=1
+            BOOST_ASIO_DISABLE_IO_URING=1
     )
 endif()
 

@@ -4,7 +4,6 @@
 #include "db/result.h"
 #include "redis/connection.h"
 
-#include <asio/awaitable.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <string>

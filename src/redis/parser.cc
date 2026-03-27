@@ -4,8 +4,7 @@
 #include "common/result.h"
 
 #include <algorithm>
-#include <asio/awaitable.hpp>
-#include <asio/buffer_registration.hpp>
+#include <boost/asio/buffer_registration.hpp>
 #include <charconv>
 #include <climits>
 #include <cstddef>
@@ -80,7 +79,7 @@ auto DecimalSize(T value) -> size_t {
 } // namespace
 
 
-auto Reader::ReadLineView() noexcept -> asio::awaitable<ResultT<std::string_view>> {
+auto Reader::ReadLineView() noexcept -> ResultT<std::string_view> {
     for (;;) {
         auto rv  = buf_.ReadView();
         // auto pos = static_cast<const byte*>(std::memchr(rv.Data(), '\n', rv.Size()));
@@ -88,28 +87,27 @@ auto Reader::ReadLineView() noexcept -> asio::awaitable<ResultT<std::string_view
         if (pos == rv.End()) {
             CHECK(rv.Size() < buf_.Capacity()) << "line length exceeds buffer size";
             buf_.Defrag();
-            auto ec = co_await Fill();
+            auto ec = Fill();
             if (ec) {
-                co_return ec;
+                return ec;
             }
             continue;
         }
 
         std::string_view line(rv.Data(), pos - rv.Data() + 1);
         buf_.Consume(pos + 1 - rv.Data());
-        co_return line;
+        return line;
     }
 }
 
-auto Reader::ReadBytesTo(char* buf, size_t len) noexcept
-    -> asio::awaitable<ResultT<std::monostate>> {
+auto Reader::ReadBytesTo(char* buf, size_t len) noexcept -> ResultT<std::monostate> {
     size_t offset = 0;
 
     auto rv = buf_.ReadView();
     if (rv.Size() >= len) {
         std::memcpy(buf + offset, rv.Data(), len);
         buf_.Consume(len);
-        co_return std::monostate{};
+        return std::monostate{};
     }
 
     std::memcpy(buf + offset, rv.Data(), rv.Size());
@@ -124,9 +122,9 @@ auto Reader::ReadBytesTo(char* buf, size_t len) noexcept
     bufs_[1]= Buf{wv.Data(), wv.Size()};
 
     for (;;) {
-        auto res = co_await ReadvImpl(bufs_);
+        auto res = ReadvImpl(bufs_);
         if (!res.Ok()) {
-            co_return res.Err();
+            return res.Err();
         }
         if (res.Value() < len) {
             offset +=  res.Value();
@@ -134,26 +132,26 @@ auto Reader::ReadBytesTo(char* buf, size_t len) noexcept
             bufs_[0] = Buf{buf + offset, len};
         } else {
             buf_.Commit(res.Value() - len);
-            co_return std::monostate{};
+            return std::monostate{};
         }
     }
 }
 
-auto Reader::Fill() -> asio::awaitable<std::error_code> {
+auto Reader::Fill() -> std::error_code {
     ResultT<size_t> res{std::error_code{}};
     if (reg_buf_.data()) {
         auto reg_wv = asio::buffer(reg_buf_ + buf_.WriteOffset(), buf_.WriteSize());
-        res  = co_await ReadImpl(reg_wv);
+        res  = ReadImpl(reg_wv);
     } else {
         auto wv  = buf_.WriteView();
-        res = co_await ReadImpl(wv.Data(), wv.Size());
+        res = ReadImpl(wv.Data(), wv.Size());
     }
 
     if (!res.Ok()) {
-        co_return res.Err();
+        return res.Err();
     }
     buf_.Commit(res.Value());
-    co_return std::error_code{};
+    return std::error_code{};
 }
 
 auto Reader::HasMore() -> bool { return buf_.Buffered() > 0; }
@@ -165,30 +163,30 @@ auto Writer::ResetWriteState() -> void {
     queued_size_ = 0;
 }
 
-auto Writer::WriteView(std::string_view s) -> asio::awaitable<std::error_code> {
+auto Writer::WriteView(std::string_view s) -> std::error_code {
     if (s.empty()) {
-        co_return std::error_code{};
+        return std::error_code{};
     }
 
     if (!vecs_.empty() &&
         (vecs_.size() >= kMaxReplyFlushCount || queued_size_ + s.size() >= kMaxReplyFlushBytes)) {
-        auto ec = co_await Flush();
+        auto ec = Flush();
         if (ec) {
-            co_return ec;
+            return ec;
         }
     }
 
     queued_size_ += s.size();
     vecs_.emplace_back(s.data(), s.size());
 
-    co_return std::error_code{};
+    return std::error_code{};
 }
 
-auto Writer::Write(std::string_view s) -> asio::awaitable<std::error_code> {
+auto Writer::Write(std::string_view s) -> std::error_code {
     if (buf_.WriteSize() < s.size() || queued_size_ + s.size() >= kMaxReplyFlushBytes) {
-        auto ec = co_await Flush();
+        auto ec = Flush();
         if (ec) {
-            co_return ec;
+            return ec;
         }
     }
 
@@ -204,20 +202,20 @@ auto Writer::Write(std::string_view s) -> asio::awaitable<std::error_code> {
     buf_.Commit(s.size());
     vecs_.emplace_back(begin, s.size());
 
-    co_return std::error_code{};
+    return std::error_code{};
 }
 
 auto Writer::WriteRef(std::string_view s, std::shared_ptr<const void> holder)
-    -> asio::awaitable<std::error_code> {
+    -> std::error_code {
     if (s.empty()) {
-        co_return std::error_code{};
+        return std::error_code{};
     }
 
     if (!vecs_.empty() &&
         (vecs_.size() >= kMaxReplyFlushCount || queued_size_ + s.size() >= kMaxReplyFlushBytes)) {
-        auto ec = co_await Flush();
+        auto ec = Flush();
         if (ec) {
-            co_return ec;
+            return ec;
         }
     }
 
@@ -227,55 +225,55 @@ auto Writer::WriteRef(std::string_view s, std::shared_ptr<const void> holder)
         keepalive_.push_back(std::move(holder));
     }
 
-    co_return std::error_code{};
+    return std::error_code{};
 }
 
-auto Writer::Flush() -> asio::awaitable<std::error_code> {
+auto Writer::Flush() -> std::error_code {
     if (vecs_.empty()) {
-        co_return std::error_code{};
+        return std::error_code{};
     }
 
     // vecs_ preserves the original enqueue order, so a single writev keeps
     // mixed owned/external pieces in the same packet order they were queued.
-    auto res = co_await WritevImpl(vecs_);
+    auto res = WritevImpl(vecs_);
     ResetWriteState();
-    co_return res.Err();
+    return res.Err();
 }
 
 
-auto Parser::ParseOne(std::vector<std::string>& args) noexcept -> asio::awaitable<ParserResut> {
-    auto headerRes = co_await rd_->ReadLineView();
+auto Parser::ParseOne(std::vector<std::string>& args) noexcept -> ParserResut {
+    auto headerRes = rd_->ReadLineView();
     if (!headerRes.Ok()) {
-        co_return headerRes.Err();
+        return headerRes.Err();
     }
 
     auto& header = headerRes.Value();
     if (header[0] != DataType::Arrays) [[unlikely]] {
-        co_return ParserResut(ParserResut::PROTOCOL_ERROR, fmt::format("need '*' but '{}'", header[0]));
+        return ParserResut(ParserResut::PROTOCOL_ERROR, fmt::format("need '*' but '{}'", header[0]));
     }
     int arrLen;
     auto [ptr, err] = std::from_chars(header.data() + 1, header.data() + header.size() - 2, arrLen);
     if (err != std::errc()) [[unlikely]] {
-        co_return std::make_error_code(err);
+        return std::make_error_code(err);
     }
 
     args.resize(arrLen);
     for (int i = 0; i < arrLen; ++i) {
-        auto lineRes = co_await rd_->ReadLineView();
+        auto lineRes = rd_->ReadLineView();
         if (!lineRes.Ok()) {
-            co_return lineRes.Err();
+            return lineRes.Err();
         }
 
         auto& line = lineRes.Value();
         if (line.size() < 4 || line[0] != DataType::BulkString) [[unlikely]] {
-            co_return ParserResut(ParserResut::PROTOCOL_ERROR, fmt::format("need $ but '{}'", line[0]));
+            return ParserResut(ParserResut::PROTOCOL_ERROR, fmt::format("need $ but '{}'", line[0]));
         }
 
         int strLen;
         auto [ptr, err] = std::from_chars(line.data() + 1,
                                           line.data() + line.size() - 2 /* exclude CRLF */, strLen);
         if (err != std::errc()) [[unlikely]] {
-            co_return std::make_error_code(err);
+            return std::make_error_code(err);
         }
 
         // empty bulk string
@@ -285,70 +283,70 @@ auto Parser::ParseOne(std::vector<std::string>& args) noexcept -> asio::awaitabl
 
         args[i].resize(strLen + 2);
 
-        auto bytesRes = co_await rd_->ReadBytesTo(args[i].data(), strLen + 2 /* include CRLF */);
+        auto bytesRes = rd_->ReadBytesTo(args[i].data(), strLen + 2 /* include CRLF */);
         if (!bytesRes.Ok()) {
-            co_return bytesRes.Err();
+            return bytesRes.Err();
         }
 
         // pop the trailing CRLF
         args[i].resize(strLen);
     }
-    co_return ParserResut(rd_->HasMore() ? ParserResut::HAS_MORE : ParserResut::OK,
-                          std::move(args));
+    return ParserResut(rd_->HasMore() ? ParserResut::HAS_MORE : ParserResut::OK,
+                       std::move(args));
 }
 
-auto Sender::SendSimpleString(std::string_view s) -> asio::awaitable<void> {
-    ec_ = co_await wr_->WritePieces(SIMPLE_STRING_PREFIX, s, CRLF);
+auto Sender::SendSimpleString(std::string_view s) -> void {
+    ec_ = wr_->WritePieces(SIMPLE_STRING_PREFIX, s, CRLF);
 }
 
-auto Sender::SendOk() -> asio::awaitable<void> {
-    ec_ = co_await wr_->WritePieces("+OK\r\n");
+auto Sender::SendOk() -> void {
+    ec_ = wr_->WritePieces("+OK\r\n");
 }
 
-auto Sender::SendPong() -> asio::awaitable<void> {
-    ec_ = co_await wr_->WritePieces("+PONG\r\n");
+auto Sender::SendPong() -> void {
+    ec_ = wr_->WritePieces("+PONG\r\n");
 }
 
-auto Sender::SendBulkString(std::string_view s) -> asio::awaitable<void> {
-    ec_ = co_await wr_->WritePieces(BULK_STRING_PREFIX, s.size(), CRLF);
+auto Sender::SendBulkString(std::string_view s) -> void {
+    ec_ = wr_->WritePieces(BULK_STRING_PREFIX, s.size(), CRLF);
     if (!ec_) {
-        ec_ = co_await wr_->WriteView(s);
+        ec_ = wr_->WriteView(s);
     }
     if (!ec_) {
-        ec_ = co_await wr_->WritePieces(CRLF);
+        ec_ = wr_->WritePieces(CRLF);
     }
 }
 
-auto Sender::SendBulkString(const std::shared_ptr<const DataEntity>& data) -> asio::awaitable<void> {
+auto Sender::SendBulkString(const std::shared_ptr<const DataEntity>& data) -> void {
     if (!data) {
-        co_await SendNullBulkString();
-        co_return;
+        SendNullBulkString();
+        return;
     }
 
     const auto& value = data->AsString();
-    ec_ = co_await wr_->WritePieces(BULK_STRING_PREFIX, value.size(), CRLF);
+    ec_ = wr_->WritePieces(BULK_STRING_PREFIX, value.size(), CRLF);
     if (!ec_) {
-        ec_ = co_await wr_->WriteRef(value, data);
+        ec_ = wr_->WriteRef(value, data);
     }
     if (!ec_) {
-        ec_ = co_await wr_->Write(CRLF);
+        ec_ = wr_->Write(CRLF);
     }
 }
 
-auto Sender::SendNullBulkString() -> asio::awaitable<void> {
-    ec_ = co_await wr_->WritePieces("$-1\r\n");
+auto Sender::SendNullBulkString() -> void {
+    ec_ = wr_->WritePieces("$-1\r\n");
 }
 
-auto Sender::SendInteger(int64_t value) -> asio::awaitable<void> {
-    ec_ = co_await wr_->WritePieces(INTEGER_PREFIX, value, CRLF);
+auto Sender::SendInteger(int64_t value) -> void {
+    ec_ = wr_->WritePieces(INTEGER_PREFIX, value, CRLF);
 }
 
-auto Sender::SendError(std::string_view s) -> asio::awaitable<void> {
-    ec_ = co_await wr_->WritePieces(ERROR_PREFIX, s, CRLF);
+auto Sender::SendError(std::string_view s) -> void {
+    ec_ = wr_->WritePieces(ERROR_PREFIX, s, CRLF);
 }
 
-auto Sender::Flush() -> asio::awaitable<void> {
-    ec_ = co_await wr_->Flush();
+auto Sender::Flush() -> void {
+    ec_ = wr_->Flush();
 }
 
 } // namespace idlekv

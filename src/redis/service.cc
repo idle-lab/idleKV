@@ -5,18 +5,8 @@
 #include "redis/parser.h"
 
 #include <array>
-#include <asio/as_tuple.hpp>
-#include <asio/asio/error.hpp>
-#include <asio/awaitable.hpp>
-#include <asio/buffer.hpp>
-#include <asio/buffer_registration.hpp>
-#include <asio/co_spawn.hpp>
-#include <asio/detached.hpp>
-#include <asio/error.hpp>
-#include <asio/post.hpp>
-#include <asio/use_awaitable.hpp>
-#include <asiochan/asiochan.hpp>
-#include <asiochan/select.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/buffer_registration.hpp>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -80,7 +70,7 @@ auto RedisService::ServiceTLState::FreeBuffer(size_t i) -> void {
 }
 
 
-auto RedisService::Handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> {
+auto RedisService::Handle(asio::ip::tcp::socket socket) -> void {
     auto& ConnList = Tlocal()->ConnList();
     auto& ConnPool = Tlocal()->ConnPool();
 
@@ -90,7 +80,7 @@ auto RedisService::Handle(asio::ip::tcp::socket socket) -> asio::awaitable<void>
     ConnList.emplace_front(conn.get());
     auto it = ConnList.begin();
 
-    co_await conn->HandleRequests();
+    conn->HandleRequests();
 
     ConnList.erase(it);
 

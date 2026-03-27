@@ -12,6 +12,14 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE "Debug")
 endif()
 
+# Prefer the system Boost toolchain over any active Conda environment so the
+# linked C++ runtime matches /usr/bin/g++.
+if(DEFINED ENV{CONDA_PREFIX} AND
+   EXISTS "/usr/lib/x86_64-linux-gnu/cmake/Boost-1.83.0/BoostConfig.cmake")
+    set(Boost_DIR "/usr/lib/x86_64-linux-gnu/cmake/Boost-1.83.0"
+        CACHE PATH "Preferred Boost config" FORCE)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(PROJECT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
@@ -28,13 +36,14 @@ endif()
 
 # 查找依赖
 find_package(Threads REQUIRED)
+find_package(Boost REQUIRED COMPONENTS fiber context system thread)
 find_library(XXHASH_LIBRARY xxhash REQUIRED)
 
 include(FetchContent)
 
 FetchContent_Declare(
   abseil
-  GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
+  GIT_REPOSITORY git@github.com:abseil/abseil-cpp.git
   GIT_TAG 20240116.2
 )
 

@@ -2,13 +2,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "common/asio_no_exceptions.h"
-#include "server/el_pool.h"
 
-#include <asio/awaitable.hpp>
-#include <asio/co_spawn.hpp>
-#include <asio/detached.hpp>
-#include <asio/io_context.hpp>
-#include <asio/ip/tcp.hpp>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -17,6 +11,8 @@
 #include <thread>
 
 namespace idlekv {
+
+class EventLoop;
 
 // stores per-thread runtime state such as allocator heap and bound event loop.
 class ThreadState {

@@ -9,14 +9,6 @@
 #include "server/el_pool.h"
 #include "server/thread_state.h"
 
-#include <asio/as_tuple.hpp>
-#include <asio/awaitable.hpp>
-#include <asio/dispatch.hpp>
-#include <asio/error.hpp>
-#include <asio/steady_timer.hpp>
-#include <asio/use_awaitable.hpp>
-#include <asio/use_future.hpp>
-#include <asiochan/channel.hpp>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -34,7 +26,6 @@ IdleEngine::IdleEngine(const Config& cfg) : db_num_(cfg.db_num_) {}
 
 auto IdleEngine::Init(EventLoopPool* elp) -> void {
     InitCommand();
-    works_.Start();
     ebr_mgr_ = std::make_unique<EBRManager>();
     ebr_mgr_->Init(elp);
     for (size_t i = 0; i < db_num_; ++i) {
@@ -72,6 +63,7 @@ auto IdleEngine::DispatchCmd(Connection* conn, std::vector<std::string>& args) n
     // works_.Post([&](){
         // timer.cancel();
     // });
+
 
     auto db_ptr = DbAt(conn->DbIndex());
     CmdContext cmdctx(conn, db_ptr, 0);

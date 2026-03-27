@@ -6,21 +6,19 @@
 #include "server/handler.h"
 #include "server/thread_state.h"
 
-#include <asio.hpp>
-#include <asio/ip/tcp.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <memory>
 #include <vector>
 
 namespace idlekv {
-
-using asio::awaitable;
 
 // coordinates listeners, event loops, and request handlers for the server process.
 class Server {
 public:
     Server(const Config& cfg);
 
-    auto DoAccept(Handler* h) -> asio::awaitable<void>;
+    auto DoAccept(Handler* h) -> void;
 
     auto PickUpConnEl(asio::ip::tcp::socket& sock) -> EventLoop*;
 

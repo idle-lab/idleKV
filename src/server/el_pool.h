@@ -1,19 +1,23 @@
 #pragma once
 
 #include "common/asio_no_exceptions.h"
+#include "server/fiber_runtime.h"
+#include "server/thread_state.h"
 #include "utils/cpu/basic.h"
 
-#include <asio/awaitable.hpp>
-#include <asio/co_spawn.hpp>
-#include <asio/detached.hpp>
-#include <asio/executor_work_guard.hpp>
-#include <asio/io_context.hpp>
-#include <asio/post.hpp>
-#include <asio/use_future.hpp>
+#include <barrier>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <atomic>
+#include <boost/fiber/condition_variable.hpp>
+#include <boost/fiber/future/async.hpp>
+#include <boost/fiber/policy.hpp>
 #include <chrono>
 #include <concepts>
 #include <cstddef>
+#include <functional>
 #include <future>
 #include <latch>
 #include <memory>
@@ -30,7 +34,8 @@ constexpr auto kMaxBusyCpuTime = std::chrono::microseconds(100);
 // manages a single io_context thread and runs submitted tasks on its bound cpu.
 class EventLoop {
 public:
-    EventLoop(unsigned cpu) : io_(1), wg_(asio::make_work_guard(io_)), cpu_(cpu) {}
+    EventLoop(unsigned cpu)
+        : io_(1), cpu_(cpu), stop_waiter_(io_) {}
 
     auto Run() -> void;
 
@@ -42,11 +47,40 @@ public:
         });
     }
 
-    // dispatch a function
     template <class Fn, class... Args>
         requires std::invocable<Fn, Args...>
-    auto Dispatch(Fn&& f, Args&&... args) {
+    auto Dispatch(Fn&& f, Args&&... args) -> void {
+        auto task = std::make_shared<std::tuple<std::decay_t<Fn>, std::decay_t<Args>...>>(
+            std::forward<Fn>(f), std::forward<Args>(args)...);
+        asio::post(io_, [task]() mutable {
+            idlekv::LaunchFiber([task = std::move(task)]() mutable {
+                std::apply(
+                    [](auto& fn, auto&... inner_args) {
+                        std::invoke(fn, std::move(inner_args)...);
+                    },
+                    *task);
+            });
+        });
+    }
+
+    template <class Fn, class... Args>
+        requires std::invocable<Fn, Args...>
+    auto Submit(Fn&& f, Args&&... args) {
         using R = std::invoke_result_t<Fn, Args...>;
+
+        if (ThreadState::Tlocal() != nullptr && ThreadState::Tlocal()->GetEventLoop() == this) {
+            std::promise<R> prom;
+            auto            fut = prom.get_future();
+
+            if constexpr (std::is_void_v<R>) {
+                std::invoke(std::forward<Fn>(f), std::forward<Args>(args)...);
+                prom.set_value();
+            } else {
+                prom.set_value(std::invoke(std::forward<Fn>(f), std::forward<Args>(args)...));
+            }
+
+            return fut;
+        }
 
         auto task = std::make_shared<std::packaged_task<R()>>(
             [fn = std::forward<Fn>(f), ... args = std::forward<Args>(args)]() mutable {
@@ -54,28 +88,17 @@ public:
             });
         auto fut = task->get_future();
 
-        asio::post(io_, [task]() { (*task)(); });
+        asio::post(io_, [task]() mutable {
+            idlekv::LaunchFiber([task = std::move(task)]() mutable { (*task)(); });
+        });
         return std::future<R>(std::move(fut));
-    }
-
-    // dispatch a coroutine
-    template <class RetType>
-    auto Dispatch(asio::awaitable<RetType>&& aw) -> void {
-        return asio::co_spawn(io_, std::move(aw), asio::detached);
     }
 
     // wait for the function to finish executing and return the result.
     template <class Fn, class... Args>
         requires std::invocable<Fn, Args...>
     auto AwaitDispatch(Fn&& f, Args&&... args) {
-        auto fut = Dispatch(std::forward<Fn>(f), std::forward<Args>(args)...);
-        return fut.get();
-    }
-
-    // wait for the coroutine to finish executing and return the result.
-    template <class RetType>
-    auto AwaitDispatch(asio::awaitable<RetType>&& aw) -> RetType {
-        auto fut = asio::co_spawn(io_, std::move(aw), asio::use_future);
+        auto fut = Submit(std::forward<Fn>(f), std::forward<Args>(args)...);
         return fut.get();
     }
 
@@ -88,8 +111,9 @@ public:
 
 private:
     asio::io_context                                           io_;
-    asio::executor_work_guard<asio::io_context::executor_type> wg_;
     unsigned                                                   cpu_;
+    asio::steady_timer                                         stop_waiter_;
+    std::atomic_bool                                           stop_requested_{false};
 
     std::jthread th_;
 };
@@ -102,7 +126,7 @@ public:
         std::optional<std::conditional_t<std::is_void_v<RetType>, std::monostate, RetType>>;
 
     EventLoopPool(size_t PoolSize = 0)
-        : pool_size_(PoolSize > 0 ? PoolSize : 3 * utils::GetOnlineCpusNum()) {}
+        : pool_size_(PoolSize > 0 ? PoolSize : utils::GetOnlineCpusNum()) {}
 
     auto Run() -> void;
 
@@ -117,7 +141,7 @@ public:
         for (size_t i = 0; i < pool_size_; i++) {
             // f must be copied, it can not be moved, because we dsitribute it into
             // multiple EventLoop.
-            els_[i]->Dispatch([this, &l, i, f]() {
+            els_[i]->Post([this, &l, i, f]() {
                 f(i, els_[i].get());
                 l.count_down();
             });
@@ -142,27 +166,14 @@ public:
         }
     }
 
-    template <class RetType>
-    auto AwaitDispatch(asio::awaitable<RetType>&& aw) -> await_optional_t<RetType> {
-        if (!is_running_.load(std::memory_order_acquire)) {
-            return std::nullopt;
-        }
-
-        if constexpr (std::is_void_v<RetType>) {
-            PickUpEl()->AwaitDispatch(std::move(aw));
-            return std::monostate{};
-        } else {
-            return PickUpEl()->AwaitDispatch(std::move(aw));
-        }
-    }
-
-    // dispatch a coroutine
-    template <class RetType>
-    auto Dispatch(asio::awaitable<RetType> aw) -> void {
+    template <class Fn, class... Args>
+        requires std::invocable<Fn, Args...>
+    auto Dispatch(Fn&& f, Args&&... args) -> void {
         if (!is_running_.load(std::memory_order_acquire)) {
             return;
         }
-        return PickUpEl()->Dispatch(std::move(aw));
+
+        PickUpEl()->Dispatch(std::forward<Fn>(f), std::forward<Args>(args)...);
     }
 
     auto PickUpEl() -> EventLoop*;
