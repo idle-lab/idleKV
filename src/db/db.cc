@@ -4,8 +4,6 @@
 
 namespace idlekv {
 
-DB::DB() : prime_() {}
-
 auto DB::Locks(const std::vector<std::string>& ws, const std::vector<std::string>& rs) -> bool {
     (void)ws;
     (void)rs;

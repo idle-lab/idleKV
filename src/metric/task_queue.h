@@ -97,12 +97,11 @@ public:
                 std::max(std::chrono::duration<double>(now - last_report_at_).count(), 1e-9);
             last_report_at_ = now;
 
-            const auto enqueue_count = enqueue_count_.exchange(0, std::memory_order_acq_rel);
+            const auto enqueue_count   = enqueue_count_.exchange(0, std::memory_order_acq_rel);
             const auto completed_count = completed_count_.exchange(0, std::memory_order_acq_rel);
-            const auto total_completed =
-                total_completed_count_.load(std::memory_order_relaxed);
-            const auto pending_max   = window_max_pending_.exchange(0, std::memory_order_acq_rel);
-            const auto pending_now   = pending_tasks_.load(std::memory_order_relaxed);
+            const auto total_completed = total_completed_count_.load(std::memory_order_relaxed);
+            const auto pending_max     = window_max_pending_.exchange(0, std::memory_order_acq_rel);
+            const auto pending_now     = pending_tasks_.load(std::memory_order_relaxed);
             const auto wake_to_first_task_count =
                 wake_to_first_task_count_.exchange(0, std::memory_order_acq_rel);
             const auto wake_to_first_task_ns =
@@ -127,9 +126,9 @@ public:
                 lock_wait_samples.swap(lock_wait_samples_);
             }
 
-            const bool has_window_activity =
-                enqueue_count != 0 || completed_count != 0 || pending_max != 0 ||
-                wake_to_first_task_count != 0 || lock_acquires != 0;
+            const bool has_window_activity = enqueue_count != 0 || completed_count != 0 ||
+                                             pending_max != 0 || wake_to_first_task_count != 0 ||
+                                             lock_acquires != 0;
             if (!has_window_activity && pending_now == last_reported_pending_) {
                 return;
             }
@@ -148,7 +147,8 @@ public:
             const auto lock_p99 = Percentile(lock_wait_samples, 0.99);
             const auto lock_max = lock_wait_samples.empty() ? 0 : lock_wait_samples.back();
             const auto wake_to_first_task_avg =
-                wake_to_first_task_count == 0 ? 0 : wake_to_first_task_ns / wake_to_first_task_count;
+                wake_to_first_task_count == 0 ? 0
+                                              : wake_to_first_task_ns / wake_to_first_task_count;
             const auto total_wake_to_first_task_avg =
                 total_wake_to_first_task_count == 0
                     ? 0
@@ -156,9 +156,9 @@ public:
             const auto completed_rate = static_cast<double>(completed_count) / elapsed_seconds;
 
             const auto contention_ratio =
-                lock_acquires == 0 ? 0.0
-                                   : (100.0 * static_cast<double>(contended) /
-                                      static_cast<double>(lock_acquires));
+                lock_acquires == 0
+                    ? 0.0
+                    : (100.0 * static_cast<double>(contended) / static_cast<double>(lock_acquires));
 
             spdlog::info(
                 "[task-queue:{}] enqueue_count={} completed_count={} completed_rate={:.2f} task/s "
@@ -168,15 +168,13 @@ public:
                 "wake_to_first_task_max={} total_wake_to_first_task_avg={} "
                 "lock_acquires={} contended={} contention={:.2f}% lock_sampled={} "
                 "lock_wait_p50={} lock_wait_p95={} lock_wait_p99={} lock_wait_max={}",
-                name_, enqueue_count, completed_count, completed_rate, total_completed,
-                pending_now, pending_max, depth_samples.size(), depth_p50, depth_p95, depth_p99,
-                depth_max, wake_to_first_task_count,
-                FormatDurationNs(wake_to_first_task_avg),
+                name_, enqueue_count, completed_count, completed_rate, total_completed, pending_now,
+                pending_max, depth_samples.size(), depth_p50, depth_p95, depth_p99, depth_max,
+                wake_to_first_task_count, FormatDurationNs(wake_to_first_task_avg),
                 FormatDurationNs(wake_to_first_task_max),
                 FormatDurationNs(total_wake_to_first_task_avg), lock_acquires, contended,
                 contention_ratio, lock_wait_samples.size(), FormatDurationNs(lock_p50),
-                FormatDurationNs(lock_p95), FormatDurationNs(lock_p99),
-                FormatDurationNs(lock_max));
+                FormatDurationNs(lock_p95), FormatDurationNs(lock_p99), FormatDurationNs(lock_max));
         }
 
     private:
@@ -244,29 +242,29 @@ public:
             }
         }
 
-        std::string            name_;
-        std::atomic<uint64_t>  enqueue_count_{0};
-        std::atomic<uint64_t>  completed_count_{0};
-        std::atomic<uint64_t>  total_completed_count_{0};
-        std::atomic<uint64_t>  pending_tasks_{0};
-        std::atomic<uint64_t>  window_max_pending_{0};
-        std::atomic<uint64_t>  depth_sequence_{0};
-        std::mutex             depth_mu_;
-        std::vector<uint64_t>  depth_samples_;
+        std::string           name_;
+        std::atomic<uint64_t> enqueue_count_{0};
+        std::atomic<uint64_t> completed_count_{0};
+        std::atomic<uint64_t> total_completed_count_{0};
+        std::atomic<uint64_t> pending_tasks_{0};
+        std::atomic<uint64_t> window_max_pending_{0};
+        std::atomic<uint64_t> depth_sequence_{0};
+        std::mutex            depth_mu_;
+        std::vector<uint64_t> depth_samples_;
 
-        std::atomic<uint64_t>  wake_to_first_task_count_{0};
-        std::atomic<uint64_t>  wake_to_first_task_count_total_{0};
-        std::atomic<uint64_t>  window_wake_to_first_task_ns_{0};
-        std::atomic<uint64_t>  total_wake_to_first_task_ns_{0};
-        std::atomic<uint64_t>  window_wake_to_first_task_max_ns_{0};
+        std::atomic<uint64_t> wake_to_first_task_count_{0};
+        std::atomic<uint64_t> wake_to_first_task_count_total_{0};
+        std::atomic<uint64_t> window_wake_to_first_task_ns_{0};
+        std::atomic<uint64_t> total_wake_to_first_task_ns_{0};
+        std::atomic<uint64_t> window_wake_to_first_task_max_ns_{0};
 
-        std::atomic<uint64_t>  lock_acquires_{0};
-        std::atomic<uint64_t>  contended_acquires_{0};
-        std::atomic<uint64_t>  lock_wait_sequence_{0};
-        std::mutex             lock_wait_mu_;
-        std::vector<uint64_t>  lock_wait_samples_;
-        clock::time_point      last_report_at_{clock::now()};
-        uint64_t               last_reported_pending_{0};
+        std::atomic<uint64_t> lock_acquires_{0};
+        std::atomic<uint64_t> contended_acquires_{0};
+        std::atomic<uint64_t> lock_wait_sequence_{0};
+        std::mutex            lock_wait_mu_;
+        std::vector<uint64_t> lock_wait_samples_;
+        clock::time_point     last_report_at_{clock::now()};
+        uint64_t              last_reported_pending_{0};
     };
 
     static auto Instance() -> TaskQueueMetricsRegistry& {
@@ -302,7 +300,7 @@ private:
     TaskQueueMetricsRegistry()
         : reporter_([this](std::stop_token stop_token) { ReportLoop(stop_token); }) {}
 
-    TaskQueueMetricsRegistry(const TaskQueueMetricsRegistry&) = delete;
+    TaskQueueMetricsRegistry(const TaskQueueMetricsRegistry&)                    = delete;
     auto operator=(const TaskQueueMetricsRegistry&) -> TaskQueueMetricsRegistry& = delete;
 
     auto ReportLoop(std::stop_token stop_token) -> void {
@@ -329,7 +327,7 @@ private:
         std::vector<std::shared_ptr<QueueMetrics>> queues;
         {
             std::lock_guard<std::mutex> lk(mu_);
-            auto it = queues_.begin();
+            auto                        it = queues_.begin();
             while (it != queues_.end()) {
                 if (auto queue = it->lock()) {
                     queues.push_back(std::move(queue));

@@ -10,7 +10,6 @@
 #include <boost/asio/detail/is_buffer_sequence.hpp>
 #include <boost/asio/registered_buffer.hpp>
 #include <charconv>
-#include <chrono>
 #include <climits>
 #include <concepts>
 #include <cstddef>
@@ -29,10 +28,10 @@ namespace idlekv {
 
 class DataEntity;
 
-constexpr size_t kDefaultReadBufferSize = 4096;
+constexpr size_t kDefaultReadBufferSize  = 4096;
 constexpr size_t kDefaultWriteBufferSize = 2048;
-constexpr size_t kMaxReplyFlushCount    = IOV_MAX - 2;
-constexpr size_t kMaxReplyFlushBytes    = 64 * KB;
+constexpr size_t kMaxReplyFlushCount     = IOV_MAX - 2;
+constexpr size_t kMaxReplyFlushBytes     = 64 * KB;
 
 constexpr const char* CRLF                 = "\r\n";
 constexpr const char* SIMPLE_STRING_PREFIX = "+";
@@ -69,8 +68,8 @@ public:
     operator asio::const_buffer() const noexcept { return asio::const_buffer(data_, size_); }
 
 private:
-    char* data_;
-    size_t      size_;  
+    char*  data_;
+    size_t size_;
 };
 
 class BufView {
@@ -164,8 +163,8 @@ public:
             ::operator delete[](buf_, std::align_val_t{alignment_});
         }
 
-        buf_         = nb;
-        cap_         = sz;
+        buf_ = nb;
+        cap_ = sz;
     }
 
 private:
@@ -174,33 +173,34 @@ private:
             ::operator delete[](buf_, std::align_val_t{alignment_});
         }
 
-        buf_         = nullptr;
-        cap_         = 0;
-        r_           = 0;
-        w_           = 0;
+        buf_ = nullptr;
+        cap_ = 0;
+        r_   = 0;
+        w_   = 0;
     }
 
     auto MoveFrom(IOBuf&& other) -> void {
-        cap_         = std::exchange(other.cap_, 0);
-        buf_         = std::exchange(other.buf_, nullptr);
-        alignment_   = other.alignment_;
-        r_           = std::exchange(other.r_, 0);
-        w_           = std::exchange(other.w_, 0);
-        owner_ = std::exchange(other.owner_, false);
+        cap_       = std::exchange(other.cap_, 0);
+        buf_       = std::exchange(other.buf_, nullptr);
+        alignment_ = other.alignment_;
+        r_         = std::exchange(other.r_, 0);
+        w_         = std::exchange(other.w_, 0);
+        owner_     = std::exchange(other.owner_, false);
     }
 
     char*  buf_{nullptr};
     size_t cap_{0};
     size_t alignment_{8};
     size_t r_{0}, w_{0};
-    bool owner_;
+    bool   owner_;
 };
 
 class Reader {
 public:
     Reader(size_t cap) : buf_(cap) {}
     Reader(char* data, size_t size) : buf_(data, size) {}
-    Reader(asio::mutable_registered_buffer buf) : buf_(static_cast<char*>(buf.data()), buf.size()), reg_buf_(buf) {}
+    Reader(asio::mutable_registered_buffer buf)
+        : buf_(static_cast<char*>(buf.data()), buf.size()), reg_buf_(buf) {}
 
     auto ReadLineView() noexcept -> ResultT<std::string_view>;
     auto ReadBytesTo(char* buf, size_t len) noexcept -> ResultT<std::monostate>;
@@ -210,18 +210,19 @@ public:
     auto Clear() -> void { buf_.Clear(); }
 
     virtual ~Reader() = default;
+
 protected:
-    virtual auto ReadImpl(char* buf, size_t size) noexcept -> ResultT<size_t> = 0;
+    virtual auto ReadImpl(char* buf, size_t size) noexcept -> ResultT<size_t>                  = 0;
     virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept -> ResultT<size_t> = 0;
-    virtual auto ReadvImpl(const std::vector<Buf>& bufs) noexcept -> ResultT<size_t> = 0;
+    virtual auto ReadvImpl(const std::vector<Buf>& bufs) noexcept -> ResultT<size_t>           = 0;
 
 private:
     // buf_ and reg_buf_ refer to the same underlying memory region.
     // When we want to use io_uring registered buffers, reads should go through
     // reg_buf_, while buf_ must remain consistent throughout the process.
-    IOBuf buf_;
+    IOBuf                           buf_;
     asio::mutable_registered_buffer reg_buf_;
-    std::vector<Buf> bufs_;
+    std::vector<Buf>                bufs_;
 };
 
 class Writer {
@@ -242,8 +243,7 @@ public:
 
     // Queue an external slice without copying and keep `holder` alive until the
     // pending reply batch is flushed.
-    auto WriteRef(std::string_view s, std::shared_ptr<const void> holder)
-        -> std::error_code;
+    auto WriteRef(std::string_view s, std::shared_ptr<const void> holder) -> std::error_code;
 
     // Flush all queued slices, including both owned buffer slices and
     // externally referenced views added via write().
@@ -252,8 +252,9 @@ public:
     auto Clear() -> void { ResetWriteState(); }
 
     virtual ~Writer() = default;
+
 protected:
-    virtual auto WriteImpl(const char* data, size_t size) noexcept -> ResultT<size_t> = 0;
+    virtual auto WriteImpl(const char* data, size_t size) noexcept -> ResultT<size_t>     = 0;
     virtual auto WritevImpl(const std::vector<BufView>& bufs) noexcept -> ResultT<size_t> = 0;
 
 private:
@@ -275,16 +276,15 @@ private:
                  !std::same_as<std::remove_cvref_t<T>, bool>)
     auto WritePiece(char*& out, T value) -> void;
 
-    IOBuf buf_;
-    std::vector<BufView> vecs_;
+    IOBuf                                    buf_;
+    std::vector<BufView>                     vecs_;
     std::vector<std::shared_ptr<const void>> keepalive_;
-    size_t queued_size_{0};
+    size_t                                   queued_size_{0};
 };
 
 template <typename... Ts>
 auto Writer::WritePieces(Ts&&... pieces) -> std::error_code {
-    const size_t total_size =
-        (size_t{0} + ... + WritePieceSize(std::forward<Ts>(pieces)));
+    const size_t total_size = (size_t{0} + ... + WritePieceSize(std::forward<Ts>(pieces)));
 
     if (total_size == 0) {
         return std::error_code{};
@@ -300,8 +300,8 @@ auto Writer::WritePieces(Ts&&... pieces) -> std::error_code {
     }
 
     const size_t offset = buf_.Buffered();
-    char* begin = buf_.Data() + offset;
-    char* out   = begin;
+    char*        begin  = buf_.Data() + offset;
+    char*        out    = begin;
     (WritePiece(out, std::forward<Ts>(pieces)), ...);
 
     queued_size_ += total_size;
@@ -313,8 +313,7 @@ auto Writer::WritePieces(Ts&&... pieces) -> std::error_code {
 inline auto Writer::WritePieceSize(std::string_view piece) const -> size_t { return piece.size(); }
 
 template <typename T>
-    requires(std::integral<std::remove_cvref_t<T>> &&
-             !std::same_as<std::remove_cvref_t<T>, bool>)
+    requires(std::integral<std::remove_cvref_t<T>> && !std::same_as<std::remove_cvref_t<T>, bool>)
 auto Writer::WritePieceSize(T value) const -> size_t {
     using Value = std::remove_cvref_t<T>;
 
@@ -332,8 +331,7 @@ inline auto Writer::WritePiece(char*& out, std::string_view piece) -> void {
 }
 
 template <typename T>
-    requires(std::integral<std::remove_cvref_t<T>> &&
-             !std::same_as<std::remove_cvref_t<T>, bool>)
+    requires(std::integral<std::remove_cvref_t<T>> && !std::same_as<std::remove_cvref_t<T>, bool>)
 auto Writer::WritePiece(char*& out, T value) -> void {
     using Value = std::remove_cvref_t<T>;
 
@@ -356,12 +354,9 @@ public:
         PROTOCOL_ERROR,
     };
 
-    ParserResut(Status s, std::vector<std::string>&& args)
-        : s_(s), args_(std::move(args)) {}
-    ParserResut(Status s, std::string&& msg)
-        : s_(s), err_msg_(std::move(msg)) {}
-    ParserResut(std::error_code ec)
-        : s_(Status::STD_ERROR), err_msg_(ec.message()), ec_(ec) {}
+    ParserResut(Status s, std::vector<std::string>&& args) : s_(s), args_(std::move(args)) {}
+    ParserResut(Status s, std::string&& msg) : s_(s), err_msg_(std::move(msg)) {}
+    ParserResut(std::error_code ec) : s_(Status::STD_ERROR), err_msg_(ec.message()), ec_(ec) {}
 
     auto Ok() const -> bool { return s_ == Status::OK || s_ == Status::HAS_MORE; }
 
@@ -395,8 +390,7 @@ private:
 
 class Sender {
 public:
-    Sender(Writer* wr) : wr_(wr) {
-    }
+    Sender(Writer* wr) : wr_(wr) {}
 
     DISABLE_COPY_MOVE(Sender);
 
@@ -404,7 +398,7 @@ public:
         BatchGuard(Sender* sender) : sender_(sender) {}
 
         ~BatchGuard() {
-            if(!sender_->IsBatched()) {
+            if (!sender_->IsBatched()) {
                 sender_->Flush();
             }
         }
@@ -423,17 +417,17 @@ public:
     auto Flush() -> void;
 
     auto SetBatch(bool batched) { batched_ = batched; }
-    auto IsBatched() const -> bool { return batched_;}
+    auto IsBatched() const -> bool { return batched_; }
     auto GetError() const -> std::error_code { return ec_; }
     auto Clear() -> void {
-        ec_                            = std::error_code{};
+        ec_ = std::error_code{};
         wr_->Clear();
     }
 
 private:
     std::error_code ec_;
 
-    bool batched_{true};
+    bool    batched_{true};
     Writer* wr_;
 };
 

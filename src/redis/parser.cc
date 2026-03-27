@@ -26,7 +26,7 @@ auto operator==(DataType dt, char prefix) -> bool { return static_cast<char>(dt)
 namespace {
 
 // debug function
-[[maybe_unused]] std::string escape_string(std::string_view s) {
+[[maybe_unused]] std::string EscapeString(std::string_view s) {
     std::string out;
     out.reserve(s.size() * 2);
 
@@ -65,8 +65,7 @@ namespace {
 }
 
 template <typename T>
-    requires(std::integral<std::remove_cvref_t<T>> &&
-             !std::same_as<std::remove_cvref_t<T>, bool>)
+    requires(std::integral<std::remove_cvref_t<T>> && !std::same_as<std::remove_cvref_t<T>, bool>)
 auto DecimalSize(T value) -> size_t {
     using Value = std::remove_cvref_t<T>;
 
@@ -78,12 +77,11 @@ auto DecimalSize(T value) -> size_t {
 
 } // namespace
 
-
 auto Reader::ReadLineView() noexcept -> ResultT<std::string_view> {
     for (;;) {
-        auto rv  = buf_.ReadView();
+        auto rv = buf_.ReadView();
         // auto pos = static_cast<const byte*>(std::memchr(rv.Data(), '\n', rv.Size()));
-        auto pos = std::find(rv.Begin(), rv.End(),  '\n');
+        auto pos = std::find(rv.Begin(), rv.End(), '\n');
         if (pos == rv.End()) {
             CHECK(rv.Size() < buf_.Capacity()) << "line length exceeds buffer size";
             buf_.Defrag();
@@ -117,9 +115,9 @@ auto Reader::ReadBytesTo(char* buf, size_t len) noexcept -> ResultT<std::monosta
     buf_.Clear();
 
     bufs_.resize(2);
-    bufs_[0]= Buf{buf + offset, len};
+    bufs_[0] = Buf{buf + offset, len};
     auto wv  = buf_.WriteView();
-    bufs_[1]= Buf{wv.Data(), wv.Size()};
+    bufs_[1] = Buf{wv.Data(), wv.Size()};
 
     for (;;) {
         auto res = ReadvImpl(bufs_);
@@ -127,7 +125,7 @@ auto Reader::ReadBytesTo(char* buf, size_t len) noexcept -> ResultT<std::monosta
             return res.Err();
         }
         if (res.Value() < len) {
-            offset +=  res.Value();
+            offset += res.Value();
             len -= res.Value();
             bufs_[0] = Buf{buf + offset, len};
         } else {
@@ -141,10 +139,10 @@ auto Reader::Fill() -> std::error_code {
     ResultT<size_t> res{std::error_code{}};
     if (reg_buf_.data()) {
         auto reg_wv = asio::buffer(reg_buf_ + buf_.WriteOffset(), buf_.WriteSize());
-        res  = ReadImpl(reg_wv);
+        res         = ReadImpl(reg_wv);
     } else {
-        auto wv  = buf_.WriteView();
-        res = ReadImpl(wv.Data(), wv.Size());
+        auto wv = buf_.WriteView();
+        res     = ReadImpl(wv.Data(), wv.Size());
     }
 
     if (!res.Ok()) {
@@ -205,8 +203,7 @@ auto Writer::Write(std::string_view s) -> std::error_code {
     return std::error_code{};
 }
 
-auto Writer::WriteRef(std::string_view s, std::shared_ptr<const void> holder)
-    -> std::error_code {
+auto Writer::WriteRef(std::string_view s, std::shared_ptr<const void> holder) -> std::error_code {
     if (s.empty()) {
         return std::error_code{};
     }
@@ -240,7 +237,6 @@ auto Writer::Flush() -> std::error_code {
     return res.Err();
 }
 
-
 auto Parser::ParseOne(std::vector<std::string>& args) noexcept -> ParserResut {
     auto headerRes = rd_->ReadLineView();
     if (!headerRes.Ok()) {
@@ -249,7 +245,8 @@ auto Parser::ParseOne(std::vector<std::string>& args) noexcept -> ParserResut {
 
     auto& header = headerRes.Value();
     if (header[0] != DataType::Arrays) [[unlikely]] {
-        return ParserResut(ParserResut::PROTOCOL_ERROR, fmt::format("need '*' but '{}'", header[0]));
+        return ParserResut(ParserResut::PROTOCOL_ERROR,
+                           fmt::format("need '*' but '{}'", header[0]));
     }
     int arrLen;
     auto [ptr, err] = std::from_chars(header.data() + 1, header.data() + header.size() - 2, arrLen);
@@ -266,7 +263,8 @@ auto Parser::ParseOne(std::vector<std::string>& args) noexcept -> ParserResut {
 
         auto& line = lineRes.Value();
         if (line.size() < 4 || line[0] != DataType::BulkString) [[unlikely]] {
-            return ParserResut(ParserResut::PROTOCOL_ERROR, fmt::format("need $ but '{}'", line[0]));
+            return ParserResut(ParserResut::PROTOCOL_ERROR,
+                               fmt::format("need $ but '{}'", line[0]));
         }
 
         int strLen;
@@ -291,8 +289,7 @@ auto Parser::ParseOne(std::vector<std::string>& args) noexcept -> ParserResut {
         // pop the trailing CRLF
         args[i].resize(strLen);
     }
-    return ParserResut(rd_->HasMore() ? ParserResut::HAS_MORE : ParserResut::OK,
-                       std::move(args));
+    return ParserResut(rd_->HasMore() ? ParserResut::HAS_MORE : ParserResut::OK, std::move(args));
 }
 
 auto Sender::SendSimpleString(std::string_view s) -> void {
@@ -329,7 +326,7 @@ auto Sender::SendBulkString(const std::shared_ptr<const DataEntity>& data) -> vo
     }
 
     const auto& value = data->AsString();
-    ec_ = wr_->WritePieces(BULK_STRING_PREFIX, value.size(), CRLF);
+    ec_               = wr_->WritePieces(BULK_STRING_PREFIX, value.size(), CRLF);
     if (!ec_) {
         ec_ = wr_->WriteRef(value, data);
     }
@@ -353,8 +350,6 @@ auto Sender::SendError(std::string_view s) -> void {
     ec_ = wr_->WritePieces(ERROR_PREFIX, s, CRLF);
 }
 
-auto Sender::Flush() -> void {
-    ec_ = wr_->Flush();
-}
+auto Sender::Flush() -> void { ec_ = wr_->Flush(); }
 
 } // namespace idlekv

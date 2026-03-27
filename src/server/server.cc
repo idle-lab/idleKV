@@ -49,16 +49,14 @@ Server::Server(const Config& cfg) {
     LogIoBackendStatus();
     elp_ = std::make_unique<EventLoopPool>();
     elp_->Run();
-    elp_->AwaitForeach([](size_t i, EventLoop* el) {
-        ThreadState::Init(i, el, el->ThreadId());
-    });
+    elp_->AwaitForeach([](size_t i, EventLoop* el) { ThreadState::Init(i, el, el->ThreadId()); });
     // check or create the data directory.
 
     // recover persisted data.
 }
 
 auto Server::DoAccept(Handler* h) -> void {
-    asio::ip::tcp::acceptor acceptor(CurrentIoContext());
+    asio::ip::tcp::acceptor   acceptor(CurrentIoContext());
     boost::system::error_code ec;
 
     // open and prepare the listening socket for this handler.
@@ -90,9 +88,8 @@ auto Server::DoAccept(Handler* h) -> void {
         h->Endpoint().port());
 
     for (;;) {
-
         boost::system::error_code accept_ec;
-        asio::ip::tcp::socket socket(CurrentIoContext());
+        asio::ip::tcp::socket     socket(CurrentIoContext());
         acceptor.async_accept(socket, boost::fibers::asio::yield[accept_ec]);
 
         if (accept_ec) {
@@ -138,7 +135,8 @@ auto Server::DoAccept(Handler* h) -> void {
             continue;
         }
 
-        target_el->Dispatch([h, socket = std::move(socket)]() mutable { h->Handle(std::move(socket)); });
+        target_el->Dispatch(
+            [h, socket = std::move(socket)]() mutable { h->Handle(std::move(socket)); });
     }
 }
 
@@ -173,9 +171,7 @@ void Server::ListenAndServe() {
     });
 
     for (size_t i = 0; i < handlers_.size(); i++) {
-        elp_->Dispatch([this, handler = handlers_[i].get()]() {
-            DoAccept(handler); 
-        });
+        elp_->Dispatch([this, handler = handlers_[i].get()]() { DoAccept(handler); });
     }
 
     // keep a small signal loop on the main thread for graceful shutdown.

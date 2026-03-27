@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/config.h"
+
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -12,10 +13,14 @@ enum struct OpStatus : uint8_t { OK, DupKey, NoSuchKey, Unknown };
 
 inline auto OpStatusToString(OpStatus ops) -> std::string {
     switch (ops) {
-    case OpStatus::OK: return "OK";
-    case OpStatus::DupKey: return "duplicate key";
-    case OpStatus::NoSuchKey: return "no such key";
-    case OpStatus::Unknown: return "unknown error";
+    case OpStatus::OK:
+        return "OK";
+    case OpStatus::DupKey:
+        return "duplicate key";
+    case OpStatus::NoSuchKey:
+        return "no such key";
+    case OpStatus::Unknown:
+        return "unknown error";
     default:
         UNREACHABLE();
     }

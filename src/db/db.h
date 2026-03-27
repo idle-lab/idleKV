@@ -1,11 +1,12 @@
 #pragma once
 
 #include "common/asio_no_exceptions.h"
+#include "db/storage/data_entity.h"
 #include "db/storage/kvstore.h"
 #include "db/storage/result.h"
-#include "db/storage/data_entity.h"
 
 #include <memory>
+#include <memory_resource>
 #include <mimalloc.h>
 #include <string>
 #include <vector>
@@ -17,7 +18,7 @@ class DB {
 public:
     using StoreType = KvStore<DummyImpl<std::string, std::shared_ptr<DataEntity>>>;
 
-    explicit DB();
+    explicit DB(std::pmr::memory_resource* mr) : prime_(mr) {}
 
     auto Locks(const std::vector<std::string>& ws, const std::vector<std::string>& rs) -> bool;
 

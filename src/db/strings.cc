@@ -1,6 +1,5 @@
 #include "db/command.h"
 #include "db/engine.h"
-#include "db/result.h"
 #include "redis/connection.h"
 #include "redis/error.h"
 
@@ -30,9 +29,9 @@ auto SingleWriteKey(const std::vector<std::string>& args)
 
 } // namespace
 
-auto Set(CmdContext* ctx, std::vector<std::string>& args) -> void {
+auto Set(ExecContext* ctx, std::vector<std::string>& args) -> void {
     auto& sender = ctx->GetConnection()->GetSender();
-    auto res = ctx->GetDb()->Set(args[1], DataEntity::FromString(std::move(args[2])));
+    auto  res    = ctx->GetDb()->Set(args[1], DataEntity::FromString(std::move(args[2])));
     if (!res.Ok()) {
         return sender.SendError(res.Message());
     }
@@ -40,9 +39,9 @@ auto Set(CmdContext* ctx, std::vector<std::string>& args) -> void {
     sender.SendOk();
 }
 
-auto Get(CmdContext* ctx, std::vector<std::string>& args) -> void {
+auto Get(ExecContext* ctx, std::vector<std::string>& args) -> void {
     auto& sender = ctx->GetConnection()->GetSender();
-    auto res = ctx->GetDb()->Get(args[1]);
+    auto  res    = ctx->GetDb()->Get(args[1]);
     if (res == OpStatus::NoSuchKey) {
         sender.SendNullBulkString();
     }
@@ -59,9 +58,9 @@ auto Get(CmdContext* ctx, std::vector<std::string>& args) -> void {
     sender.SendBulkString(value);
 }
 
-auto Del(CmdContext* ctx, std::vector<std::string>& args) -> void {
+auto Del(ExecContext* ctx, std::vector<std::string>& args) -> void {
     auto& sender = ctx->GetConnection()->GetSender();
-    auto res = ctx->GetDb()->Del(args[1]);
+    auto  res    = ctx->GetDb()->Del(args[1]);
     if (res == OpStatus::NoSuchKey) {
         return sender.SendInteger(0);
     }

@@ -155,7 +155,7 @@ private:
 
         auto total_count = total_count_.load(std::memory_order_relaxed);
         auto total_ns    = total_ns_.load(std::memory_order_relaxed);
-        auto TotalBytes = total_bytes_.load(std::memory_order_relaxed);
+        auto TotalBytes  = total_bytes_.load(std::memory_order_relaxed);
 
         bool has_latency = window_count > 0 || total_count > 0;
         bool has_bytes   = window_bytes > 0 || TotalBytes > 0;
@@ -182,8 +182,7 @@ private:
                             name_, FormatDuration(window_avg_ns), window_count,
                             FormatDuration(total_avg_ns), total_count,
                             FormatBytes(window_avg_bytes), FormatBytes(total_avg_bytes),
-                            FormatRate(window_rate),
-                            FormatBytes(static_cast<double>(window_bytes)),
+                            FormatRate(window_rate), FormatBytes(static_cast<double>(window_bytes)),
                             FormatBytes(static_cast<double>(TotalBytes)));
                 return;
             }

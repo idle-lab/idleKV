@@ -7,13 +7,12 @@
 #include "server/handler.h"
 #include "utils/pool/pool.h"
 
-#include <array>
+#include <atomic>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/buffer_registration.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/registered_buffer.hpp>
-#include <atomic>
 #include <cstddef>
 #include <cstdlib>
 #include <list>
@@ -31,8 +30,9 @@ public:
     class ServiceTLState {
         struct Slot {
             asio::mutable_registered_buffer buffer;
-            size_t index;
+            size_t                          index;
         };
+
     public:
         static constexpr auto kConnPoolSize = 64;
 
@@ -44,11 +44,12 @@ public:
         auto ConnList() -> std::list<Connection*>& { return conn_list_; }
 
     private:
-        utils::Pool<ConnectionPtr>                            conn_pool_;
-        std::list<Connection*>                                conn_list_;
-        std::unique_ptr<byte[]> buf_space_;
-        std::vector<size_t> free_list_;
-        std::optional<asio::buffer_registration<std::vector<asio::mutable_buffer>>> buffer_registration_;
+        utils::Pool<ConnectionPtr> conn_pool_;
+        std::list<Connection*>     conn_list_;
+        std::unique_ptr<char[]>    buf_space_;
+        std::vector<size_t>        free_list_;
+        std::optional<asio::buffer_registration<std::vector<asio::mutable_buffer>>>
+            buffer_registration_;
     };
 
     RedisService(const Config& cfg) : Handler(cfg.ip_, std::atoi(cfg.port_.c_str())) {}
@@ -65,6 +66,7 @@ public:
     virtual std::string Name() override { return "Redis"; }
 
     virtual ~RedisService() override = default;
+
 private:
     std::atomic<bool> stop_{false};
 

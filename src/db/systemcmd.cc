@@ -1,5 +1,4 @@
 #include "db/engine.h"
-#include "db/result.h"
 #include "redis/connection.h"
 #include "redis/error.h"
 
@@ -17,7 +16,7 @@ auto NoKeys(const std::vector<std::string>& args)
     return {};
 }
 
-auto Ping(CmdContext* ctx, std::vector<std::string>& args) -> void {
+auto Ping(ExecContext* ctx, std::vector<std::string>& args) -> void {
     auto& sender = ctx->GetConnection()->GetSender();
     switch (args.size()) {
     case 1:
@@ -29,12 +28,12 @@ auto Ping(CmdContext* ctx, std::vector<std::string>& args) -> void {
     }
 }
 
-auto Select(CmdContext* ctx, std::vector<std::string>& args) -> void {
-    auto& sender = ctx->GetConnection()->GetSender();
+auto Select(ExecContext* ctx, std::vector<std::string>& args) -> void {
+    auto&       sender  = ctx->GetConnection()->GetSender();
     size_t      DbIndex = 0;
-    const auto* begin    = args[1].data();
-    const auto* end      = begin + args[1].size();
-    auto [ptr, ec]       = std::from_chars(begin, end, DbIndex);
+    const auto* begin   = args[1].data();
+    const auto* end     = begin + args[1].size();
+    auto [ptr, ec]      = std::from_chars(begin, end, DbIndex);
     if (ec != std::errc{} || ptr != end) {
         return sender.SendError(fmt::format(kProtocolErrFmt, "invalid DB index"));
     }

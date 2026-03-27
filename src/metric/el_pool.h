@@ -2,10 +2,6 @@
 
 namespace idlekv {
 
-class EventLoopPoolMetric {
+class EventLoopPoolMetric {};
 
-
-};
-
-
-} // namespace
+} // namespace idlekv

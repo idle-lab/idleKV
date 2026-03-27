@@ -1,7 +1,6 @@
 #pragma once
 
 #include "db/db.h"
-#include "db/result.h"
 #include "redis/connection.h"
 
 #include <cstddef>
@@ -13,9 +12,9 @@
 
 namespace idlekv {
 
-class CmdContext {
+class ExecContext {
 public:
-    CmdContext(Connection* conn, DB* db, size_t OwnerId)
+    ExecContext(Connection* conn, DB* db, size_t OwnerId)
         : conn_(conn), db_(db), owner_id_(OwnerId) {}
 
     auto GetConnection() -> Connection* { return conn_; }
@@ -31,7 +30,7 @@ private:
 };
 
 // ExecFunc is interface for command executor
-using Exector = auto (*)(CmdContext* ctx, std::vector<std::string>& args) -> void;
+using Exector = auto (*)(ExecContext* ctx, std::vector<std::string>& args) -> void;
 
 // PreFunc analyses command line when queued command to `multi`
 // returns related write keys and read keys
@@ -60,12 +59,12 @@ constexpr auto HasFlag(CmdFlags flags, CmdFlags flag) -> bool {
 
 class Cmd {
 public:
-    Cmd(const std::string& name, int32_t arity, int32_t FirstKey, int32_t LastKey,
-        Exector exector, Prepare prepare, CmdFlags flags = CmdFlags::None)
+    Cmd(const std::string& name, int32_t arity, int32_t FirstKey, int32_t LastKey, Exector exector,
+        Prepare prepare, CmdFlags flags = CmdFlags::None)
         : name_(name), arity_(arity), first_key_(FirstKey), last_key_(LastKey), exec_(exector),
           prepare_(prepare), flags_(flags) {}
 
-    auto Exec(CmdContext* ctx, std::vector<std::string>& args) const -> void {
+    auto Exec(ExecContext* ctx, std::vector<std::string>& args) const -> void {
         return exec_(ctx, args);
     }
 
@@ -108,7 +107,7 @@ private:
 
     Exector exec_;
     // prepare returns related keys command
-    Prepare prepare_;
+    Prepare  prepare_;
     CmdFlags flags_{CmdFlags::None};
 };
 

@@ -1,8 +1,8 @@
 #pragma once
 
-
 #include "common/config.h"
 #include "server/el_pool.h"
+
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -10,7 +10,6 @@
 #include <list>
 #include <memory_resource>
 #include <mimalloc.h>
-#include <new>
 #include <utility>
 #include <vector>
 namespace idlekv {
@@ -20,23 +19,22 @@ namespace idlekv {
 #endif
 
 struct Retired {
-    void* ptr;
+    void*                      ptr;
     std::function<void(void*)> deleter;
 };
 
-
 struct alignas(CACHELINE_SIZE) EBRThreadLocal {
-    std::atomic<uint64_t> local_epoch{0};
-    std::atomic<bool>     active{false};
+    std::atomic<uint64_t>               local_epoch{0};
+    std::atomic<bool>                   active{false};
     std::array<std::vector<Retired>, 3> buckets;
-    size_t retire_count{0};
+    size_t                              retire_count{0};
 };
 
 inline thread_local EBRThreadLocal ebr_local{};
 
 class EBRManager {
 public:
-    auto Init(EventLoopPool* elp) {
+    auto Init(EventLoop* el) {
         // threads_.resize(elp->PoolSize());
 
         // elp->AwaitForeach([this](size_t i, EventLoop* el) {
@@ -47,13 +45,11 @@ public:
 
     inline void Enter() {
         ebr_local.local_epoch.store(global_epoch_.load(std::memory_order_acquire),
-                              std::memory_order_relaxed);
+                                    std::memory_order_relaxed);
         ebr_local.active.store(true, std::memory_order_release);
     }
 
-    inline void Leave() {
-        ebr_local.active.store(false, std::memory_order_release);
-    }
+    inline void Leave() { ebr_local.active.store(false, std::memory_order_release); }
 
     inline void Retire(void* ptr, std::function<void(void*)> deleter) {
         uint64_t e = global_epoch_.load(std::memory_order_relaxed);
@@ -68,7 +64,6 @@ public:
     }
 
 private:
-
     void TryAdvanceEpoch() {
         uint64_t cur = global_epoch_.load(std::memory_order_acquire);
 
@@ -85,7 +80,7 @@ private:
     }
 
     void Reclaim() {
-        uint64_t cur = global_epoch_.load(std::memory_order_acquire);
+        uint64_t cur           = global_epoch_.load(std::memory_order_acquire);
         uint64_t reclaim_epoch = (cur + 1) % 3; // E-2
 
         auto& bucket = ebr_local.buckets[reclaim_epoch];
@@ -97,12 +92,11 @@ private:
         bucket.clear();
     }
 
-    std::atomic<uint64_t> global_epoch_ = 0;
+    std::atomic<uint64_t>        global_epoch_ = 0;
     std::vector<EBRThreadLocal*> threads_;
 
     static constexpr size_t kReclaimThreshold = 64;
 };
-
 
 class MemoryAlloctor {
 public:
@@ -110,15 +104,16 @@ public:
 };
 
 // alloc a fix memory block, implement memory reclamation based on EBR
-template<class Type, size_t PoolSize = 32>
+template <class Type, size_t PoolSize = 32>
 class FixMemoryAlloctor : public MemoryAlloctor {
 public:
-    FixMemoryAlloctor(std::pmr::memory_resource* mr, EBRManager* ebr_mgr) : ebr_mgr_(ebr_mgr), mr_(mr) {}
-    static constexpr size_t Size = sizeof(Type);
-    static constexpr size_t Alignment = alignof(Type);
+    FixMemoryAlloctor(std::pmr::memory_resource* mr, EBRManager* ebr_mgr)
+        : ebr_mgr_(ebr_mgr), mr_(mr) {}
+    static constexpr size_t Size        = sizeof(Type);
+    static constexpr size_t Alignment   = alignof(Type);
     static constexpr size_t kMaxSlotNum = 256;
 
-    template<class ...Args>
+    template <class... Args>
     auto New(Args&&... args) -> Type* {
         void* ptr = nullptr;
 
@@ -146,9 +141,7 @@ public:
             return;
         }
 
-        ebr_mgr_->Retire(ptr, [this](void* p) {
-            Recycle(p);
-        });
+        ebr_mgr_->Retire(ptr, [this](void* p) { Recycle(p); });
     }
 
     auto Shrink() -> void {
@@ -158,12 +151,13 @@ public:
     auto MemoryUsage() -> size_t { return usage_; }
 
 private:
-        auto Recycle(void* ptr) -> void {
+    auto Recycle(void* ptr) -> void {
         for (auto it = memeory_blocks_.blocks_.begin(); it != memeory_blocks_.blocks_.end(); it++) {
             Block* block = *it;
             if (ptr >= block->data && ptr < static_cast<void*>(block->data + kMaxSlotNum * Size)) {
                 block->allocd--;
-                uint8_t slot_id = static_cast<uint8_t>((static_cast<uint8_t*>(ptr) - block->data) / Size);
+                uint8_t slot_id =
+                    static_cast<uint8_t>((static_cast<uint8_t*>(ptr) - block->data) / Size);
 
                 memeory_blocks_.free_list_.emplace_back(block, slot_id);
                 return;
@@ -178,7 +172,7 @@ private:
     };
 
     struct MemoryBlocks {
-        std::list<Block*> blocks_;
+        std::list<Block*>                      blocks_;
         std::list<std::pair<Block*, uint16_t>> free_list_;
     };
     MemoryBlocks memeory_blocks_;
@@ -186,10 +180,8 @@ private:
     size_t free_num_{0}, alloced_{0};
     size_t usage_;
 
-    EBRManager* ebr_mgr_;
+    EBRManager*                ebr_mgr_;
     std::pmr::memory_resource* mr_{std::pmr::get_default_resource()};
 };
-
-
 
 } // namespace idlekv

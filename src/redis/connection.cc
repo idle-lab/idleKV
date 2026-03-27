@@ -3,7 +3,6 @@
 #include "common/logger.h"
 #include "common/result.h"
 #include "db/engine.h"
-#include "metric/request_stage.h"
 #include "redis/error.h"
 #include "redis/parser.h"
 #include "server/fiber_runtime.h"
@@ -85,26 +84,6 @@ auto FormatRemoteEndpoint(const Connection& conn) -> std::string {
     return fmt::format("{}:{}", ep.address().to_string(), ep.port());
 }
 
-auto ExecResultName(const ExecResult& res) -> std::string_view {
-    switch (res.GetType()) {
-    case ExecResult::kPong:
-        return "pong";
-    case ExecResult::kOk:
-        return "ok";
-    case ExecResult::kSimpleString:
-        return "SimpleString";
-    case ExecResult::kBulkString:
-        return "BulkString";
-    case ExecResult::kNull:
-        return "null";
-    case ExecResult::kInteger:
-        return "integer";
-    case ExecResult::kError:
-        return "error";
-    }
-
-    return "unknown";
-}
 
 } // namespace
 
@@ -194,8 +173,7 @@ auto Connection::HandleRequests() noexcept -> void {
 
             // Parser failed. Try to send a single ERR reply then close the connection.
             auto reply_ec = ReplyParseError(s_, parse_res);
-            if (reply_ec && !IsConnectionClosedError(reply_ec) &&
-                !IsTransientIoError(reply_ec)) {
+            if (reply_ec && !IsConnectionClosedError(reply_ec) && !IsTransientIoError(reply_ec)) {
                 LOG(warn, "failed to send parse error reply: {}", reply_ec.message());
             }
             break;
@@ -207,14 +185,13 @@ auto Connection::HandleRequests() noexcept -> void {
                                          fmt::format(kProtocolErrFmt, "empty command"));
 
             auto reply_ec = ReplyParseError(s_, parse_err);
-            if (reply_ec && !IsConnectionClosedError(reply_ec) &&
-                !IsTransientIoError(reply_ec)) {
+            if (reply_ec && !IsConnectionClosedError(reply_ec) && !IsTransientIoError(reply_ec)) {
                 LOG(warn, "failed to send protocol error reply: {}", reply_ec.message());
             }
             break;
         }
         std::transform(args[0].begin(), args[0].end(), args[0].begin(),
-                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
         if (parse_res != ParserResut::HAS_MORE) {
             s_.SetBatch(false);
@@ -254,7 +231,7 @@ auto Connection::Reset() -> void {
     }
     p_.Clear();
     s_.Clear();
-    ec_ = std::error_code{};
+    ec_       = std::error_code{};
     db_index_ = 0;
 }
 

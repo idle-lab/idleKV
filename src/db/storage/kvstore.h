@@ -24,9 +24,10 @@ namespace idlekv {
 template <class Impl>
 class KvStore {
 public:
-    using ValueType  = typename Impl::ValueType;
+    using ValueType = typename Impl::ValueType;
 
-    KvStore()  {}
+    KvStore() {}
+    explicit KvStore(std::pmr::memory_resource* mr) {}
 
     template <class U, class V>
     auto Set(U&& key, V&& value) -> Result<bool> {
@@ -54,56 +55,55 @@ private:
 template <class Key, class Value>
 class DummyImpl {
 public:
-    using KeyType = Key;
+    using KeyType   = Key;
     using ValueType = Value;
 
-    template<size_t ShardNum>
+    template <size_t ShardNum>
     class ShardHash {
     public:
-    using MapType =
-        absl::flat_hash_map<KeyType, ValueType, std::hash<KeyType>, std::equal_to<KeyType>>;
+        using MapType =
+            absl::flat_hash_map<KeyType, ValueType, std::hash<KeyType>, std::equal_to<KeyType>, std::pmr::polymorphic_allocator<std::pair<const KeyType, Value>>>;
 
-    ShardHash() = default;
+        ShardHash() = default;
 
-    template <class U, class V>
-    auto Insert(U&& key, V&& value) -> void {
-        auto shard_id = Hash(key) % ShardNum;
-        {
-            std::lock_guard<std::mutex> lg(locks_[shard_id]);
-            shards_[shard_id].insert(std::make_pair(std::forward<U>(key), std::forward<V>(value)));
-        }
-    }
-
-    template <class U>
-    auto Find(U&& key) -> std::optional<ValueType> {
-        auto shard_id = Hash(key) % ShardNum;
-        {
-            std::lock_guard<std::mutex> lg(locks_[shard_id]);
-            auto it = shards_[shard_id].find(key);
-            if (it == shards_[shard_id].end()) {
-                return std::nullopt;
+        template <class U, class V>
+        auto Insert(U&& key, V&& value) -> void {
+            auto shard_id = Hash(key) % ShardNum;
+            {
+                std::lock_guard<std::mutex> lg(locks_[shard_id]);
+                shards_[shard_id].insert(
+                    std::make_pair(std::forward<U>(key), std::forward<V>(value)));
             }
-            return it->second;
         }
-    }
 
-    template <class U>
-    auto Erase(U&& key) -> std::optional<size_t> {
-        auto shard_id = Hash(key) % ShardNum;
-        {
-            std::lock_guard<std::mutex> lg(locks_[shard_id]);
-            std::unordered_map<int, int> a;
-            a.erase(1);
-            return shards_[shard_id].erase(key);
+        template <class U>
+        auto Find(U&& key) -> std::optional<ValueType> {
+            auto shard_id = Hash(key) % ShardNum;
+            {
+                std::lock_guard<std::mutex> lg(locks_[shard_id]);
+                auto                        it = shards_[shard_id].find(key);
+                if (it == shards_[shard_id].end()) {
+                    return std::nullopt;
+                }
+                return it->second;
+            }
         }
-    }
+
+        template <class U>
+        auto Erase(U&& key) -> std::optional<size_t> {
+            auto shard_id = Hash(key) % ShardNum;
+            {
+                std::lock_guard<std::mutex>  lg(locks_[shard_id]);
+                std::unordered_map<int, int> a;
+                a.erase(1);
+                return shards_[shard_id].erase(key);
+            }
+        }
 
     private:
-        auto Hash(const KeyType& key) -> uint64_t {
-            return XXH32(key.data(), key.size(), 54188);
-        }
+        auto Hash(const KeyType& key) -> uint64_t { return XXH32(key.data(), key.size(), 54188); }
 
-        std::array<MapType, ShardNum> shards_;
+        std::array<MapType, ShardNum>    shards_;
         std::array<std::mutex, ShardNum> locks_;
     };
 
@@ -135,7 +135,6 @@ private:
     ShardHash<32> data_;
 };
 
-
 // template <class Key, class Value>
 // class ArtImpl {
 // public:
@@ -145,7 +144,6 @@ private:
 //     using TableType = Art<ValueType>;
 
 //     explicit ArtImpl()  {}
-
 
 //     template <class U, class V>
 //     auto SetImpl(U&& key, V&& value) -> Result<bool> {

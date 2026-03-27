@@ -24,11 +24,11 @@ constexpr uint64_t GB = 1024 * MB;
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-  #define LIKELY(x)   (__builtin_expect(!!(x), 1))
-  #define UNLIKELY(x) (__builtin_expect(!!(x), 0))
+#define LIKELY(x) (__builtin_expect(!!(x), 1))
+#define UNLIKELY(x) (__builtin_expect(!!(x), 0))
 #else
-  #define LIKELY(x)   (!!(x))
-  #define UNLIKELY(x) (!!(x))
+#define LIKELY(x) (!!(x))
+#define UNLIKELY(x) (!!(x))
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -41,17 +41,17 @@ constexpr uint64_t GB = 1024 * MB;
 #define PREFETCH_W(p)
 #endif
 
-#define DISABLE_COPY(type) \
-    type(const type&) = delete; \
+#define DISABLE_COPY(type)                                                                         \
+    type(const type&)            = delete;                                                         \
     type& operator=(const type&) = delete;
 
-#define DISABLE_MOVE(type) \
-    type(type&&) = delete; \
+#define DISABLE_MOVE(type)                                                                         \
+    type(type&&)            = delete;                                                              \
     type& operator=(type&&) = delete;
 
-#define DISABLE_COPY_MOVE(type) \
-          DISABLE_COPY(type)    \
-          DISABLE_MOVE(type)
+#define DISABLE_COPY_MOVE(type)                                                                    \
+    DISABLE_COPY(type)                                                                             \
+    DISABLE_MOVE(type)
 
 namespace idlekv {
 
@@ -65,11 +65,7 @@ public:
         opts_.add_option("--DbNum", db_num_, "number of DB");
     }
 
-    // 不能拷贝不能移动
-    Config(const Config&)            = delete;
-    Config(Config&&)                 = delete;
-    Config& operator=(const Config&) = delete;
-    Config& operator=(Config&&)      = delete;
+    DISABLE_COPY_MOVE(Config);
 
     void Parse(int argc, char** argv) { opts_.parse(argc, argv); }
 
@@ -84,6 +80,7 @@ public:
     std::string config_file_path;
 
     uint8_t db_num_{16};
+    uint8_t shard_num_{16};
 
 private:
     CLI::App opts_;

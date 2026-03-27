@@ -2,13 +2,13 @@
 
 #include "absl/functional/function_ref.h"
 #include "common/asio_no_exceptions.h"
-#include "db/result.h"
 #include "db/storage/data_entity.h"
 #include "redis/parser.h"
 #include "server/el_pool.h"
 #include "server/fiber_runtime.h"
 
 #include <array>
+#include <atomic>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/buffer_registration.hpp>
@@ -19,7 +19,6 @@
 #include <boost/asio/registered_buffer.hpp>
 #include <boost/system/detail/error_code.hpp>
 #include <cassert>
-#include <atomic>
 #include <cstddef>
 #include <cstring>
 #include <functional>
@@ -37,17 +36,20 @@ public:
     explicit Connection()
         : Reader(kDefaultReadBufferSize), Writer(kDefaultWriteBufferSize), p_(this), s_(this) {}
 
-    explicit Connection(asio::mutable_registered_buffer buf, absl::FunctionRef<void()> buffer_releaser)
-        : Reader(buf), Writer(kDefaultWriteBufferSize), p_(this), s_(this), buffer_releaser_(buffer_releaser) {}
+    explicit Connection(asio::mutable_registered_buffer buf,
+                        absl::FunctionRef<void()>       buffer_releaser)
+        : Reader(buf), Writer(kDefaultWriteBufferSize), p_(this), s_(this),
+          buffer_releaser_(buffer_releaser) {}
 
-    ~Connection() { 
+    ~Connection() {
         if (buffer_releaser_.has_value()) {
             (*buffer_releaser_)();
         }
     }
 
     virtual auto ReadImpl(char* buf, size_t size) noexcept -> ResultT<size_t> override;
-    virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept -> ResultT<size_t> override;
+    virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept
+        -> ResultT<size_t> override;
     virtual auto ReadvImpl(const std::vector<Buf>& bufs) noexcept -> ResultT<size_t> override;
 
     virtual auto WriteImpl(const char* data, size_t size) noexcept -> ResultT<size_t> override;
@@ -83,18 +85,18 @@ public:
     auto IsClosed() const -> bool {
         return ec_ || !(socket_.has_value() && socket_->is_open()) || s_.GetError();
     }
-private:
 
-    std::optional<asio::ip::tcp::socket>           socket_;
-    boost::system::error_code                      ec_;
+private:
+    std::optional<asio::ip::tcp::socket> socket_;
+    boost::system::error_code            ec_;
 
     Parser p_;
     Sender s_;
 
     std::optional<absl::FunctionRef<void()>> buffer_releaser_;
 
-    EventLoop*        el_;
-    size_t            db_index_ = 0;
+    EventLoop* el_;
+    size_t     db_index_ = 0;
 };
 
 } // namespace idlekv

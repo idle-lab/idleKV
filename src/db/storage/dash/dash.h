@@ -4,10 +4,8 @@
 
 #include <cstddef>
 #include <functional>
-
 #include <type_traits>
 #
-
 
 namespace idlekv::dash {
 
@@ -19,8 +17,6 @@ class DashEH {
     static_assert(std::is_copy_constructible_v<Value>,
                   "DashEH currently requires copyable value types");
 
-
-    
 public:
     using SegmentType = detail::Segment<Key, Value, RegularBuckets, StashBuckets, SlotsPerBucket>;
     using RecordType  = typename SegmentType::RecordType;

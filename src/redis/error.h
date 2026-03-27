@@ -14,5 +14,4 @@ constexpr const char* kArgNumErrFmt     = "ERR wrong number of arguments for '{}
 constexpr const char* kUnknownCmdErrFmt = "Err unknown command '{}'";
 constexpr const char* kStandardErr      = "Err standard error";
 
-
 } // namespace idlekv

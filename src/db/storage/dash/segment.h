@@ -29,8 +29,6 @@ public:
     static constexpr size_t kStashBucketCount   = StashBuckets;
     static constexpr size_t kBucketCount        = RegularBuckets + StashBuckets;
     static constexpr size_t kSlotsPerBucket     = SlotsPerBucket;
-
-
 };
 
 } // namespace idlekv::dash::detail

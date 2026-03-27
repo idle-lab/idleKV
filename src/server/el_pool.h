@@ -5,12 +5,12 @@
 #include "server/thread_state.h"
 #include "utils/cpu/basic.h"
 
+#include <atomic>
 #include <barrier>
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/steady_timer.hpp>
-#include <atomic>
 #include <boost/fiber/condition_variable.hpp>
 #include <boost/fiber/future/async.hpp>
 #include <boost/fiber/policy.hpp>
@@ -34,8 +34,7 @@ constexpr auto kMaxBusyCpuTime = std::chrono::microseconds(100);
 // manages a single io_context thread and runs submitted tasks on its bound cpu.
 class EventLoop {
 public:
-    EventLoop(unsigned cpu)
-        : io_(1), cpu_(cpu), stop_waiter_(io_) {}
+    EventLoop(unsigned cpu, size_t pool_index) : io_(1), cpu_(cpu), stop_waiter_(io_), pool_index_(pool_index) {}
 
     auto Run() -> void;
 
@@ -50,15 +49,17 @@ public:
     template <class Fn, class... Args>
         requires std::invocable<Fn, Args...>
     auto Dispatch(Fn&& f, Args&&... args) -> void {
+        // keep args... life cycle.
         auto task = std::make_shared<std::tuple<std::decay_t<Fn>, std::decay_t<Args>...>>(
             std::forward<Fn>(f), std::forward<Args>(args)...);
+
+        // we need post to target thread and luanch the fiber.
         asio::post(io_, [task]() mutable {
-            idlekv::LaunchFiber([task = std::move(task)]() mutable {
-                std::apply(
-                    [](auto& fn, auto&... inner_args) {
-                        std::invoke(fn, std::move(inner_args)...);
-                    },
-                    *task);
+            LaunchFiber([task = std::move(task)]() mutable {
+                // unpack task and execute it.
+                std::apply([](auto& fn,
+                              auto&... inner_args) { std::invoke(fn, std::move(inner_args)...); },
+                           *task);
             });
         });
     }
@@ -103,6 +104,7 @@ public:
     }
 
     auto ThreadId() -> std::thread::native_handle_type { return th_.native_handle(); }
+    auto PoolIndex() -> size_t { return pool_index_; }
     auto IoContext() -> asio::io_context& { return io_; }
     auto Cpu() -> unsigned { return cpu_; }
 
@@ -110,10 +112,11 @@ public:
     auto Stop() -> void;
 
 private:
-    asio::io_context                                           io_;
-    unsigned                                                   cpu_;
-    asio::steady_timer                                         stop_waiter_;
-    std::atomic_bool                                           stop_requested_{false};
+    asio::io_context   io_;
+    unsigned           cpu_;
+    asio::steady_timer stop_waiter_;
+    std::atomic_bool   stop_requested_{false};
+    size_t pool_index_;
 
     std::jthread th_;
 };

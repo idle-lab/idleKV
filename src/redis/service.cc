@@ -4,7 +4,6 @@
 #include "redis/connection.h"
 #include "redis/parser.h"
 
-#include <array>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/buffer_registration.hpp>
 #include <cstddef>
@@ -15,7 +14,6 @@
 
 namespace idlekv {
 
-
 auto RedisService::Init(EventLoop* el) -> void {
     tl_ = new ServiceTLState();
     tl_->Init(el->IoContext().get_executor(), kDefaultReadBufferSize);
@@ -24,11 +22,10 @@ auto RedisService::Init(EventLoop* el) -> void {
     tl_->ConnPool().SetNew([]() -> ConnectionPtr {
         auto* tl = RedisService::Tlocal();
         CHECK(tl);
-        
+
         if (auto slot = tl->GetRegisterBuffer(); slot.has_value()) {
-            return std::make_unique<Connection>(slot->buffer, [index = slot->index, tl]() {
-                tl->FreeBuffer(index);
-            });
+            return std::make_unique<Connection>(
+                slot->buffer, [index = slot->index, tl]() { tl->FreeBuffer(index); });
         } else {
             // use normal buffer
             return std::make_unique<Connection>();
@@ -36,13 +33,14 @@ auto RedisService::Init(EventLoop* el) -> void {
     });
 }
 
-auto RedisService::ServiceTLState::Init(asio::any_io_executor exector, size_t buf_size_per_conn) -> void {
+auto RedisService::ServiceTLState::Init(asio::any_io_executor exector, size_t buf_size_per_conn)
+    -> void {
     const size_t total = buf_size_per_conn * kConnPoolSize;
 
-    buf_space_ = std::make_unique<byte[]>(total);
+    buf_space_ = std::make_unique<char[]>(total);
     std::vector<asio::mutable_buffer> bufs;
 
-    for (int i = 0; i < kConnPoolSize;i++) {
+    for (int i = 0; i < kConnPoolSize; i++) {
         bufs.emplace_back(buf_space_.get() + i * buf_size_per_conn, buf_size_per_conn);
         free_list_.emplace_back(i);
     }
@@ -59,16 +57,10 @@ auto RedisService::ServiceTLState::GetRegisterBuffer() -> std::optional<Slot> {
 
     auto index = free_list_.back();
     free_list_.pop_back();
-    return Slot{
-        .buffer=buffer_registration_->at(index),
-        .index=index
-    };
+    return Slot{.buffer = buffer_registration_->at(index), .index = index};
 }
 
-auto RedisService::ServiceTLState::FreeBuffer(size_t i) -> void {
-    free_list_.emplace_back(i);
-}
-
+auto RedisService::ServiceTLState::FreeBuffer(size_t i) -> void { free_list_.emplace_back(i); }
 
 auto RedisService::Handle(asio::ip::tcp::socket socket) -> void {
     auto& ConnList = Tlocal()->ConnList();

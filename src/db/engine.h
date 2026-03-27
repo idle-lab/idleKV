@@ -2,14 +2,15 @@
 
 #include "common/config.h"
 #include "db/command.h"
-#include "db/result.h"
+#include "db/shard.h"
 #include "redis/connection.h"
 #include "server/el_pool.h"
 
+#include <absl/container/flat_hash_map.h>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <mimalloc.h>
-#include <absl/container/flat_hash_map.h>
 #include <string>
 #include <vector>
 
@@ -23,11 +24,10 @@ public:
     auto Init(EventLoopPool* elp) -> void;
     auto DispatchCmd(Connection*, std::vector<std::string>& args) noexcept -> void;
 
-    auto DbNum() const -> size_t { return db_num_; }
+    auto DbNum() const -> size_t { return cfg_.db_num_; }
     auto GetCmd(const std::string& name) -> Cmd*;
     auto RegisterCmd(const std::string& name, int32_t arity, int32_t FirstKey, int32_t LastKey,
-                     Exector exector, Prepare prepare,
-                     CmdFlags flags = CmdFlags::None) -> void;
+                     Exector exector, Prepare prepare, CmdFlags flags = CmdFlags::None) -> void;
 
     auto DbAt(size_t index) -> DB* {
         CHECK_LT(index, db_slice_.size());
@@ -39,11 +39,11 @@ private:
 
     std::vector<std::shared_ptr<DB>> db_slice_;
 
-    std::unique_ptr<EBRManager> ebr_mgr_;
+    std::vector<Shard*> shards_;
 
     // read-only
     absl::flat_hash_map<std::string, Cmd> cmd_map_;
-    size_t db_num_;
+    const Config& cfg_;
 };
 
 extern std::unique_ptr<IdleEngine> engine;

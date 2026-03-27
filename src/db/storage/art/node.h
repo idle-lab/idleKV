@@ -23,23 +23,23 @@ enum struct NodeType : uint8_t {
     Unknow,
 };
 
-template<typename... Ts>
+template <typename... Ts>
 struct TypeList {};
 
-template<typename T, typename List>
+template <typename T, typename List>
 struct TypeIndex;
 
-template<typename T, typename... Ts>
+template <typename T, typename... Ts>
 struct TypeIndex<T, TypeList<T, Ts...>> {
     static constexpr size_t value = 0;
 };
 
-template<typename T, typename U, typename... Ts>
+template <typename T, typename U, typename... Ts>
 struct TypeIndex<T, TypeList<U, Ts...>> {
     static constexpr size_t value = 1 + TypeIndex<T, TypeList<Ts...>>::value;
 };
 
-constexpr size_t kNodeTypeCount = 5;
+constexpr size_t        kNodeTypeCount  = 5;
 static constexpr size_t kMaxPrefixBytes = 8;
 struct Node {
 public:
@@ -51,10 +51,10 @@ public:
 
     struct Prefix {
         uint8_t len_{0};
-        byte data_[kMaxPrefixBytes]{};
+        byte    data_[kMaxPrefixBytes]{};
     };
 
-    Prefix prefix_;
+    Prefix   prefix_;
     NodeType type_{NodeType::Unknow};
 };
 
@@ -74,12 +74,12 @@ public:
     auto SetNext(byte key, Node*) -> void;
     auto DelNext(byte key) -> Node*;
     auto IsFull() const -> bool { return size_ == 4; }
-    auto UnderFull() const -> bool { 
+    auto UnderFull() const -> bool {
         // if size_ == 1, we should do path compression, not node shrink.
-        return false; 
+        return false;
     }
 
-    byte keys_[4]{};
+    byte  keys_[4]{};
     Node* next_[4]{};
 };
 
@@ -94,13 +94,13 @@ public:
     auto UnderFull() const -> bool { return size_ == 3; }
 
     Node* next_[16]{};
-    byte keys_[16]{};
+    byte  keys_[16]{};
 };
 
 class Node48 : public InnerNode {
 public:
-    static constexpr const size_t Nothing = 0;
-    static constexpr uint64_t VALID_MASK = (1ULL << 48) - 1;
+    static constexpr const size_t Nothing    = 0;
+    static constexpr uint64_t     VALID_MASK = (1ULL << 48) - 1;
 
     Node48() : InnerNode(NodeType::Node48) {}
 
@@ -110,11 +110,10 @@ public:
     auto IsFull() const -> bool { return size_ == 48; }
     auto UnderFull() const -> bool { return size_ == 15; }
 
-    byte keys_[256]{};
-    Node* next_[48]{};
+    byte     keys_[256]{};
+    Node*    next_[48]{};
     uint64_t bitmap_{VALID_MASK}; // 1 means no next, 0 means has a next.
 };
-
 
 class Node256 : public InnerNode {
 public:
@@ -129,8 +128,8 @@ public:
     Node* next_[256]{};
 };
 
-template<class T>
-requires std::default_initializable<T>
+template <class T>
+    requires std::default_initializable<T>
 class NodeLeaf : public Node {
 public:
     NodeLeaf() : Node(NodeType::Leaf) {}
@@ -138,8 +137,8 @@ public:
     T value_;
 };
 
-template<class T>
-requires std::default_initializable<T>
+template <class T>
+    requires std::default_initializable<T>
 class NodeLeaf4 : public Node {
 public:
     NodeLeaf4() : Node(NodeType::Leaf) {}
@@ -147,9 +146,8 @@ public:
     T values_[4];
 };
 
-
-template<class T>
-requires std::default_initializable<T>
+template <class T>
+    requires std::default_initializable<T>
 class NodeLeaf16 : public Node {
 public:
     NodeLeaf16() : Node(NodeType::Leaf) {}
@@ -157,9 +155,7 @@ public:
     T values_[16];
 };
 
-
-auto NodeGrow(Node* node) -> Node* ;
+auto NodeGrow(Node* node) -> Node*;
 auto NodeShrink(Node* node) -> Node*;
-
 
 } // namespace idlekv

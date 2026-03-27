@@ -38,8 +38,8 @@ auto EventLoop::Run() -> void {
 
 auto EventLoop::Stop() -> void {
     bool expected = false;
-    if (!stop_requested_.compare_exchange_strong(
-            expected, true, std::memory_order_acq_rel, std::memory_order_acquire)) {
+    if (!stop_requested_.compare_exchange_strong(expected, true, std::memory_order_acq_rel,
+                                                 std::memory_order_acquire)) {
         return;
     }
 
@@ -106,7 +106,7 @@ auto EventLoopPool::SetupEls() -> void {
         // pin each event loop thread to a cpu to keep scheduling predictable.
         int      rel_indx = i % num_online_cpus;
         unsigned abs_cpu  = rel_to_abs_cpu[rel_indx];
-        els_[i]           = std::make_unique<EventLoop>(abs_cpu);
+        els_[i]           = std::make_unique<EventLoop>(abs_cpu, i);
 
         els_[i]->Run();
 
