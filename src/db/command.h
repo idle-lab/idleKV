@@ -1,6 +1,7 @@
 #pragma once
 
 #include "db/db.h"
+#include "db/shard.h"
 #include "redis/connection.h"
 
 #include <cstddef>
@@ -12,20 +13,28 @@
 
 namespace idlekv {
 
+
+
 class ExecContext {
 public:
-    ExecContext(Connection* conn, DB* db, size_t OwnerId)
-        : conn_(conn), db_(db), owner_id_(OwnerId) {}
+    ExecContext(Connection* conn, size_t OwnerId)
+        : conn_(conn), owner_id_(OwnerId) {
+        db_index_ = conn_->DbIndex();
+    }
 
     auto GetConnection() -> Connection* { return conn_; }
 
-    auto GetDb() -> DB* { return db_; }
+    auto InitShard(Shard* shard) -> void { shard_ = shard; }
+
+    auto GetDb() -> DB* { return shard_->DbAt(db_index_); }
+    auto GetShard() -> Shard* { return shard_; }
     auto OwnerId() -> size_t { return owner_id_; }
 
 private:
     Connection* conn_;
 
-    DB*    db_ = nullptr;
+    Shard* shard_;
+    size_t db_index_;
     size_t owner_id_;
 };
 

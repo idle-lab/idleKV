@@ -1,6 +1,7 @@
 #include "db/engine.h"
 
 #include "common/asio_no_exceptions.h"
+#include "common/logger.h"
 #include "db/command.h"
 #include "db/shard.h"
 #include "db/storage/alloctor.h"
@@ -31,13 +32,16 @@ auto IdleEngine::Init(EventLoopPool* elp) -> void {
     // Init shard_set
     InitCommand();
 
-    shards_.reserve(cfg_.shard_num_);
+    shards_.resize(cfg_.shard_num_);
 
     elp->AwaitForeach([this](size_t i, EventLoop* el) {
+        if (i >= cfg_.shard_num_) {
+            return;
+        }
         auto* heap = ThreadState::Tlocal()->DataHeap();
 
-        void* ptr = mi_heap_malloc_aligned(heap, sizeof(Shard), alignof(Shard));
-        Shard* shard = new (ptr) Shard(el, heap);
+        void*  ptr   = mi_heap_malloc_aligned(heap, sizeof(Shard), alignof(Shard));
+        Shard* shard = new (ptr) Shard(cfg_, el, heap);
 
         shards_[i] = shard;
     });
@@ -64,15 +68,21 @@ auto IdleEngine::DispatchCmd(Connection* conn, std::vector<std::string>& args) n
     }
 
     if (cmd->CanExecInline()) {
-        ExecContext cmdctx(conn, nullptr, id);
+        ExecContext cmdctx(conn, id);
         cmd->Exec(&cmdctx, args);
         return;
     }
 
-    auto       db_ptr = DbAt(conn->DbIndex());
-    ExecContext cmdctx(conn, db_ptr, 0);
+    ShardId shard_id = id;
 
-    cmd->Exec(&cmdctx, args);
+    if (cmd->FirstKey() > 0) {
+        shard_id = CalculateShardId(args[cmd->FirstKey()]);
+    }
+
+    ExecContext cmdctx(conn, 0);
+    cmdctx.InitShard(ShardAt(shard_id));
+
+    cmd->Exec(&cmdctx, args); 
 }
 
 auto IdleEngine::RegisterCmd(const std::string& name, int32_t arity, int32_t FirstKey,

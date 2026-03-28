@@ -1,8 +1,13 @@
+#include "common/result.h"
 #include "db/command.h"
 #include "db/engine.h"
+#include "db/storage/result.h"
 #include "redis/connection.h"
 #include "redis/error.h"
 
+#include <boost/fiber/future/future.hpp>
+#include <boost/fiber/future/promise.hpp>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -29,21 +34,41 @@ auto SingleWriteKey(const std::vector<std::string>& args)
 
 } // namespace
 
+
 auto Set(ExecContext* ctx, std::vector<std::string>& args) -> void {
+    using namespace boost::fibers;
     auto& sender = ctx->GetConnection()->GetSender();
-    auto  res    = ctx->GetDb()->Set(args[1], DataEntity::FromString(std::move(args[2])));
+
+
+    auto prom = std::make_shared<promise<Result<bool>>>();
+    auto fut = prom->get_future();
+    DB* db = ctx->GetDb();
+
+    ctx->GetShard()->Add([prom, db, key = std::move(args[1]), value = std::move(args[2])]() mutable {
+        prom->set_value(db->Set(std::move(key), DataEntity::FromString(std::move(value))));
+    });
+
+    auto res = fut.get();
     if (!res.Ok()) {
         return sender.SendError(res.Message());
     }
-
     sender.SendOk();
 }
 
 auto Get(ExecContext* ctx, std::vector<std::string>& args) -> void {
+    using namespace boost::fibers;
     auto& sender = ctx->GetConnection()->GetSender();
-    auto  res    = ctx->GetDb()->Get(args[1]);
+    auto prom = std::make_shared<promise<Result<std::shared_ptr<DataEntity>>>>();
+    auto fut = prom->get_future();
+    DB* db = ctx->GetDb();
+
+    ctx->GetShard()->Add([db, prom, value = std::move(args[1])] {
+        prom->set_value(db->Get(value));
+    });
+
+    auto res = fut.get();
     if (res == OpStatus::NoSuchKey) {
-        sender.SendNullBulkString();
+        return sender.SendNullBulkString();
     }
 
     const auto& value = res.Get();

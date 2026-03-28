@@ -27,7 +27,7 @@ public:
     using ValueType = typename Impl::ValueType;
 
     KvStore() {}
-    explicit KvStore(std::pmr::memory_resource* mr) {}
+    explicit KvStore(std::pmr::memory_resource* mr) : data_(mr) {}
 
     template <class U, class V>
     auto Set(U&& key, V&& value) -> Result<bool> {
@@ -58,73 +58,30 @@ public:
     using KeyType   = Key;
     using ValueType = Value;
 
-    template <size_t ShardNum>
-    class ShardHash {
-    public:
-        using MapType =
-            absl::flat_hash_map<KeyType, ValueType, std::hash<KeyType>, std::equal_to<KeyType>, std::pmr::polymorphic_allocator<std::pair<const KeyType, Value>>>;
+    using MapType =
+        absl::flat_hash_map<KeyType, ValueType, std::hash<KeyType>, std::equal_to<KeyType>,
+                            std::pmr::polymorphic_allocator<std::pair<const KeyType, Value>>>;
 
-        ShardHash() = default;
-
-        template <class U, class V>
-        auto Insert(U&& key, V&& value) -> void {
-            auto shard_id = Hash(key) % ShardNum;
-            {
-                std::lock_guard<std::mutex> lg(locks_[shard_id]);
-                shards_[shard_id].insert(
-                    std::make_pair(std::forward<U>(key), std::forward<V>(value)));
-            }
-        }
-
-        template <class U>
-        auto Find(U&& key) -> std::optional<ValueType> {
-            auto shard_id = Hash(key) % ShardNum;
-            {
-                std::lock_guard<std::mutex> lg(locks_[shard_id]);
-                auto                        it = shards_[shard_id].find(key);
-                if (it == shards_[shard_id].end()) {
-                    return std::nullopt;
-                }
-                return it->second;
-            }
-        }
-
-        template <class U>
-        auto Erase(U&& key) -> std::optional<size_t> {
-            auto shard_id = Hash(key) % ShardNum;
-            {
-                std::lock_guard<std::mutex>  lg(locks_[shard_id]);
-                std::unordered_map<int, int> a;
-                a.erase(1);
-                return shards_[shard_id].erase(key);
-            }
-        }
-
-    private:
-        auto Hash(const KeyType& key) -> uint64_t { return XXH32(key.data(), key.size(), 54188); }
-
-        std::array<MapType, ShardNum>    shards_;
-        std::array<std::mutex, ShardNum> locks_;
-    };
+    DummyImpl(std::pmr::memory_resource* mr) : data_(mr) {}
 
     template <class U, class V>
     auto SetImpl(U&& key, V&& value) -> Result<bool> {
-        data_.Insert(std::forward<U>(key), std::forward<V>(value));
+        data_.insert(std::make_pair(std::forward<U>(key), std::forward<V>(value)));
         return {OpStatus::OK, true};
     }
 
     template <class U>
     auto GetImpl(U&& key) -> Result<ValueType> {
-        auto record = data_.Find(key);
-        if (!record.has_value()) {
-            return {OpStatus::NoSuchKey, ValueType{}};
+        auto it = data_.find(key);
+        if (it == data_.end()) {
+            return {OpStatus::NoSuchKey, std::nullopt};
         }
-        return {OpStatus::OK, record.value()};
+        return {OpStatus::OK, it->second};
     }
 
     template <class U>
     auto DelImpl(U&& key) -> Result<bool> {
-        auto count = data_.Erase(std::forward<U>(key));
+        auto count = data_.erase(std::forward<U>(key));
         if (count == 0) {
             return {OpStatus::NoSuchKey, true};
         }
@@ -132,7 +89,7 @@ public:
     }
 
 private:
-    ShardHash<32> data_;
+    MapType data_;
 };
 
 // template <class Key, class Value>

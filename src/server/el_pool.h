@@ -34,7 +34,8 @@ constexpr auto kMaxBusyCpuTime = std::chrono::microseconds(100);
 // manages a single io_context thread and runs submitted tasks on its bound cpu.
 class EventLoop {
 public:
-    EventLoop(unsigned cpu, size_t pool_index) : io_(1), cpu_(cpu), stop_waiter_(io_), pool_index_(pool_index) {}
+    EventLoop(unsigned cpu, size_t pool_index)
+        : io_(1), cpu_(cpu), stop_waiter_(io_), pool_index_(pool_index) {}
 
     auto Run() -> void;
 
@@ -116,7 +117,7 @@ private:
     unsigned           cpu_;
     asio::steady_timer stop_waiter_;
     std::atomic_bool   stop_requested_{false};
-    size_t pool_index_;
+    size_t             pool_index_;
 
     std::jthread th_;
 };

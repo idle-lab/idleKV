@@ -38,7 +38,7 @@ private:
     std::thread::native_handle_type thread_id_;
     size_t                          pool_index_;
 
-    uint64_t                                 next_coro_id_ = 1;
+    uint64_t next_coro_id_ = 1;
 
     static thread_local ThreadState* state_;
 };

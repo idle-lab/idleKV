@@ -10,9 +10,7 @@ template <class T>
 class ResultT {
 public:
     ResultT(std::error_code ec, T res) : ec_(ec), res_(std::move(res)) {}
-
     ResultT(std::error_code ec) : ec_(ec) {}
-
     ResultT(T res) : res_(std::move(res)) {}
 
     auto Ok() const -> bool { return !ec_; }

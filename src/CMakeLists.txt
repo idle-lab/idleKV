@@ -33,7 +33,7 @@ if (DISABLE_CHECK)
     )
 endif()
 
-option(ENABLE_ASIO_IO_URING "Enable Asio io_uring backend" OFF)
+option(ENABLE_ASIO_IO_URING "Enable Asio io_uring backend" ON)
 
 if (ENABLE_ASIO_IO_URING)
     find_library(LIBURING_LIBRARY uring)

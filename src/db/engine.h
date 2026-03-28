@@ -8,10 +8,11 @@
 
 #include <absl/container/flat_hash_map.h>
 #include <cstddef>
-#include <functional>
+#include <cstdint>
 #include <memory>
 #include <mimalloc.h>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace idlekv {
@@ -29,12 +30,15 @@ public:
     auto RegisterCmd(const std::string& name, int32_t arity, int32_t FirstKey, int32_t LastKey,
                      Exector exector, Prepare prepare, CmdFlags flags = CmdFlags::None) -> void;
 
-    auto DbAt(size_t index) -> DB* {
-        CHECK_LT(index, db_slice_.size());
-        return db_slice_[index].get();
-    }
+    auto ShardAt(size_t index) -> Shard* { return shards_[index]; }
 
 private:
+    static constexpr uint64_t kSeed = 0x9E3779B97F4A7C15ULL;
+
+    auto CalculateShardId(std::string_view s) -> ShardId {
+        return static_cast<ShardId>(XXH64(s.data(), s.size(), kSeed) % cfg_.shard_num_);
+    }
+
     auto InitCommand() -> void;
 
     std::vector<std::shared_ptr<DB>> db_slice_;
@@ -43,7 +47,7 @@ private:
 
     // read-only
     absl::flat_hash_map<std::string, Cmd> cmd_map_;
-    const Config& cfg_;
+    const Config&                         cfg_;
 };
 
 extern std::unique_ptr<IdleEngine> engine;

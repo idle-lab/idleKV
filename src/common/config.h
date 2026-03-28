@@ -80,7 +80,8 @@ public:
     std::string config_file_path;
 
     uint8_t db_num_{16};
-    uint8_t shard_num_{16};
+
+    uint8_t shard_num_{6};
 
 private:
     CLI::App opts_;

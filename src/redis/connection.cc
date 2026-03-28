@@ -9,6 +9,7 @@
 
 #include <boost/asio/read.hpp>
 #include <boost/asio/registered_buffer.hpp>
+#include <boost/fiber/operations.hpp>
 #include <cstddef>
 #include <spdlog/spdlog.h>
 #include <sys/uio.h>
@@ -74,16 +75,6 @@ auto ReplyParseError(Sender& sender, const ParserResut& res) -> std::error_code 
     sender.Flush();
     return sender.GetError();
 }
-
-auto FormatRemoteEndpoint(const Connection& conn) -> std::string {
-    const auto ep = conn.RemoteEndpoint();
-    if (ep == asio::ip::tcp::endpoint{}) {
-        return {};
-    }
-
-    return fmt::format("{}:{}", ep.address().to_string(), ep.port());
-}
-
 
 } // namespace
 

@@ -34,7 +34,7 @@ inline thread_local EBRThreadLocal ebr_local{};
 
 class EBRManager {
 public:
-    auto Init(EventLoop* el) {
+    auto Init() {
         // threads_.resize(elp->PoolSize());
 
         // elp->AwaitForeach([this](size_t i, EventLoop* el) {
