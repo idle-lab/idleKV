@@ -39,16 +39,6 @@ find_package(Threads REQUIRED)
 find_package(Boost REQUIRED COMPONENTS fiber context system thread)
 find_library(XXHASH_LIBRARY xxhash REQUIRED)
 
-include(FetchContent)
-
-FetchContent_Declare(
-  abseil
-  GIT_REPOSITORY git@github.com:abseil/abseil-cpp.git
-  GIT_TAG 20240116.2
-)
-
-FetchContent_MakeAvailable(abseil)
-
 add_subdirectory(third_part)
 add_subdirectory(src)
 if (ENABLE_BENCHMARK)
