@@ -24,14 +24,47 @@
 #include <chrono>
 #include <memory>
 #include <system_error>
-#include <tuple>
-#include <type_traits>
 #include <utility>
-#include <variant>
+
+namespace idlekv {
+class FiberCpuProps : public boost::fibers::fiber_properties {
+public:
+    explicit FiberCpuProps(boost::fibers::context* ctx) noexcept
+        : boost::fibers::fiber_properties(ctx) {}
+
+    uint64_t total_cpu_ns{0};
+    uint64_t slice_cpu_ns{0};
+
+    // internal fields
+    uint64_t last_resume_cpu_ns{0};
+    uint64_t switch_count{0};
+};
+
+} // namepsace idlekv
+
+namespace boost::fibers {
+
+struct no_op_lock {
+    void lock() {}
+    void unlock() {}
+
+    bool try_lock() { return true; }
+};
+
+} // namespace boost::fibers
 
 namespace boost::fibers::asio {
 
-class round_robin : public algo::algorithm {
+inline auto ReadThreadCpuTimeNs() noexcept -> uint64_t {
+    ::timespec ts{};
+    if (::clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) != 0) [[unlikely]] {
+        return 0;
+    }
+
+    return static_cast<uint64_t>(ts.tv_sec) * 1'000'000'000ull + static_cast<uint64_t>(ts.tv_nsec);
+}
+
+class round_robin : public algo::algorithm_with_properties<idlekv::FiberCpuProps> {
 private:
     using ready_queue_type = scheduler::ready_queue_type;
 
@@ -54,7 +87,7 @@ public:
         boost::asio::add_service(io_ctx, new service(io_ctx));
     }
 
-    void awakened(boost::fibers::context* ctx) noexcept override {
+    void awakened(boost::fibers::context* ctx, idlekv::FiberCpuProps&) noexcept override {
         BOOST_ASSERT(nullptr != ctx);
         BOOST_ASSERT(!ctx->ready_is_linked());
         ctx->ready_link(rqueue_);
@@ -64,6 +97,8 @@ public:
     }
 
     auto pick_next() noexcept -> boost::fibers::context* override {
+        AccountRunningFiber();
+
         boost::fibers::context* ctx = nullptr;
         if (!rqueue_.empty()) {
             ctx = &rqueue_.front();
@@ -72,6 +107,7 @@ public:
             BOOST_ASSERT(boost::fibers::context::active() != ctx);
             if (!ctx->is_context(boost::fibers::type::dispatcher_context)) {
                 --counter_;
+                MarkScheduledIn(ctx);
             }
         }
         return ctx;
@@ -82,7 +118,7 @@ public:
     void suspend_until(std::chrono::steady_clock::time_point const& abs_time) noexcept override {
         if (abs_time != (std::chrono::steady_clock::time_point::max)()) {
             suspend_timer_.expires_at(abs_time);
-            suspend_timer_.async_wait([this](boost::system::error_code const& ec) {
+            suspend_timer_.async_wait([](boost::system::error_code const& ec) {
                 if (!ec) {
                     boost::this_fiber::yield();
                 }
@@ -98,11 +134,58 @@ public:
     }
 
 private:
+    auto PropsOf(boost::fibers::context* ctx) noexcept -> idlekv::FiberCpuProps* {
+        if (ctx == nullptr || !ctx->is_context(boost::fibers::type::worker_context)) {
+            return nullptr;
+        }
+
+        auto* raw = ctx->get_properties();
+        return raw == nullptr ? nullptr : static_cast<idlekv::FiberCpuProps*>(raw);
+    }
+
+    void AccountRunningFiber() noexcept {
+        auto* props = PropsOf(running_ctx_);
+        if (props == nullptr || running_since_cpu_ns_ == 0) {
+            running_ctx_          = nullptr;
+            running_since_cpu_ns_ = 0;
+            return;
+        }
+
+        const uint64_t now = ReadThreadCpuTimeNs();
+        if (now >= running_since_cpu_ns_) {
+            const uint64_t delta = now - running_since_cpu_ns_;
+            props->total_cpu_ns += delta;
+            props->slice_cpu_ns += delta;
+            ++props->switch_count;
+        }
+
+        props->last_resume_cpu_ns = 0;
+        running_ctx_              = nullptr;
+        running_since_cpu_ns_     = 0;
+    }
+
+    void MarkScheduledIn(boost::fibers::context* ctx) noexcept {
+        auto* props = PropsOf(ctx);
+        if (props == nullptr) {
+            return;
+        }
+
+        const uint64_t now        = ReadThreadCpuTimeNs();
+        props->slice_cpu_ns       = 0;
+        props->last_resume_cpu_ns = now;
+
+        running_ctx_          = ctx;
+        running_since_cpu_ns_ = now;
+    }
+
     ready_queue_type                  rqueue_{};
     boost::asio::steady_timer         suspend_timer_;
     boost::fibers::mutex              mtx_{};
     boost::fibers::condition_variable cnd_{};
     std::size_t                       counter_{0};
+
+    boost::fibers::context* running_ctx_{nullptr};
+    uint64_t                running_since_cpu_ns_{0};
 };
 
 //[fibers_asio_yield_t
@@ -388,54 +471,47 @@ public:
 
 namespace idlekv {
 
-namespace detail {
-
-template <typename... Args>
-struct fiber_async_result;
-
-template <>
-struct fiber_async_result<> {
-    using type = std::monostate;
-
-    static auto Pack() -> type { return {}; }
-};
-
-template <typename T>
-struct fiber_async_result<T> {
-    using type = std::decay_t<T>;
-
-    static auto Pack(T&& value) -> type { return std::forward<T>(value); }
-};
-
-template <typename T, typename U, typename... Rest>
-struct fiber_async_result<T, U, Rest...> {
-    using type = std::tuple<std::decay_t<T>, std::decay_t<U>, std::decay_t<Rest>...>;
-
-    static auto Pack(T&& first, U&& second, Rest&&... rest) -> type {
-        return type(std::forward<T>(first), std::forward<U>(second), std::forward<Rest>(rest)...);
-    }
-};
-
-template <typename... Args>
-using fiber_async_result_t = typename fiber_async_result<Args...>::type;
-
-template <typename Result, typename... Args>
-auto PackFiberAsyncResult(Args&&... args) -> Result {
-    if constexpr (sizeof...(Args) == 0) {
-        return fiber_async_result<>::Pack();
-    } else {
-        return fiber_async_result<Args...>::Pack(std::forward<Args>(args)...);
-    }
-}
-
-} // namespace detail
-
 auto CurrentIoContext() -> asio::io_context&;
 auto FiberSleepFor(std::chrono::steady_clock::duration dur) -> std::error_code;
 
 template <typename Fn>
 auto LaunchFiber(Fn&& fn) -> void {
     boost::fibers::fiber(std::forward<Fn>(fn)).detach();
+}
+
+inline auto MaybeYieldOnCpuBudget(std::chrono::nanoseconds cpu_budget) noexcept -> bool {
+    auto* ctx = boost::fibers::context::active();
+    if (ctx == nullptr || !ctx->is_context(boost::fibers::type::worker_context)) {
+        return false;
+    }
+
+    auto* raw = ctx->get_properties();
+    if (raw == nullptr) {
+        return false;
+    }
+
+    auto& props = static_cast<FiberCpuProps&>(*raw);
+    if (props.last_resume_cpu_ns == 0) {
+        return false;
+    }
+
+    const uint64_t budget_ns = static_cast<uint64_t>(cpu_budget.count());
+    const uint64_t now       = boost::fibers::asio::ReadThreadCpuTimeNs();
+
+    if (now < props.last_resume_cpu_ns) {
+        return false;
+    }
+
+    if (now - props.last_resume_cpu_ns < budget_ns) {
+        return false;
+    }
+
+    if (!boost::fibers::has_ready_fibers()) {
+        return false;
+    }
+
+    boost::this_fiber::yield();
+    return true;
 }
 
 } // namespace idlekv

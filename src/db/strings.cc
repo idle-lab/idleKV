@@ -1,5 +1,6 @@
 #include "common/result.h"
 #include "db/command.h"
+#include "db/context.h"
 #include "db/engine.h"
 #include "db/storage/result.h"
 #include "redis/connection.h"
@@ -9,6 +10,7 @@
 #include <boost/fiber/future/promise.hpp>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -16,16 +18,16 @@ namespace idlekv {
 
 namespace {
 
-auto SingleReadKey(const std::vector<std::string>& args)
-    -> std::pair<std::vector<std::string>, std::vector<std::string>> {
+auto SingleReadKey(const CmdArgs& args)
+    -> std::pair<std::vector<std::string_view>, std::vector<std::string_view>> {
     if (args.size() < 2) {
         return {};
     }
     return {{}, {args[1]}};
 }
 
-auto SingleWriteKey(const std::vector<std::string>& args)
-    -> std::pair<std::vector<std::string>, std::vector<std::string>> {
+auto SingleWriteKey(const CmdArgs& args)
+    -> std::pair<std::vector<std::string_view>, std::vector<std::string_view>> {
     if (args.size() < 2) {
         return {};
     }
@@ -34,18 +36,17 @@ auto SingleWriteKey(const std::vector<std::string>& args)
 
 } // namespace
 
-
-auto Set(ExecContext* ctx, std::vector<std::string>& args) -> void {
+auto Set(ExecContext* ctx, CmdArgs& args) -> void {
     using namespace boost::fibers;
     auto& sender = ctx->GetConnection()->GetSender();
 
-
     auto prom = std::make_shared<promise<Result<bool>>>();
-    auto fut = prom->get_future();
-    DB* db = ctx->GetDb();
+    auto fut  = prom->get_future();
+    DB*  db   = ctx->GetDb();
 
-    ctx->GetShard()->Add([prom, db, key = std::move(args[1]), value = std::move(args[2])]() mutable {
-        prom->set_value(db->Set(std::move(key), DataEntity::FromString(std::move(value))));
+    ctx->GetShard()->Add(
+    [prom, db, ags = std::move(args)]() mutable {
+            prom->set_value(db->Set(std::string(ags[1]), DataEntity::FromString(std::string(ags[2]))));
     });
 
     auto res = fut.get();
@@ -55,15 +56,16 @@ auto Set(ExecContext* ctx, std::vector<std::string>& args) -> void {
     sender.SendOk();
 }
 
-auto Get(ExecContext* ctx, std::vector<std::string>& args) -> void {
+auto Get(ExecContext* ctx, CmdArgs& args) -> void {
     using namespace boost::fibers;
     auto& sender = ctx->GetConnection()->GetSender();
-    auto prom = std::make_shared<promise<Result<std::shared_ptr<DataEntity>>>>();
-    auto fut = prom->get_future();
-    DB* db = ctx->GetDb();
+    auto  prom   = std::make_shared<promise<Result<std::shared_ptr<DataEntity>>>>();
+    auto  fut    = prom->get_future();
+    DB*   db     = ctx->GetDb();
 
-    ctx->GetShard()->Add([db, prom, value = std::move(args[1])] {
-        prom->set_value(db->Get(value));
+    ctx->GetShard()->Add(
+        [db, prom, ags = std::move(args)] {
+            prom->set_value(db->Get((ags[1]))); 
     });
 
     auto res = fut.get();
@@ -83,9 +85,19 @@ auto Get(ExecContext* ctx, std::vector<std::string>& args) -> void {
     sender.SendBulkString(value);
 }
 
-auto Del(ExecContext* ctx, std::vector<std::string>& args) -> void {
+auto Del(ExecContext* ctx, CmdArgs& args) -> void {
+    using namespace boost::fibers;
     auto& sender = ctx->GetConnection()->GetSender();
-    auto  res    = ctx->GetDb()->Del(args[1]);
+    auto  prom   = std::make_shared<promise<Result<bool>>>();
+    auto  fut    = prom->get_future();
+    DB*   db     = ctx->GetDb();
+
+    ctx->GetShard()->Add(
+        [db, prom, ags = std::move(args)] {
+            prom->set_value(db->Del(ags[1])); 
+    });
+
+    auto res = fut.get();
     if (res == OpStatus::NoSuchKey) {
         return sender.SendInteger(0);
     }

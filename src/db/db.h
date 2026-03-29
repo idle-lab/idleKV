@@ -24,9 +24,9 @@ public:
 
     auto Set(std::string key, DataEntity value) -> Result<bool>;
 
-    auto Get(const std::string& key) -> Result<std::shared_ptr<DataEntity>>;
+    auto Get(std::string_view key) -> Result<std::shared_ptr<DataEntity>>;
 
-    auto Del(const std::string& key) -> Result<bool>;
+    auto Del(std::string_view key) -> Result<bool>;
 
     // TODO(cyb)
     auto MemoryUsage() -> size_t;

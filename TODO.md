@@ -7,11 +7,11 @@
 
 VLL or MVCC？
 
-3.23 计划：
+3.29:
 
-- The ART of Practical Synchronization 论文
+- pipeline 实现
 
-- READ-OPTIMIZED WRITE EXCLUSION 实现
+- VLLM 论文
 
 
 

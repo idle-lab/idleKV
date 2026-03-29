@@ -5,15 +5,23 @@
 #include "db/engine.h"
 #include "redis/error.h"
 #include "redis/parser.h"
+#include "redis/service.h"
+#include "server/el_pool.h"
 #include "server/fiber_runtime.h"
 
+#include <array>
 #include <boost/asio/read.hpp>
 #include <boost/asio/registered_buffer.hpp>
+#include <boost/fiber/context.hpp>
+#include <boost/fiber/mutex.hpp>
 #include <boost/fiber/operations.hpp>
 #include <cstddef>
+#include <cstdint>
+#include <mutex>
 #include <spdlog/spdlog.h>
 #include <sys/uio.h>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace idlekv {
@@ -105,7 +113,7 @@ auto Connection::ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept -> R
     return ResultT{ec_, size_t(n)};
 }
 
-auto Connection::ReadvImpl(const std::vector<Buf>& bufs) noexcept -> ResultT<size_t> {
+auto Connection::ReadvImpl(const std::array<Buf, 2>& bufs) noexcept -> ResultT<size_t> {
     if (IsClosed()) {
         return ResultT<size_t>(ToStdErrorCode(asio::error::not_connected));
     }
@@ -147,11 +155,12 @@ auto Connection::WritevImpl(const std::vector<BufView>& bufs) noexcept -> Result
 }
 
 auto Connection::HandleRequests() noexcept -> void {
-    std::vector<std::string> args;
-    while (!IsClosed()) {
-        auto parse_res = p_.ParseOne(args);
+    cur_args_ = RedisService::Tlocal()->GetCmdArgsOrCreate();
 
-        if (!parse_res.Ok()) {
+    for (uint32_t count = 0; !IsClosed(); count++) {
+        auto parse_res = p_.ParseOne(*cur_args_);
+
+        if (!parse_res.Ok()) [[unlikely]] {
             if (parse_res == ParserResut::STD_ERROR) {
                 if (IsConnectionClosedError(parse_res.ErrorCode())) {
                     break;
@@ -170,7 +179,7 @@ auto Connection::HandleRequests() noexcept -> void {
             break;
         }
 
-        auto& args = parse_res.Value();
+        auto& args = *cur_args_;
         if (args.empty()) [[unlikely]] {
             auto parse_err = ParserResut(ParserResut::PROTOCOL_ERROR,
                                          fmt::format(kProtocolErrFmt, "empty command"));
@@ -181,16 +190,77 @@ auto Connection::HandleRequests() noexcept -> void {
             }
             break;
         }
-        std::transform(args[0].begin(), args[0].end(), args[0].begin(),
+        std::transform(args[0].begin(), args[0].end(), const_cast<char*>(args[0].begin()),
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-        if (parse_res != ParserResut::HAS_MORE) {
+        bool can_sync_dispatch = parse_res != ParserResut::HAS_MORE && pipeline_queue_.empty() &&
+                                 !async_fiber_.joinable();
+
+        if (can_sync_dispatch) {
             s_.SetBatch(false);
+            engine->DispatchCmd(this, args);
+        } else {
+            if (!async_fiber_.joinable()) [[unlikely]] {
+                async_fiber_ = boost::fibers::fiber([this] { AsyncHandle(); });
+            }
+
+            pipeline_queue_.emplace_back(std::move(cur_args_));
+            cur_args_ = RedisService::Tlocal()->GetCmdArgsOrCreate();
+
+            async_cv_.notify_one();
         }
 
-        engine->DispatchCmd(this, args);
+        // check every 32 commands.
+        if ((count & ((1 << 5) - 1)) == 0) {
+            MaybeYieldOnCpuBudget(kMaxBusyCpuTime);
+        }
+
+        cur_args_->clear();
     }
 }
+
+auto Connection::AsyncHandle() noexcept -> void {
+    boost::fibers::no_op_lock mu;
+
+    std::unique_lock<boost::fibers::no_op_lock> lk(mu);
+
+    uint64_t pre_shed_count = -1;
+    while (!IsClosed()) {
+        async_cv_.wait(lk, [this]() -> bool { return IsClosed() || !pipeline_queue_.empty(); });
+
+        uint64_t cur_count = boost::this_fiber::properties<FiberCpuProps>().switch_count;
+        if (pipeline_queue_.size() == 1 && cur_count == pre_shed_count) {
+            boost::this_fiber::yield();
+        }
+        pre_shed_count = cur_count;
+
+        if (IsClosed()) {
+            return;
+        }
+
+        s_.SetBatch(pipeline_queue_.size() > 1);
+
+        // Squash pipeline cmd
+        for (uint32_t count = 0; !pipeline_queue_.empty(); count++) {
+            auto args = std::move(pipeline_queue_.front());
+            pipeline_queue_.pop_front();
+
+            engine->DispatchCmd(this, *args);
+
+            // check every 32 commands.
+            if ((count & ((1 << 5) - 1)) == 0) {
+                MaybeYieldOnCpuBudget(kMaxBusyCpuTime);
+            }
+
+            // recycle CmdArgs.
+            RedisService::Tlocal()->RecycleCmdArgs(std::move(args));
+        }
+
+        if (!p_.HashMore()) {
+            s_.Flush();
+        }
+    }
+};
 
 auto Connection::Flush() -> void {
     if (s_.GetError() || IsClosed()) {
@@ -202,9 +272,6 @@ auto Connection::Flush() -> void {
 auto Connection::Reset(asio::ip::tcp::socket&& socket) -> void {
     CHECK(socket_.has_value() == false) << "override a connection that is currently in use";
     socket_.emplace(std::move(socket));
-    p_.Clear();
-    s_.Clear();
-    ec_       = std::error_code{};
     db_index_ = 0;
 }
 
@@ -220,10 +287,13 @@ auto Connection::Reset() -> void {
         }
         socket_.reset();
     }
+    if (async_fiber_.joinable()) {
+        async_cv_.notify_all();
+        async_fiber_.join();
+    }
     p_.Clear();
     s_.Clear();
-    ec_       = std::error_code{};
-    db_index_ = 0;
+    ec_ = std::error_code{};
 }
 
 } // namespace idlekv

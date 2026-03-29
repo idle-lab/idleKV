@@ -16,7 +16,6 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
-#include <variant>
 #include <vector>
 
 namespace idlekv {
@@ -98,14 +97,14 @@ auto Reader::ReadLineView() noexcept -> ResultT<std::string_view> {
     }
 }
 
-auto Reader::ReadBytesTo(char* buf, size_t len) noexcept -> ResultT<std::monostate> {
+auto Reader::ReadBytesTo(char* buf, size_t len) noexcept -> std::error_code {
     size_t offset = 0;
 
     auto rv = buf_.ReadView();
     if (rv.Size() >= len) {
         std::memcpy(buf + offset, rv.Data(), len);
         buf_.Consume(len);
-        return std::monostate{};
+        return std::error_code{};
     }
 
     std::memcpy(buf + offset, rv.Data(), rv.Size());
@@ -114,7 +113,6 @@ auto Reader::ReadBytesTo(char* buf, size_t len) noexcept -> ResultT<std::monosta
 
     buf_.Clear();
 
-    bufs_.resize(2);
     bufs_[0] = Buf{buf + offset, len};
     auto wv  = buf_.WriteView();
     bufs_[1] = Buf{wv.Data(), wv.Size()};
@@ -130,10 +128,27 @@ auto Reader::ReadBytesTo(char* buf, size_t len) noexcept -> ResultT<std::monosta
             bufs_[0] = Buf{buf + offset, len};
         } else {
             buf_.Commit(res.Value() - len);
-            return std::monostate{};
+            return std::error_code{};
         }
     }
 }
+
+auto Reader::SkipCRLF() noexcept -> std::error_code {
+    size_t n = 2;
+    while (buf_.Buffered() < n) {
+        n -= buf_.Buffered();
+        buf_.Consume(buf_.Buffered());
+        buf_.Clear();
+        auto ec = Fill();
+        if (ec) {
+            return ec;
+        }
+    }
+
+    buf_.Consume(n);
+    return std::error_code{};
+}
+
 
 auto Reader::Fill() -> std::error_code {
     ResultT<size_t> res{std::error_code{}};
@@ -237,7 +252,7 @@ auto Writer::Flush() -> std::error_code {
     return res.Err();
 }
 
-auto Parser::ParseOne(std::vector<std::string>& args) noexcept -> ParserResut {
+auto Parser::ParseOne(CmdArgs& args) noexcept -> ParserResut {
     auto headerRes = rd_->ReadLineView();
     if (!headerRes.Ok()) {
         return headerRes.Err();
@@ -254,7 +269,6 @@ auto Parser::ParseOne(std::vector<std::string>& args) noexcept -> ParserResut {
         return std::make_error_code(err);
     }
 
-    args.resize(arrLen);
     for (int i = 0; i < arrLen; ++i) {
         auto lineRes = rd_->ReadLineView();
         if (!lineRes.Ok()) {
@@ -279,17 +293,18 @@ auto Parser::ParseOne(std::vector<std::string>& args) noexcept -> ParserResut {
             continue;
         }
 
-        args[i].resize(strLen + 2);
+        args.PushArg(strLen);
 
-        auto bytesRes = rd_->ReadBytesTo(args[i].data(), strLen + 2 /* include CRLF */);
-        if (!bytesRes.Ok()) {
-            return bytesRes.Err();
+        if (auto ec = rd_->ReadBytesTo(const_cast<char*>(args[i].data()), strLen); ec) {
+            return ec;
         }
 
-        // pop the trailing CRLF
-        args[i].resize(strLen);
+        // skip the trailing CRLF
+        if (auto ec = rd_->SkipCRLF(); ec) {
+            return ec;
+        }
     }
-    return ParserResut(rd_->HasMore() ? ParserResut::HAS_MORE : ParserResut::OK, std::move(args));
+    return ParserResut(rd_->HasMore() ? ParserResut::HAS_MORE : ParserResut::OK);
 }
 
 auto Sender::SendSimpleString(std::string_view s) -> void {

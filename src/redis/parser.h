@@ -1,11 +1,14 @@
 ﻿#pragma once
 
+#include "absl/container/inlined_vector.h"
 #include "common/asio_no_exceptions.h"
 #include "common/config.h"
 #include "common/logger.h"
 #include "common/result.h"
+#include "db/command.h"
 #include "db/storage/data_entity.h"
 
+#include <array>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/detail/is_buffer_sequence.hpp>
 #include <boost/asio/registered_buffer.hpp>
@@ -64,6 +67,8 @@ public:
     auto End() -> char* { return data_ + size_; }
     auto Data() -> char* { return const_cast<char*>(data_); }
     auto Size() const -> size_t { return size_; }
+    // Adapt to the Boost.asio library
+    auto size() const -> size_t { return size_; }
     operator asio::mutable_buffer() const noexcept { return asio::mutable_buffer(data_, size_); }
     operator asio::const_buffer() const noexcept { return asio::const_buffer(data_, size_); }
 
@@ -203,7 +208,8 @@ public:
         : buf_(static_cast<char*>(buf.data()), buf.size()), reg_buf_(buf) {}
 
     auto ReadLineView() noexcept -> ResultT<std::string_view>;
-    auto ReadBytesTo(char* buf, size_t len) noexcept -> ResultT<std::monostate>;
+    auto ReadBytesTo(char* buf, size_t len) noexcept -> std::error_code;
+    auto SkipCRLF() noexcept -> std::error_code;
 
     auto Fill() -> std::error_code;
     auto HasMore() -> bool;
@@ -214,7 +220,7 @@ public:
 protected:
     virtual auto ReadImpl(char* buf, size_t size) noexcept -> ResultT<size_t>                  = 0;
     virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept -> ResultT<size_t> = 0;
-    virtual auto ReadvImpl(const std::vector<Buf>& bufs) noexcept -> ResultT<size_t>           = 0;
+    virtual auto ReadvImpl(const std::array<Buf, 2>& bufs) noexcept -> ResultT<size_t>           = 0;
 
 private:
     // buf_ and reg_buf_ refer to the same underlying memory region.
@@ -222,7 +228,7 @@ private:
     // reg_buf_, while buf_ must remain consistent throughout the process.
     IOBuf                           buf_;
     asio::mutable_registered_buffer reg_buf_;
-    std::vector<Buf>                bufs_;
+    std::array<Buf, 2>     bufs_;
 };
 
 class Writer {
@@ -354,13 +360,11 @@ public:
         PROTOCOL_ERROR,
     };
 
-    ParserResut(Status s, std::vector<std::string>&& args) : s_(s), args_(std::move(args)) {}
+    ParserResut(Status s) : s_(s) {}
     ParserResut(Status s, std::string&& msg) : s_(s), err_msg_(std::move(msg)) {}
     ParserResut(std::error_code ec) : s_(Status::STD_ERROR), err_msg_(ec.message()), ec_(ec) {}
 
     auto Ok() const -> bool { return s_ == Status::OK || s_ == Status::HAS_MORE; }
-
-    auto Value() -> std::vector<std::string>& { return args_; }
 
     auto Message() const -> const std::string& { return err_msg_; }
 
@@ -369,10 +373,9 @@ public:
     auto operator==(Status s) const -> bool { return s == s_; }
 
 private:
-    Status                   s_;
-    std::string              err_msg_;
-    std::error_code          ec_;
-    std::vector<std::string> args_;
+    Status          s_;
+    std::string     err_msg_;
+    std::error_code ec_;
 };
 
 class Parser {
@@ -380,9 +383,10 @@ public:
     Parser(Reader* rd) : rd_(rd) {}
 
     // parse a Redis command
-    auto ParseOne(std::vector<std::string>& args) noexcept -> ParserResut;
+    auto ParseOne(CmdArgs& args) noexcept -> ParserResut;
 
     auto Clear() -> void { rd_->Clear(); }
+    auto HashMore() -> bool { return rd_->HasMore(); }
 
 private:
     Reader* rd_;

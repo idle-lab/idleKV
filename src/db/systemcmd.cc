@@ -1,3 +1,5 @@
+#include "db/command.h"
+#include "db/context.h"
 #include "db/engine.h"
 #include "redis/connection.h"
 #include "redis/error.h"
@@ -10,13 +12,13 @@ namespace idlekv {
 
 namespace {
 
-auto NoKeys(const std::vector<std::string>& args)
-    -> std::pair<std::vector<std::string>, std::vector<std::string>> {
+auto NoKeys(const CmdArgs& args)
+    -> std::pair<std::vector<std::string_view>, std::vector<std::string_view>> {
     (void)args;
     return {};
 }
 
-auto Ping(ExecContext* ctx, std::vector<std::string>& args) -> void {
+auto Ping(ExecContext* ctx, CmdArgs& args) -> void {
     auto& sender = ctx->GetConnection()->GetSender();
     switch (args.size()) {
     case 1:
@@ -28,7 +30,7 @@ auto Ping(ExecContext* ctx, std::vector<std::string>& args) -> void {
     }
 }
 
-auto Select(ExecContext* ctx, std::vector<std::string>& args) -> void {
+auto Select(ExecContext* ctx, CmdArgs& args) -> void {
     auto&       sender  = ctx->GetConnection()->GetSender();
     size_t      DbIndex = 0;
     const auto* begin   = args[1].data();

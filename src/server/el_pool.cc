@@ -22,8 +22,8 @@ auto EventLoop::Run() -> void {
 
         while (!io_.stopped()) {
             if (boost::fibers::has_ready_fibers()) {
-                while (io_.poll()) {
-                }
+                while (io_.poll())
+                    ;
 
                 // yield this fiber to processe pending (ready) fibers.
                 boost::this_fiber::yield();

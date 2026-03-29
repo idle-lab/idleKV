@@ -1,14 +1,14 @@
 #pragma once
 
+#include "absl/container/inlined_vector.h"
 #include "absl/functional/function_ref.h"
 #include "common/asio_no_exceptions.h"
+#include "db/command.h"
 #include "db/storage/data_entity.h"
 #include "redis/parser.h"
 #include "server/el_pool.h"
 #include "server/fiber_runtime.h"
 
-#include <array>
-#include <atomic>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/buffer_registration.hpp>
@@ -17,13 +17,16 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/registered_buffer.hpp>
+#include <boost/fiber/condition_variable.hpp>
+#include <boost/fiber/fiber.hpp>
 #include <boost/system/detail/error_code.hpp>
 #include <cassert>
 #include <cstddef>
 #include <cstring>
-#include <functional>
+#include <deque>
+#include <memory>
 #include <optional>
-#include <system_error>
+#include <queue>
 #include <vector>
 
 namespace idlekv {
@@ -33,6 +36,8 @@ class IdleEngine;
 
 class Connection : public Reader, public Writer {
 public:
+    using CmdArgsPtr = std::unique_ptr<CmdArgs>;
+
     explicit Connection()
         : Reader(kDefaultReadBufferSize), Writer(kDefaultWriteBufferSize), p_(this), s_(this) {}
 
@@ -50,12 +55,13 @@ public:
     virtual auto ReadImpl(char* buf, size_t size) noexcept -> ResultT<size_t> override;
     virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept
         -> ResultT<size_t> override;
-    virtual auto ReadvImpl(const std::vector<Buf>& bufs) noexcept -> ResultT<size_t> override;
+    virtual auto ReadvImpl(const std::array<Buf, 2>& bufs) noexcept -> ResultT<size_t> override;
 
     virtual auto WriteImpl(const char* data, size_t size) noexcept -> ResultT<size_t> override;
     virtual auto WritevImpl(const std::vector<BufView>& bufs) noexcept -> ResultT<size_t> override;
 
     auto HandleRequests() noexcept -> void;
+    auto AsyncHandle() noexcept -> void;
 
     auto Flush() -> void;
 
@@ -97,6 +103,12 @@ private:
 
     EventLoop* el_;
     size_t     db_index_ = 0;
+
+    boost::fibers::fiber                  async_fiber_;
+    boost::fibers::condition_variable_any async_cv_;
+
+    std::deque<CmdArgsPtr> pipeline_queue_;
+    CmdArgsPtr cur_args_;
 };
 
 } // namespace idlekv

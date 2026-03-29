@@ -6,16 +6,10 @@
 #include "db/storage/result.h"
 #include "result.h"
 
-#include <array>
 #include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <memory_resource>
-#include <mutex>
 #include <optional>
-#include <string_view>
-#include <type_traits>
-#include <unordered_map>
 #include <utility>
 #include <xxhash.h>
 
@@ -66,13 +60,13 @@ public:
 
     template <class U, class V>
     auto SetImpl(U&& key, V&& value) -> Result<bool> {
-        data_.insert(std::make_pair(std::forward<U>(key), std::forward<V>(value)));
+        data_.insert(std::make_pair(std::string(key), std::forward<V>(value)));
         return {OpStatus::OK, true};
     }
 
     template <class U>
     auto GetImpl(U&& key) -> Result<ValueType> {
-        auto it = data_.find(key);
+        auto it = data_.find(std::string(key));
         if (it == data_.end()) {
             return {OpStatus::NoSuchKey, std::nullopt};
         }
@@ -81,7 +75,7 @@ public:
 
     template <class U>
     auto DelImpl(U&& key) -> Result<bool> {
-        auto count = data_.erase(std::forward<U>(key));
+        auto count = data_.erase(std::string(key));
         if (count == 0) {
             return {OpStatus::NoSuchKey, true};
         }

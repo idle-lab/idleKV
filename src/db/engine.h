@@ -23,10 +23,10 @@ public:
     IdleEngine(const Config& cfg);
 
     auto Init(EventLoopPool* elp) -> void;
-    auto DispatchCmd(Connection*, std::vector<std::string>& args) noexcept -> void;
+    auto DispatchCmd(Connection*, CmdArgs& args) noexcept -> void;
 
     auto DbNum() const -> size_t { return cfg_.db_num_; }
-    auto GetCmd(const std::string& name) -> Cmd*;
+    auto GetCmd(std::string_view name) -> Cmd*;
     auto RegisterCmd(const std::string& name, int32_t arity, int32_t FirstKey, int32_t LastKey,
                      Exector exector, Prepare prepare, CmdFlags flags = CmdFlags::None) -> void;
 

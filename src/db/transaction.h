@@ -13,11 +13,6 @@ using TxnId = uint64_t;
 // The index position of the key in args
 class Keys {};
 
-class Args {
-public:
-private:
-};
-
 class CommandContext {
 public:
     Cmd* cmd;
@@ -34,11 +29,7 @@ private:
 
 class Transaction {
 public:
-    auto Init() -> void {
-
-    }
-
-    
+    auto Init() -> void {}
 
 private:
     TxnId txn_id_;

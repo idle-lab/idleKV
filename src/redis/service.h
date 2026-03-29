@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/config.h"
+#include "db/command.h"
 #include "redis/connection.h"
 #include "redis/parser.h"
 #include "server/el_pool.h"
@@ -27,7 +28,8 @@ namespace idlekv {
 class RedisService : public Handler {
 public:
     using ConnectionPtr = std::unique_ptr<Connection>;
-    class ServiceTLState {
+    using CmdArgsPtr = std::unique_ptr<CmdArgs>;
+    class ServiceTLData {
         struct Slot {
             asio::mutable_registered_buffer buffer;
             size_t                          index;
@@ -42,10 +44,17 @@ public:
         auto FreeBuffer(size_t) -> void;
         auto ConnPool() -> utils::Pool<ConnectionPtr>& { return conn_pool_; }
         auto ConnList() -> std::list<Connection*>& { return conn_list_; }
+        auto GetCmdArgsOrCreate() -> CmdArgsPtr;
+        auto RecycleCmdArgs(CmdArgsPtr ptr) -> void;
 
     private:
         utils::Pool<ConnectionPtr> conn_pool_;
         std::list<Connection*>     conn_list_;
+
+        // pipeline cmd args pool
+        utils::Pool<CmdArgsPtr> args_pool_;
+
+        // register buffer
         std::unique_ptr<char[]>    buf_space_;
         std::vector<size_t>        free_list_;
         std::optional<asio::buffer_registration<std::vector<asio::mutable_buffer>>>
@@ -57,7 +66,7 @@ public:
     virtual auto Init(EventLoop* el) -> void override;
     virtual auto Handle(asio::ip::tcp::socket socket) -> void override;
 
-    static auto Tlocal() -> ServiceTLState* { return tl_; }
+    static auto Tlocal() -> ServiceTLData* { return tl_; }
 
     auto Stopped() -> bool { return stop_.load(std::memory_order_acquire); }
 
@@ -70,7 +79,7 @@ public:
 private:
     std::atomic<bool> stop_{false};
 
-    static thread_local ServiceTLState* tl_;
+    static thread_local ServiceTLData* tl_;
 };
 
 } // namespace idlekv

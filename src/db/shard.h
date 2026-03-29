@@ -40,7 +40,6 @@ public:
                 task();
             }
         });
-        worker_fiber_.detach();
     }
 
     template <class Fn>
@@ -48,8 +47,9 @@ public:
         queue_.push(std::forward<Fn>(fn));
     }
 
-    auto Stop() -> void { 
+    auto Stop() -> void {
         queue_.close();
+        worker_fiber_.join();
     }
 
 private:
@@ -57,6 +57,7 @@ private:
 
     // a bounded, buffered channel (MPMC queue) suitable to synchronize fibers (running on the same
     // or different threads) via asynchronous message passing.
+    // TODO(cyb): lock-free queue.
     boost::fibers::buffered_channel<Task> queue_;
 };
 

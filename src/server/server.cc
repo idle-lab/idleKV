@@ -84,7 +84,7 @@ auto Server::DoAccept(Handler* h) -> void {
         return;
     }
 
-    LOG(info, "start handler {}, listen on {}:{}", h->Name(), h->Endpoint().address().to_string(),
+    LOG(info, "start handler {}, listening on {}:{}", h->Name(), h->Endpoint().address().to_string(),
         h->Endpoint().port());
 
     for (;;) {

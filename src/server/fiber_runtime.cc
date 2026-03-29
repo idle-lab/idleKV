@@ -6,15 +6,11 @@
 
 #include <boost/system/detail/error_code.hpp>
 
-namespace boost {
-namespace fibers {
-namespace asio {
+namespace boost::fibers::asio {
 
 boost::asio::io_context::id round_robin::service::id;
 
-} // namespace asio
-} // namespace fibers
-} // namespace boost
+} // namespace boost::fibers::asio
 
 namespace idlekv {
 

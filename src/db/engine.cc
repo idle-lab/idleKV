@@ -3,6 +3,7 @@
 #include "common/asio_no_exceptions.h"
 #include "common/logger.h"
 #include "db/command.h"
+#include "db/context.h"
 #include "db/shard.h"
 #include "db/storage/alloctor.h"
 #include "redis/connection.h"
@@ -16,6 +17,7 @@
 #include <memory>
 #include <mimalloc.h>
 #include <spdlog/spdlog.h>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <xxhash.h>
@@ -54,7 +56,7 @@ auto IdleEngine::InitCommand() -> void {
     InitList(this);
 }
 
-auto IdleEngine::DispatchCmd(Connection* conn, std::vector<std::string>& args) noexcept -> void {
+auto IdleEngine::DispatchCmd(Connection* conn, CmdArgs& args) noexcept -> void {
     size_t id     = ThreadState::Tlocal()->PoolIndex();
     auto&  sender = conn->GetSender();
 
@@ -82,7 +84,7 @@ auto IdleEngine::DispatchCmd(Connection* conn, std::vector<std::string>& args) n
     ExecContext cmdctx(conn, 0);
     cmdctx.InitShard(ShardAt(shard_id));
 
-    cmd->Exec(&cmdctx, args); 
+    cmd->Exec(&cmdctx, args);
 }
 
 auto IdleEngine::RegisterCmd(const std::string& name, int32_t arity, int32_t FirstKey,
@@ -93,7 +95,7 @@ auto IdleEngine::RegisterCmd(const std::string& name, int32_t arity, int32_t Fir
         std::forward_as_tuple(name, arity, FirstKey, LastKey, exector, prepare, flags));
 }
 
-auto IdleEngine::GetCmd(const std::string& name) -> Cmd* {
+auto IdleEngine::GetCmd(std::string_view name) -> Cmd* {
     auto it = cmd_map_.find(name);
     if (it == cmd_map_.end()) {
         return nullptr;
