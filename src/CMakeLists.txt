@@ -23,7 +23,6 @@ target_link_libraries(idlekv_core
         Boost::system
         Boost::thread
         ${XXHASH_LIBRARY}
-        absl::flat_hash_map
 )
 
 if (DISABLE_CHECK)

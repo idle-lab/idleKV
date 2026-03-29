@@ -1,8 +1,8 @@
 #include "common/config.h"
-#include "common/logger.h"
 #include "db/engine.h"
 #include "redis/service.h"
 #include "server/server.h"
+#include "banner.h"
 
 #include <CLI11/CLI11.hpp>
 #include <cstdio>
@@ -12,17 +12,21 @@
 
 std::string Banner() {
     return R"(
-    _     _ _      _  ___     __
-   (_) __| | | ___| |/ \ \   / /
-   | |/ _` | |/ _ \ ' / \ \ / / 
-   | | (_| | |  __/ . \  \ V /  
-   |_|\__,_|_|\___|_|\_\  \_/   
+    ___      _ _         _  ____     __
+   |_ _|  __| | |  ___  | |/ /\ \   / /
+    | |  / _` | | / _ \ | ' /  \ \ / / 
+    | | | (_| | |/  __/ | . \   \ V /  
+   |___| \__,_|_|\___|  |_|\_\   \_/   
+                                       
+    >> High Performance Key-Value Store <<
 )";
 }
 
 using namespace idlekv;
 
 int main(int argc, char** argv) {
+    Console::PrintGradient(Banner());
+
     try {
         idlekv::Config cfg;
 
