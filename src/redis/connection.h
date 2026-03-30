@@ -1,13 +1,10 @@
 #pragma once
 
-#include "absl/container/inlined_vector.h"
 #include "absl/functional/function_ref.h"
 #include "common/asio_no_exceptions.h"
 #include "db/command.h"
-#include "db/storage/data_entity.h"
 #include "redis/parser.h"
 #include "server/el_pool.h"
-#include "server/fiber_runtime.h"
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/buffer.hpp>
@@ -21,6 +18,7 @@
 #include <boost/fiber/fiber.hpp>
 #include <boost/system/detail/error_code.hpp>
 #include <cassert>
+#include <chrono>
 #include <cstddef>
 #include <cstring>
 #include <deque>
@@ -31,12 +29,19 @@
 
 namespace idlekv {
 
+static constexpr size_t kPipelineSquashThreshold = 32;
+
 class DB;
 class IdleEngine;
 
 class Connection : public Reader, public Writer {
 public:
     using CmdArgsPtr = std::unique_ptr<CmdArgs>;
+
+    struct PendingRequest {
+        CmdArgsPtr                            args;
+        std::chrono::steady_clock::time_point started_at;
+    };
 
     explicit Connection()
         : Reader(kDefaultReadBufferSize), Writer(kDefaultWriteBufferSize), p_(this), s_(this) {}
@@ -107,8 +112,8 @@ private:
     boost::fibers::fiber                  async_fiber_;
     boost::fibers::condition_variable_any async_cv_;
 
-    std::deque<CmdArgsPtr> pipeline_queue_;
-    CmdArgsPtr cur_args_;
+    std::deque<PendingRequest> pipeline_queue_;
+    CmdArgsPtr                 cur_args_;
 };
 
 } // namespace idlekv

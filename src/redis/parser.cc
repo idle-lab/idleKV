@@ -2,6 +2,7 @@
 
 #include "common/logger.h"
 #include "common/result.h"
+#include "metric/prometheus.h"
 
 #include <algorithm>
 #include <boost/asio/buffer_registration.hpp>
@@ -362,6 +363,7 @@ auto Sender::SendInteger(int64_t value) -> void {
 
 auto Sender::SendError(std::string_view s) -> void {
     BatchGuard bg(this);
+    PrometheusMetrics::Instance().OnErrorResponse();
     ec_ = wr_->WritePieces(ERROR_PREFIX, s, CRLF);
 }
 

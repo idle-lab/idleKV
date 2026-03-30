@@ -1,6 +1,7 @@
 #include "common/config.h"
 #include "db/engine.h"
 #include "redis/service.h"
+#include "server/metrics_service.h"
 #include "server/server.h"
 #include "banner.h"
 
@@ -50,6 +51,9 @@ int main(int argc, char** argv) {
         engine->Init(srv->GetEventLoopPool());
 
         srv->RegisterHandler(std::make_unique<idlekv::RedisService>(cfg));
+        if (cfg.metrics_port_ != 0) {
+            srv->RegisterHandler(std::make_unique<idlekv::MetricsService>(cfg));
+        }
         // may be support rpc/http ?
 
         srv->ListenAndServe();

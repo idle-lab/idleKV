@@ -1,6 +1,7 @@
 #include "redis/service.h"
 
 #include "common/logger.h"
+#include "metric/prometheus.h"
 #include "redis/connection.h"
 #include "redis/parser.h"
 
@@ -82,6 +83,11 @@ auto RedisService::ServiceTLData::RecycleCmdArgs(CmdArgsPtr ptr) -> void {
 }
 
 auto RedisService::Handle(asio::ip::tcp::socket socket) -> void {
+    struct ConnectionMetricScope {
+        ConnectionMetricScope() { PrometheusMetrics::Instance().OnConnectionAccepted(); }
+        ~ConnectionMetricScope() { PrometheusMetrics::Instance().OnConnectionClosed(); }
+    } connection_metric_scope;
+
     auto& ConnList = Tlocal()->ConnList();
     auto& ConnPool = Tlocal()->ConnPool();
 

@@ -3,6 +3,7 @@
 #include "common/logger.h"
 #include "common/result.h"
 #include "db/engine.h"
+#include "metric/prometheus.h"
 #include "redis/error.h"
 #include "redis/parser.h"
 #include "redis/service.h"
@@ -27,6 +28,8 @@
 namespace idlekv {
 
 namespace {
+
+using RequestClock = std::chrono::steady_clock;
 
 template <typename ErrorEnum>
 auto ToStdErrorCode(ErrorEnum ec) -> std::error_code {
@@ -197,8 +200,10 @@ auto Connection::HandleRequests() noexcept -> void {
                                  !async_fiber_.joinable();
 
         if (can_sync_dispatch) {
+            const auto started_at = RequestClock::now();
             s_.SetBatch(false);
             engine->DispatchCmd(this, args);
+            PrometheusMetrics::Instance().ObserveRequestDuration(RequestClock::now() - started_at);
 
             args.ClearForReuse();
         } else {
@@ -206,7 +211,8 @@ auto Connection::HandleRequests() noexcept -> void {
                 async_fiber_ = boost::fibers::fiber([this] { AsyncHandle(); });
             }
 
-            pipeline_queue_.emplace_back(std::move(cur_args_));
+            pipeline_queue_.emplace_back(
+                PendingRequest{.args = std::move(cur_args_), .started_at = RequestClock::now()});
             cur_args_ = RedisService::Tlocal()->GetCmdArgsOrCreate();
 
             async_cv_.notify_one();
@@ -224,8 +230,8 @@ auto Connection::AsyncHandle() noexcept -> void {
     boost::fibers::no_op_lock mu;
 
     std::unique_lock<boost::fibers::no_op_lock> lk(mu);
+    bool yielded_for_batch = false;
 
-    uint64_t pre_shed_count = -1;
     while (!IsClosed()) {
         async_cv_.wait(lk, [this]() -> bool { return IsClosed() || !pipeline_queue_.empty(); });
 
@@ -233,38 +239,45 @@ auto Connection::AsyncHandle() noexcept -> void {
             return;
         }
 
-        uint64_t cur_count = boost::this_fiber::properties<FiberCpuProps>().switch_count;
-        if (pipeline_queue_.size() == 1 && pre_shed_count == cur_count) {
+        if (!yielded_for_batch && pipeline_queue_.size() == 1 && p_.HashMore()) {
+            yielded_for_batch = true;
             boost::this_fiber::yield();
+            // LOG(debug, "pipeline depth {} after yielding for batch", pipeline_queue_.size());
         }
-        pre_shed_count = cur_count;
 
         s_.SetBatch(pipeline_queue_.size() > 1);
 
-        // // Squash pipeline cmd
-        // for (uint32_t count = 0; !pipeline_queue_.empty(); count++) {
-        //     auto args = std::move(pipeline_queue_.front());
-        //     pipeline_queue_.pop_front();
+        // If the pipeline queue is too long, we squash all pending requests in the queue without yielding.
+        if (pipeline_queue_.size() > kPipelineSquashThreshold) {
+            // Squash pipeline cmd
+            while (!pipeline_queue_.empty()) {
+                auto req = std::move(pipeline_queue_.front());
+                pipeline_queue_.pop_front();
 
-        //     engine->DispatchCmd(this, *args);
+                engine->DispatchCmd(this, *req.args);
 
-        //     // check every 32 commands.
-        //     if ((count & ((1 << 5) - 1)) == 0) {
-        //         MaybeYieldOnCpuBudget(kMaxBusyCpuCycles);
-        //     }
+                PrometheusMetrics::Instance().ObserveRequestDuration(RequestClock::now() -
+                                                            req.started_at);
+                // recycle CmdArgs.
+                RedisService::Tlocal()->RecycleCmdArgs(std::move(req.args));
+            }
+        } else {
+            auto request = std::move(pipeline_queue_.front());
+            pipeline_queue_.pop_front();
 
-        //     // recycle CmdArgs.
-        //     RedisService::Tlocal()->RecycleCmdArgs(std::move(args));
-        // }
+            engine->DispatchCmd(this, *request.args);
 
-        auto args = std::move(pipeline_queue_.front());
-        pipeline_queue_.pop_front();
-
-        engine->DispatchCmd(this, *args);
-        RedisService::Tlocal()->RecycleCmdArgs(std::move(args));
+            PrometheusMetrics::Instance().ObserveRequestDuration(RequestClock::now() -
+                                                        request.started_at);
+            RedisService::Tlocal()->RecycleCmdArgs(std::move(request.args));
+        }
 
         if (!p_.HashMore() && pipeline_queue_.empty()) {
             s_.Flush();
+        }
+
+        if (pipeline_queue_.empty()) {
+            yielded_for_batch = false;
         }
     }
 };

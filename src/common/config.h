@@ -60,6 +60,9 @@ public:
     Config() : opts_(SERVER_NAME) {
         opts_.add_option("--ip", ip_, "Listen IP")->default_val("0.0.0.0");
         opts_.add_option("--port", port_, "Listen port")->default_val(DEFAULT_PORT);
+        opts_.add_option("--metrics-ip", metrics_ip_, "Prometheus listen IP")->default_val("0.0.0.0");
+        opts_.add_option("--metrics-port", metrics_port_,
+                         "Prometheus metrics port")->default_val(9108);
 
         opts_.add_option("-c,--config", config_file_path, "Config file path");
         opts_.add_option("--DbNum", db_num_, "number of DB");
@@ -74,8 +77,10 @@ public:
     bool HasConfigFile() const { return !config_file_path.empty(); }
 
     std::string ip_, port_;
+    std::string metrics_ip_;
     uint16_t    io_threads_     = 1;
     uint16_t    worker_threads_ = 0;
+    uint16_t    metrics_port_   = 0;
 
     std::string config_file_path;
 
