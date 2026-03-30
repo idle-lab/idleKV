@@ -72,10 +72,7 @@ auto RedisService::ServiceTLData::FreeBuffer(size_t i) -> void { free_list_.empl
 auto RedisService::ServiceTLData::GetCmdArgsOrCreate() -> CmdArgsPtr {
     auto ptr = args_pool_.Get();
 
-    ptr->offsets_.clear();
-    if (ptr->HeapMemory() > 1024) {
-        ptr->storage_.clear();
-    }
+    ptr->ClearForReuse();
 
     return ptr;
 }

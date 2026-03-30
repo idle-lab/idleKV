@@ -158,6 +158,15 @@ public:
         storage_.resize(last_offs);
     }
 
+    void ClearForReuse() {
+        offsets_.clear();
+        if (HeapMemory() > 1024) {
+            storage_.clear();
+            offsets_.shrink_to_fit();
+        }
+    }
+
+private:
     absl::InlinedVector<uint32_t, 5> offsets_;
     absl::InlinedVector<char, 88>    storage_;
 };

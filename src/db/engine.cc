@@ -81,7 +81,7 @@ auto IdleEngine::DispatchCmd(Connection* conn, CmdArgs& args) noexcept -> void {
         shard_id = CalculateShardId(args[cmd->FirstKey()]);
     }
 
-    ExecContext cmdctx(conn, 0);
+    ExecContext cmdctx(conn, id);
     cmdctx.InitShard(ShardAt(shard_id));
 
     cmd->Exec(&cmdctx, args);

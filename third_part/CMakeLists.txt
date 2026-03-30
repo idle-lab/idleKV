@@ -19,4 +19,5 @@ target_link_libraries_system(third_part
         mimalloc-static
         absl::flat_hash_map
         absl::inlined_vector
+        absl::check
 )

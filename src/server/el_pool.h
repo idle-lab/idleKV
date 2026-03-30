@@ -6,7 +6,6 @@
 #include "utils/cpu/basic.h"
 
 #include <atomic>
-#include <barrier>
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
@@ -14,7 +13,6 @@
 #include <boost/fiber/condition_variable.hpp>
 #include <boost/fiber/future/async.hpp>
 #include <boost/fiber/policy.hpp>
-#include <chrono>
 #include <concepts>
 #include <cstddef>
 #include <functional>
@@ -29,7 +27,7 @@
 #include <vector>
 namespace idlekv {
 
-constexpr auto kMaxBusyCpuTime = std::chrono::microseconds(100);
+inline const uint64_t kMaxBusyCpuCycles = 200/* us */ * FiberCycleClock::Frequency() / 1'000'000ULL;
 
 // manages a single io_context thread and runs submitted tasks on its bound cpu.
 class EventLoop {

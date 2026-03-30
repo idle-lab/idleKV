@@ -7,6 +7,7 @@
 #pragma once
 
 #include "common/asio_no_exceptions.h"
+#include "absl/base/internal/cycleclock.h"
 
 #include <boost/asio/execution_context.hpp>
 #include <boost/asio/io_context.hpp>
@@ -22,7 +23,9 @@
 #include <boost/fiber/operations.hpp>
 #include <boost/fiber/scheduler.hpp>
 #include <chrono>
+#include <cstdint>
 #include <memory>
+#include <sys/stat.h>
 #include <system_error>
 #include <utility>
 
@@ -32,13 +35,42 @@ public:
     explicit FiberCpuProps(boost::fibers::context* ctx) noexcept
         : boost::fibers::fiber_properties(ctx) {}
 
-    uint64_t total_cpu_ns{0};
-    uint64_t slice_cpu_ns{0};
-
     // internal fields
-    uint64_t last_resume_cpu_ns{0};
+    uint64_t last_resume_cycle{0};
     uint64_t switch_count{0};
 };
+
+class FiberCycleClock {
+public:
+    // Returns the current value of the cycle counter.
+    static uint64_t Now() {
+#if defined(__x86_64__)
+        unsigned long low, high;
+        __asm__ volatile("rdtsc" : "=a"(low), "=d"(high));
+        return (static_cast<uint64_t>(high) << 32) + low;
+#elif defined(__aarch64__)
+        int64_t tv;
+        asm volatile("mrs %0, cntvct_el0" : "=r"(tv));
+        return tv;
+#else
+        return absl::base_internal::CycleClock::Now();
+#endif
+    }
+
+    static uint64_t Frequency() {
+        uint64_t frequency_;
+#ifdef __aarch64__
+        // On aarch64, we can read the frequency from the cntfrq_el0 register.
+        uint64_t res;
+        __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(res));
+        frequency_ = res;
+#else
+        frequency_ = absl::base_internal::CycleClock::Frequency();
+#endif
+        return frequency_;
+    }
+};
+
 
 } // namepsace idlekv
 
@@ -55,14 +87,6 @@ struct no_op_lock {
 
 namespace boost::fibers::asio {
 
-inline auto ReadThreadCpuTimeNs() noexcept -> uint64_t {
-    ::timespec ts{};
-    if (::clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) != 0) [[unlikely]] {
-        return 0;
-    }
-
-    return static_cast<uint64_t>(ts.tv_sec) * 1'000'000'000ull + static_cast<uint64_t>(ts.tv_nsec);
-}
 
 class round_robin : public algo::algorithm_with_properties<idlekv::FiberCpuProps> {
 private:
@@ -145,23 +169,16 @@ private:
 
     void AccountRunningFiber() noexcept {
         auto* props = PropsOf(running_ctx_);
-        if (props == nullptr || running_since_cpu_ns_ == 0) {
+        if (props == nullptr || running_since_cycle_ == 0) {
             running_ctx_          = nullptr;
-            running_since_cpu_ns_ = 0;
+            running_since_cycle_  = 0;
             return;
         }
 
-        const uint64_t now = ReadThreadCpuTimeNs();
-        if (now >= running_since_cpu_ns_) {
-            const uint64_t delta = now - running_since_cpu_ns_;
-            props->total_cpu_ns += delta;
-            props->slice_cpu_ns += delta;
-            ++props->switch_count;
-        }
-
-        props->last_resume_cpu_ns = 0;
-        running_ctx_              = nullptr;
-        running_since_cpu_ns_     = 0;
+        ++props->switch_count;
+        props->last_resume_cycle = 0;
+        running_ctx_             = nullptr;
+        running_since_cycle_     = 0;
     }
 
     void MarkScheduledIn(boost::fibers::context* ctx) noexcept {
@@ -170,12 +187,11 @@ private:
             return;
         }
 
-        const uint64_t now        = ReadThreadCpuTimeNs();
-        props->slice_cpu_ns       = 0;
-        props->last_resume_cpu_ns = now;
+        const uint64_t now      = idlekv::FiberCycleClock::Now();
+        props->last_resume_cycle = now;
 
-        running_ctx_          = ctx;
-        running_since_cpu_ns_ = now;
+        running_ctx_         = ctx;
+        running_since_cycle_ = now;
     }
 
     ready_queue_type                  rqueue_{};
@@ -185,7 +201,7 @@ private:
     std::size_t                       counter_{0};
 
     boost::fibers::context* running_ctx_{nullptr};
-    uint64_t                running_since_cpu_ns_{0};
+    uint64_t                running_since_cycle_{0};
 };
 
 //[fibers_asio_yield_t
@@ -479,7 +495,7 @@ auto LaunchFiber(Fn&& fn) -> void {
     boost::fibers::fiber(std::forward<Fn>(fn)).detach();
 }
 
-inline auto MaybeYieldOnCpuBudget(std::chrono::nanoseconds cpu_budget) noexcept -> bool {
+inline auto MaybeYieldOnCpuBudget(uint64_t budget_cycles) noexcept -> bool {
     auto* ctx = boost::fibers::context::active();
     if (ctx == nullptr || !ctx->is_context(boost::fibers::type::worker_context)) {
         return false;
@@ -491,22 +507,21 @@ inline auto MaybeYieldOnCpuBudget(std::chrono::nanoseconds cpu_budget) noexcept 
     }
 
     auto& props = static_cast<FiberCpuProps&>(*raw);
-    if (props.last_resume_cpu_ns == 0) {
-        return false;
-    }
-
-    const uint64_t budget_ns = static_cast<uint64_t>(cpu_budget.count());
-    const uint64_t now       = boost::fibers::asio::ReadThreadCpuTimeNs();
-
-    if (now < props.last_resume_cpu_ns) {
-        return false;
-    }
-
-    if (now - props.last_resume_cpu_ns < budget_ns) {
+    if (props.last_resume_cycle == 0) {
         return false;
     }
 
     if (!boost::fibers::has_ready_fibers()) {
+        return false;
+    }
+
+    const uint64_t now = FiberCycleClock::Now();
+
+    if (now < props.last_resume_cycle) {
+        return false;
+    }
+
+    if (now - props.last_resume_cycle < budget_cycles) {
         return false;
     }
 

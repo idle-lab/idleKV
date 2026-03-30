@@ -38,6 +38,12 @@ int main(int argc, char** argv) {
 
         spdlog::set_default_logger(idlekv::MakeDefaultLogger());
 
+#ifdef NDEBUG 
+        LOG(info, "you are running in release mode");
+#elif
+        LOG(warn, "you are running in debug mode, performance may be significantly degraded");
+#endif
+
         auto srv = std::make_shared<idlekv::Server>(cfg);
 
         engine = std::make_unique<idlekv::IdleEngine>(cfg);

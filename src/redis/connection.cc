@@ -199,6 +199,8 @@ auto Connection::HandleRequests() noexcept -> void {
         if (can_sync_dispatch) {
             s_.SetBatch(false);
             engine->DispatchCmd(this, args);
+
+            args.ClearForReuse();
         } else {
             if (!async_fiber_.joinable()) [[unlikely]] {
                 async_fiber_ = boost::fibers::fiber([this] { AsyncHandle(); });
@@ -212,10 +214,9 @@ auto Connection::HandleRequests() noexcept -> void {
 
         // check every 32 commands.
         if ((count & ((1 << 5) - 1)) == 0) {
-            MaybeYieldOnCpuBudget(kMaxBusyCpuTime);
+            MaybeYieldOnCpuBudget(kMaxBusyCpuCycles);
         }
 
-        cur_args_->clear();
     }
 }
 
@@ -228,35 +229,41 @@ auto Connection::AsyncHandle() noexcept -> void {
     while (!IsClosed()) {
         async_cv_.wait(lk, [this]() -> bool { return IsClosed() || !pipeline_queue_.empty(); });
 
-        uint64_t cur_count = boost::this_fiber::properties<FiberCpuProps>().switch_count;
-        if (pipeline_queue_.size() == 1 && cur_count == pre_shed_count) {
-            boost::this_fiber::yield();
-        }
-        pre_shed_count = cur_count;
-
         if (IsClosed()) {
             return;
         }
 
+        uint64_t cur_count = boost::this_fiber::properties<FiberCpuProps>().switch_count;
+        if (pipeline_queue_.size() == 1 && pre_shed_count == cur_count) {
+            boost::this_fiber::yield();
+        }
+        pre_shed_count = cur_count;
+
         s_.SetBatch(pipeline_queue_.size() > 1);
 
-        // Squash pipeline cmd
-        for (uint32_t count = 0; !pipeline_queue_.empty(); count++) {
-            auto args = std::move(pipeline_queue_.front());
-            pipeline_queue_.pop_front();
+        // // Squash pipeline cmd
+        // for (uint32_t count = 0; !pipeline_queue_.empty(); count++) {
+        //     auto args = std::move(pipeline_queue_.front());
+        //     pipeline_queue_.pop_front();
 
-            engine->DispatchCmd(this, *args);
+        //     engine->DispatchCmd(this, *args);
 
-            // check every 32 commands.
-            if ((count & ((1 << 5) - 1)) == 0) {
-                MaybeYieldOnCpuBudget(kMaxBusyCpuTime);
-            }
+        //     // check every 32 commands.
+        //     if ((count & ((1 << 5) - 1)) == 0) {
+        //         MaybeYieldOnCpuBudget(kMaxBusyCpuCycles);
+        //     }
 
-            // recycle CmdArgs.
-            RedisService::Tlocal()->RecycleCmdArgs(std::move(args));
-        }
+        //     // recycle CmdArgs.
+        //     RedisService::Tlocal()->RecycleCmdArgs(std::move(args));
+        // }
 
-        if (!p_.HashMore()) {
+        auto args = std::move(pipeline_queue_.front());
+        pipeline_queue_.pop_front();
+
+        engine->DispatchCmd(this, *args);
+        RedisService::Tlocal()->RecycleCmdArgs(std::move(args));
+
+        if (!p_.HashMore() && pipeline_queue_.empty()) {
             s_.Flush();
         }
     }

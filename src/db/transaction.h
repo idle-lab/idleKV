@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <absl/functional/function_ref.h>
 
 namespace idlekv {
 
@@ -29,7 +30,13 @@ private:
 
 class Transaction {
 public:
+    using Task = absl::FunctionRef<void()>;
+
     auto Init() -> void {}
+
+    auto Schedule(Task task) -> void {
+        
+    }
 
 private:
     TxnId txn_id_;
