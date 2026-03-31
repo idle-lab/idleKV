@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <chrono>
 
 namespace idlekv {
 
@@ -171,6 +172,12 @@ private:
     absl::InlinedVector<char, 88>    storage_;
 };
 
+using CmdArgsPtr = std::unique_ptr<CmdArgs>;
+struct PendingRequest {
+    CmdArgsPtr                            args;
+    std::chrono::steady_clock::time_point started_at;
+};
+
 template <typename I> void CmdArgs::Assign(I begin, I end, size_t len) {
   offsets_.resize(len);
   size_t total_size = 0;
@@ -201,15 +208,23 @@ class ExecContext;
 // ExecFunc is interface for command executor
 using Exector = auto (*)(ExecContext* ctx, CmdArgs& args) -> void;
 
+// key index in CmdArgs.
+using KeySet = absl::InlinedVector<size_t, 4>;
+
+struct WRSet {
+    KeySet read_keys;
+    KeySet write_keys;
+};
+
 // PreFunc analyses command line when queued command to `multi`
 // returns related write keys and read keys.
 // All string_views are referenced from CmdArgs
-using Prepare = auto (*)(const CmdArgs& args)
-    -> std::pair<std::vector<std::string_view>, std::vector<std::string_view>>;
+using Prepare = auto (*)(const CmdArgs& args) -> WRSet;
 
 enum class CmdFlags : uint32_t {
     None          = 0,
-    CanExecInline = 1U << 0,
+    CanExecInPlace = 1U << 0,
+    NoKey        = 1U << 1, 
 };
 
 constexpr auto operator|(CmdFlags lhs, CmdFlags rhs) -> CmdFlags {
@@ -238,8 +253,7 @@ public:
         return exec_(ctx, args);
     }
 
-    auto PrepareKeys(CmdArgs& args) const
-        -> std::pair<std::vector<std::string_view>, std::vector<std::string_view>> {
+    auto PrepareKeys(CmdArgs& args) const -> WRSet {
         return prepare_(args);
     }
 
@@ -259,7 +273,7 @@ public:
     auto LastKey() const -> int32_t { return last_key_; }
     auto Flags() const -> CmdFlags { return flags_; }
     auto HasFlag(CmdFlags flag) const -> bool { return idlekv::HasFlag(flags_, flag); }
-    auto CanExecInline() const -> bool { return HasFlag(CmdFlags::CanExecInline); }
+    auto CanExecInPlace() const -> bool { return HasFlag(CmdFlags::CanExecInPlace); }
 
 private:
     // name in lowercase letters
@@ -281,6 +295,11 @@ private:
     CmdFlags flags_{CmdFlags::None};
 };
 
-
+// 包含一条指令所需的上下文信息，包括指令，参数，读写键值。
+struct CommandContext {
+    Cmd*      cmd_;
+    CmdArgsPtr args_;
+    WRSet     keys_;
+};
 
 } // namespace idlekv

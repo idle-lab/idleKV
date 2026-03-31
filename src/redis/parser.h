@@ -392,7 +392,21 @@ private:
     Reader* rd_;
 };
 
-class Sender {
+class SenderBase {
+public:
+    virtual auto SendSimpleString(std::string_view s) -> void = 0;
+    virtual auto SendOk() -> void = 0;
+    virtual auto SendPong() -> void = 0;
+    virtual auto SendBulkString(std::string_view s) -> void = 0;
+    virtual auto SendBulkString(const std::shared_ptr<const DataEntity>& data) -> void = 0;
+    virtual auto SendNullBulkString() -> void = 0;
+    virtual auto SendInteger(int64_t value) -> void = 0;
+    virtual auto SendError(std::string_view s) -> void = 0;
+
+    virtual ~SenderBase() = default;
+};
+
+class Sender : public SenderBase {
 public:
     Sender(Writer* wr) : wr_(wr) {}
 
@@ -409,14 +423,14 @@ public:
         Sender* sender_;
     };
 
-    auto SendSimpleString(std::string_view s) -> void;
-    auto SendOk() -> void;
-    auto SendPong() -> void;
-    auto SendBulkString(std::string_view s) -> void;
-    auto SendBulkString(const std::shared_ptr<const DataEntity>& data) -> void;
-    auto SendNullBulkString() -> void;
-    auto SendInteger(int64_t value) -> void;
-    auto SendError(std::string_view s) -> void;
+    auto SendSimpleString(std::string_view s) -> void override;
+    auto SendOk() -> void override;
+    auto SendPong() -> void override;
+    auto SendBulkString(std::string_view s) -> void override;
+    auto SendBulkString(const std::shared_ptr<const DataEntity>& data) -> void override;
+    auto SendNullBulkString() -> void override;
+    auto SendInteger(int64_t value) -> void override;
+    auto SendError(std::string_view s) -> void override;
 
     auto Flush() -> void;
 

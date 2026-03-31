@@ -2,6 +2,7 @@
 #include "server/el_pool.h"
 
 #include "common/logger.h"
+#include "server/fiber_runtime.h"
 #include "utils/cpu/basic.h"
 
 #include <atomic>
@@ -20,6 +21,11 @@ auto EventLoop::Run() -> void {
         io_.restart();
         boost::fibers::use_scheduling_algorithm<boost::fibers::asio::round_robin>(io_);
 
+        auto& prop = boost::this_fiber::properties<FiberProps>();
+        prop.SetName("EventLoopFiber");
+        prop.SetPriority(FiberPriority::BACKGROUND);
+
+        // main fiber loop: run the io_context and yield to ready fibers when possible.
         while (!io_.stopped()) {
             if (boost::fibers::has_ready_fibers()) {
                 while (io_.poll())

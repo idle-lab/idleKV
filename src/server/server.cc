@@ -12,6 +12,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/signal_set.hpp>
+#include <boost/fiber/operations.hpp>
 #include <boost/system/detail/error_code.hpp>
 #include <climits>
 #include <cstddef>
@@ -130,13 +131,17 @@ auto Server::DoAccept(Handler* h) -> void {
             }
 
             target_el->Dispatch([h, socket = std::move(rebound_socket)]() mutable {
+                boost::this_fiber::properties<FiberProps>().SetName("ConnectionHandler");
                 h->Handle(std::move(socket));
             });
             continue;
         }
 
         target_el->Dispatch(
-            [h, socket = std::move(socket)]() mutable { h->Handle(std::move(socket)); });
+            [h, socket = std::move(socket)]() mutable { 
+                boost::this_fiber::properties<FiberProps>().SetName("ConnectionHandler");
+                h->Handle(std::move(socket)); 
+            });
     }
 }
 

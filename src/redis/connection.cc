@@ -2,6 +2,7 @@
 
 #include "common/logger.h"
 #include "common/result.h"
+#include "db/command.h"
 #include "db/engine.h"
 #include "metric/prometheus.h"
 #include "redis/error.h"
@@ -9,6 +10,7 @@
 #include "redis/service.h"
 #include "server/el_pool.h"
 #include "server/fiber_runtime.h"
+#include "utils/coroutine/generator.h"
 
 #include <array>
 #include <boost/asio/read.hpp>
@@ -16,6 +18,8 @@
 #include <boost/fiber/context.hpp>
 #include <boost/fiber/mutex.hpp>
 #include <boost/fiber/operations.hpp>
+#include <boost/fiber/policy.hpp>
+#include <boost/fiber/type.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -208,7 +212,7 @@ auto Connection::HandleRequests() noexcept -> void {
             args.ClearForReuse();
         } else {
             if (!async_fiber_.joinable()) [[unlikely]] {
-                async_fiber_ = boost::fibers::fiber([this] { AsyncHandle(); });
+                async_fiber_ = boost::fibers::fiber(boost::fibers::launch::post, [this] { AsyncHandle(); });
             }
 
             pipeline_queue_.emplace_back(
@@ -218,15 +222,12 @@ auto Connection::HandleRequests() noexcept -> void {
             async_cv_.notify_one();
         }
 
-        // check every 32 commands.
-        if ((count & ((1 << 5) - 1)) == 0) {
-            MaybeYieldOnCpuBudget(kMaxBusyCpuCycles);
-        }
-
+        MaybeYieldOnCpuBudget(kMaxParseCpuCycles);
     }
 }
 
 auto Connection::AsyncHandle() noexcept -> void {
+    boost::this_fiber::properties<FiberProps>().SetName("ConnectionAsyncHandler");
     boost::fibers::no_op_lock mu;
 
     std::unique_lock<boost::fibers::no_op_lock> lk(mu);
@@ -242,7 +243,7 @@ auto Connection::AsyncHandle() noexcept -> void {
         if (!yielded_for_batch && pipeline_queue_.size() == 1 && p_.HashMore()) {
             yielded_for_batch = true;
             boost::this_fiber::yield();
-            // LOG(debug, "pipeline depth {} after yielding for batch", pipeline_queue_.size());
+            LOG(debug, "pipeline depth {} after yielding for batch", pipeline_queue_.size());
         }
 
         s_.SetBatch(pipeline_queue_.size() > 1);
@@ -251,15 +252,17 @@ auto Connection::AsyncHandle() noexcept -> void {
         if (pipeline_queue_.size() > kPipelineSquashThreshold) {
             // Squash pipeline cmd
             while (!pipeline_queue_.empty()) {
-                auto req = std::move(pipeline_queue_.front());
-                pipeline_queue_.pop_front();
 
-                engine->DispatchCmd(this, *req.args);
+                auto gen = [this]() -> utils::Generator<PendingRequest> {
+                    while (!pipeline_queue_.empty()) {
+                        auto req = std::move(pipeline_queue_.front());
+                        pipeline_queue_.pop_front();
+                        co_yield std::move(req);
+                    }
+                }();
 
-                PrometheusMetrics::Instance().ObserveRequestDuration(RequestClock::now() -
-                                                            req.started_at);
-                // recycle CmdArgs.
-                RedisService::Tlocal()->RecycleCmdArgs(std::move(req.args));
+                engine->DispatchManyCmd(this, gen);
+
             }
         } else {
             auto request = std::move(pipeline_queue_.front());

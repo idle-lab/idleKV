@@ -8,6 +8,7 @@
 
 #include "common/asio_no_exceptions.h"
 #include "absl/base/internal/cycleclock.h"
+#include "common/logger.h"
 
 #include <boost/asio/execution_context.hpp>
 #include <boost/asio/io_context.hpp>
@@ -30,14 +31,45 @@
 #include <utility>
 
 namespace idlekv {
-class FiberCpuProps : public boost::fibers::fiber_properties {
+enum class FiberPriority : uint8_t {
+    NORMAL = 0,      // default priority
+    BACKGROUND = 1,  // background priority, runs when no NORMAL fibers are ready.
+    HIGH = 2,        // high priority, scheduled before other worker fibers.
+};
+
+class FiberProps : public boost::fibers::fiber_properties {
 public:
-    explicit FiberCpuProps(boost::fibers::context* ctx) noexcept
-        : boost::fibers::fiber_properties(ctx) {}
+    explicit FiberProps(boost::fibers::context* ctx,
+                           FiberPriority         priority = FiberPriority::NORMAL) noexcept
+        : boost::fibers::fiber_properties(ctx),
+          priority_(priority) {}
+
+    FiberProps(std::string name, FiberPriority priority = FiberPriority::NORMAL) noexcept
+        : boost::fibers::fiber_properties(nullptr),
+          priority_(priority),
+          name_(std::move(name)) {}
+
+    auto Priority() const noexcept -> FiberPriority { return priority_; }
+
+    auto SetPriority(FiberPriority priority) noexcept -> void {
+        if (priority_ == priority) {
+            return;
+        }
+
+        priority_ = priority;
+        notify();
+    }
+
+    auto Name() const noexcept -> const std::string& { return name_; }
+    auto SetName(std::string name) noexcept -> void { name_ = std::move(name); }
 
     // internal fields
     uint64_t last_resume_cycle{0};
     uint64_t switch_count{0};
+
+private:
+    FiberPriority priority_{FiberPriority::NORMAL};
+    std::string name_;
 };
 
 class FiberCycleClock {
@@ -88,7 +120,7 @@ struct no_op_lock {
 namespace boost::fibers::asio {
 
 
-class round_robin : public algo::algorithm_with_properties<idlekv::FiberCpuProps> {
+class round_robin : public algo::algorithm_with_properties<idlekv::FiberProps> {
 private:
     using ready_queue_type = scheduler::ready_queue_type;
 
@@ -111,10 +143,21 @@ public:
         boost::asio::add_service(io_ctx, new service(io_ctx));
     }
 
-    void awakened(boost::fibers::context* ctx, idlekv::FiberCpuProps&) noexcept override {
+    void property_change(boost::fibers::context* ctx,
+                         idlekv::FiberProps&  props) noexcept override {
+        BOOST_ASSERT(nullptr != ctx);
+        if (ctx->is_context(boost::fibers::type::dispatcher_context) || !ctx->ready_is_linked()) {
+            return;
+        }
+
+        ctx->ready_unlink();
+        ctx->ready_link(ReadyQueueFor(ctx, &props));
+    }
+
+    void awakened(boost::fibers::context* ctx, idlekv::FiberProps& prop) noexcept override {
         BOOST_ASSERT(nullptr != ctx);
         BOOST_ASSERT(!ctx->ready_is_linked());
-        ctx->ready_link(rqueue_);
+        ctx->ready_link(ReadyQueueFor(ctx, &prop));
         if (!ctx->is_context(boost::fibers::type::dispatcher_context)) {
             ++counter_;
         }
@@ -123,21 +166,24 @@ public:
     auto pick_next() noexcept -> boost::fibers::context* override {
         AccountRunningFiber();
 
-        boost::fibers::context* ctx = nullptr;
-        if (!rqueue_.empty()) {
-            ctx = &rqueue_.front();
-            rqueue_.pop_front();
-            BOOST_ASSERT(nullptr != ctx);
-            BOOST_ASSERT(boost::fibers::context::active() != ctx);
-            if (!ctx->is_context(boost::fibers::type::dispatcher_context)) {
-                --counter_;
-                MarkScheduledIn(ctx);
-            }
+        if (auto* ctx = PickNextFrom(high_queue_); ctx != nullptr) {
+            return ctx;
         }
-        return ctx;
+
+        if (auto* ctx = PickNextFrom(normal_queue_); ctx != nullptr) {
+            return ctx;
+        }
+
+        if (auto* ctx = PickNextFrom(background_queue_); ctx != nullptr) {
+            return ctx;
+        }
+
+        return nullptr;
     }
 
-    auto has_ready_fibers() const noexcept -> bool override { return counter_ > 0; }
+    auto has_ready_fibers() const noexcept -> bool override {
+        return counter_ > 0;
+    }
 
     void suspend_until(std::chrono::steady_clock::time_point const& abs_time) noexcept override {
         if (abs_time != (std::chrono::steady_clock::time_point::max)()) {
@@ -158,13 +204,53 @@ public:
     }
 
 private:
-    auto PropsOf(boost::fibers::context* ctx) noexcept -> idlekv::FiberCpuProps* {
+    auto ReadyQueueFor(boost::fibers::context*      ctx,
+                       idlekv::FiberProps const* props) noexcept -> ready_queue_type& {
+        if (ctx->is_context(boost::fibers::type::dispatcher_context)) {
+            return background_queue_;
+        }
+
+        if (props == nullptr) {
+            return normal_queue_;
+        }
+
+        switch (props->Priority()) {
+        case idlekv::FiberPriority::HIGH:
+            return high_queue_;
+        case idlekv::FiberPriority::BACKGROUND:
+            return background_queue_;
+        case idlekv::FiberPriority::NORMAL:
+        default:
+            return normal_queue_;
+        }
+    }
+
+    auto PickNextFrom(ready_queue_type& queue) noexcept -> boost::fibers::context* {
+        if (queue.empty()) {
+            return nullptr;
+        }
+
+        auto* ctx = &queue.front();
+        queue.pop_front();
+
+        BOOST_ASSERT(nullptr != ctx);
+        BOOST_ASSERT(boost::fibers::context::active() != ctx);
+
+        if (!ctx->is_context(boost::fibers::type::dispatcher_context)) {
+            --counter_;
+            MarkScheduledIn(ctx);
+        }
+
+        return ctx;
+    }
+
+    auto PropsOf(boost::fibers::context* ctx) noexcept -> idlekv::FiberProps* {
         if (ctx == nullptr || !ctx->is_context(boost::fibers::type::worker_context)) {
             return nullptr;
         }
 
         auto* raw = ctx->get_properties();
-        return raw == nullptr ? nullptr : static_cast<idlekv::FiberCpuProps*>(raw);
+        return raw == nullptr ? nullptr : static_cast<idlekv::FiberProps*>(raw);
     }
 
     void AccountRunningFiber() noexcept {
@@ -194,7 +280,9 @@ private:
         running_since_cycle_ = now;
     }
 
-    ready_queue_type                  rqueue_{};
+    ready_queue_type                  high_queue_{};
+    ready_queue_type                  normal_queue_{};
+    ready_queue_type                  background_queue_{};
     boost::asio::steady_timer         suspend_timer_;
     boost::fibers::mutex              mtx_{};
     boost::fibers::condition_variable cnd_{};
@@ -491,8 +579,36 @@ auto CurrentIoContext() -> asio::io_context&;
 auto FiberSleepFor(std::chrono::steady_clock::duration dur) -> std::error_code;
 
 template <typename Fn>
-auto LaunchFiber(Fn&& fn) -> void {
-    boost::fibers::fiber(std::forward<Fn>(fn)).detach();
+auto LaunchFiberDetached(FiberPriority priority, Fn&& fn) -> void {
+    auto* props = static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, priority));
+    boost::fibers::fiber(props, std::allocator_arg, boost::fibers::default_stack(),
+                         std::forward<Fn>(fn))
+        .detach();
+}
+
+template <typename Fn>
+auto LaunchFiberDetached(Fn&& fn) -> void {
+    LaunchFiberDetached(FiberPriority::NORMAL, std::forward<Fn>(fn));
+}
+
+template <typename Fn>
+auto LaunchFiber(FiberPriority priority, Fn&& fn) -> boost::fibers::fiber {
+    auto* props = static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, priority));
+    return boost::fibers::fiber(props, std::allocator_arg, boost::fibers::default_stack(),
+                                std::forward<Fn>(fn));
+}
+
+template <typename Fn>
+auto LaunchFiber(FiberProps props, Fn&& fn) -> boost::fibers::fiber {
+    auto* props_ptr = static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, props.Priority()));
+    return boost::fibers::fiber(props_ptr, std::allocator_arg, boost::fibers::default_stack(),
+                                std::forward<Fn>(fn));
+}
+
+
+template <typename Fn>
+auto LaunchFiber(Fn&& fn) -> boost::fibers::fiber {
+    return LaunchFiber(FiberPriority::NORMAL, std::forward<Fn>(fn));
 }
 
 inline auto MaybeYieldOnCpuBudget(uint64_t budget_cycles) noexcept -> bool {
@@ -506,7 +622,7 @@ inline auto MaybeYieldOnCpuBudget(uint64_t budget_cycles) noexcept -> bool {
         return false;
     }
 
-    auto& props = static_cast<FiberCpuProps&>(*raw);
+    auto& props = static_cast<FiberProps&>(*raw);
     if (props.last_resume_cycle == 0) {
         return false;
     }

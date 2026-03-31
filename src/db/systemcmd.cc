@@ -12,8 +12,7 @@ namespace idlekv {
 
 namespace {
 
-auto NoKeys(const CmdArgs& args)
-    -> std::pair<std::vector<std::string_view>, std::vector<std::string_view>> {
+auto NoKeys(const CmdArgs& args) -> WRSet {
     (void)args;
     return {};
 }
@@ -51,8 +50,8 @@ auto Select(ExecContext* ctx, CmdArgs& args) -> void {
 } // namespace
 
 auto InitSystemCmd(IdleEngine* eng) -> void {
-    eng->RegisterCmd("ping", -1, -1, -1, Ping, NoKeys, CmdFlags::CanExecInline);
-    eng->RegisterCmd("select", 2, -1, -1, Select, NoKeys, CmdFlags::CanExecInline);
+    eng->RegisterCmd("ping", -1, -1, -1, Ping, NoKeys, CmdFlags::CanExecInPlace | CmdFlags::NoKey);
+    eng->RegisterCmd("select", 2, -1, -1, Select, NoKeys, CmdFlags::CanExecInPlace | CmdFlags::NoKey);
 }
 
 } // namespace idlekv

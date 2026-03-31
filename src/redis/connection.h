@@ -29,20 +29,13 @@
 
 namespace idlekv {
 
-static constexpr size_t kPipelineSquashThreshold = 32;
+static constexpr size_t kPipelineSquashThreshold = 2;
 
 class DB;
 class IdleEngine;
 
 class Connection : public Reader, public Writer {
 public:
-    using CmdArgsPtr = std::unique_ptr<CmdArgs>;
-
-    struct PendingRequest {
-        CmdArgsPtr                            args;
-        std::chrono::steady_clock::time_point started_at;
-    };
-
     explicit Connection()
         : Reader(kDefaultReadBufferSize), Writer(kDefaultWriteBufferSize), p_(this), s_(this) {}
 

@@ -3,10 +3,13 @@
 #include "common/config.h"
 #include "db/command.h"
 #include "db/shard.h"
+#include "db/squasher.h"
 #include "redis/connection.h"
 #include "server/el_pool.h"
+#include "utils/coroutine/generator.h"
 
 #include <absl/container/flat_hash_map.h>
+#include <absl/functional/function_ref.h>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -24,13 +27,14 @@ public:
 
     auto Init(EventLoopPool* elp) -> void;
     auto DispatchCmd(Connection*, CmdArgs& args) noexcept -> void;
+    auto DispatchManyCmd(Connection*, utils::Generator<PendingRequest>& gen) noexcept -> void;
 
     auto DbNum() const -> size_t { return cfg_.db_num_; }
-    auto GetCmd(std::string_view name) -> Cmd*;
     auto RegisterCmd(const std::string& name, int32_t arity, int32_t FirstKey, int32_t LastKey,
                      Exector exector, Prepare prepare, CmdFlags flags = CmdFlags::None) -> void;
 
     auto ShardAt(size_t index) -> Shard* { return shards_[index]; }
+    auto ShardNum() -> size_t { return shards_.size(); }
 
 private:
     static constexpr uint64_t kSeed = 0x9E3779B97F4A7C15ULL;
@@ -39,6 +43,7 @@ private:
         return static_cast<ShardId>(XXH64(s.data(), s.size(), kSeed) % cfg_.shard_num_);
     }
 
+    auto GetCmd(std::string_view name) -> Cmd*;
     auto InitCommand() -> void;
 
     std::vector<std::shared_ptr<DB>> db_slice_;

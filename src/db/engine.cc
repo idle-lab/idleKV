@@ -20,6 +20,7 @@
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <vector>
 #include <xxhash.h>
 
 namespace idlekv {
@@ -69,7 +70,7 @@ auto IdleEngine::DispatchCmd(Connection* conn, CmdArgs& args) noexcept -> void {
         return sender.SendError(fmt::format(kArgNumErrFmt, cmd->Name()));
     }
 
-    if (cmd->CanExecInline()) {
+    if (cmd->CanExecInPlace()) {
         ExecContext cmdctx(conn, id);
         cmd->Exec(&cmdctx, args);
         return;
@@ -86,6 +87,15 @@ auto IdleEngine::DispatchCmd(Connection* conn, CmdArgs& args) noexcept -> void {
 
     cmd->Exec(&cmdctx, args);
 }
+
+auto IdleEngine::DispatchManyCmd(Connection* conn, utils::Generator<PendingRequest>& gen) noexcept -> void {
+    std::vector<ShardId> cmd_order;
+
+    for (auto& req : gen) {
+        
+    }
+}
+
 
 auto IdleEngine::RegisterCmd(const std::string& name, int32_t arity, int32_t FirstKey,
                              int32_t LastKey, Exector exector, Prepare prepare, CmdFlags flags)

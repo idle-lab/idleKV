@@ -3,7 +3,6 @@
 #include "common/config.h"
 #include "db/command.h"
 #include "redis/connection.h"
-#include "redis/parser.h"
 #include "server/el_pool.h"
 #include "server/handler.h"
 #include "utils/pool/pool.h"
@@ -28,7 +27,6 @@ namespace idlekv {
 class RedisService : public Handler {
 public:
     using ConnectionPtr = std::unique_ptr<Connection>;
-    using CmdArgsPtr = std::unique_ptr<CmdArgs>;
     class ServiceTLData {
         struct Slot {
             asio::mutable_registered_buffer buffer;

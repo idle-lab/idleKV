@@ -5,10 +5,7 @@
 #include "db/storage/alloctor.h"
 #include "server/el_pool.h"
 #include "server/fiber_runtime.h"
-#include "utils/fiber/buffered_channel.h"
-#include "utils/fiber/event_count.h"
 
-#include <atomic>
 #include <boost/fiber/buffered_channel.hpp>
 #include <boost/fiber/channel_op_status.hpp>
 #include <boost/fiber/fiber.hpp>
@@ -128,7 +125,7 @@ public:
 
     auto Start() -> void {
         for (int i = 0 ;i < 1; i++) {
-            consumers_.emplace_back([this] {
+            consumers_.emplace_back(LaunchFiber(FiberProps{"TaskQueueConsumer", FiberPriority::HIGH}, [this] {
                 Task task;
                 while (true) {
                     auto res = queue_.pop(task);
@@ -139,7 +136,7 @@ public:
 
                     task();
                 }
-            });
+            }));
         }
     }
 

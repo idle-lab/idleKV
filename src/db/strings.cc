@@ -21,20 +21,18 @@ namespace idlekv {
 
 namespace {
 
-auto SingleReadKey(const CmdArgs& args)
-    -> std::pair<std::vector<std::string_view>, std::vector<std::string_view>> {
+auto SingleReadKey(const CmdArgs& args) -> WRSet {
     if (args.size() < 2) {
         return {};
     }
-    return {{}, {args[1]}};
+    return {{}, {1}};
 }
 
-auto SingleWriteKey(const CmdArgs& args)
-    -> std::pair<std::vector<std::string_view>, std::vector<std::string_view>> {
+auto SingleWriteKey(const CmdArgs& args) -> WRSet {
     if (args.size() < 2) {
         return {};
     }
-    return {{args[1]}, {}};
+    return {{1}, {}};
 }
 
 template<class Fn>
