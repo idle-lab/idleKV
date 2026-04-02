@@ -38,7 +38,6 @@ public:
             return;
         }
 
-        waiting_ctx_splk_.lock();
         std::unique_lock<boost::fibers::detail::spinlock> lk(waiting_ctx_splk_);
 
         if (count_.load(std::memory_order_acquire) == 0) {

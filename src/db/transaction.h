@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <spdlog/spdlog.h>
 #include <vector>
 
 namespace idlekv {
