@@ -6,15 +6,12 @@ namespace idlekv {
 
 // TODO(cyb): Object impl to support hash, set...
 class SmallString {
-
     static constexpr size_t kMaxSmallStringLen = 8;
 
     char data[kMaxSmallStringLen];
 };
 
-class String {
-
-};
+class String {};
 
 class Object {
 public:
@@ -29,11 +26,9 @@ public:
 
     union {
         SmallString ss_;
-        String s_;
-
+        String      s_;
 
     } obj_;
-
 };
 
 } // namespace idlekv

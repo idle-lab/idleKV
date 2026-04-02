@@ -220,7 +220,7 @@ public:
 protected:
     virtual auto ReadImpl(char* buf, size_t size) noexcept -> ResultT<size_t>                  = 0;
     virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept -> ResultT<size_t> = 0;
-    virtual auto ReadvImpl(const std::array<Buf, 2>& bufs) noexcept -> ResultT<size_t>           = 0;
+    virtual auto ReadvImpl(const std::array<Buf, 2>& bufs) noexcept -> ResultT<size_t>         = 0;
 
 private:
     // buf_ and reg_buf_ refer to the same underlying memory region.
@@ -228,7 +228,7 @@ private:
     // reg_buf_, while buf_ must remain consistent throughout the process.
     IOBuf                           buf_;
     asio::mutable_registered_buffer reg_buf_;
-    std::array<Buf, 2>     bufs_;
+    std::array<Buf, 2>              bufs_;
 };
 
 class Writer {
@@ -394,14 +394,14 @@ private:
 
 class SenderBase {
 public:
-    virtual auto SendSimpleString(std::string_view s) -> void = 0;
-    virtual auto SendOk() -> void = 0;
-    virtual auto SendPong() -> void = 0;
-    virtual auto SendBulkString(std::string_view s) -> void = 0;
+    virtual auto SendSimpleString(std::string_view s) -> void                          = 0;
+    virtual auto SendOk() -> void                                                      = 0;
+    virtual auto SendPong() -> void                                                    = 0;
+    virtual auto SendBulkString(std::string_view s) -> void                            = 0;
     virtual auto SendBulkString(const std::shared_ptr<const DataEntity>& data) -> void = 0;
-    virtual auto SendNullBulkString() -> void = 0;
-    virtual auto SendInteger(int64_t value) -> void = 0;
-    virtual auto SendError(std::string_view s) -> void = 0;
+    virtual auto SendNullBulkString() -> void                                          = 0;
+    virtual auto SendInteger(int64_t value) -> void                                    = 0;
+    virtual auto SendError(std::string_view s) -> void                                 = 0;
 
     virtual ~SenderBase() = default;
 };

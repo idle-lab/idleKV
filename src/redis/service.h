@@ -53,8 +53,8 @@ public:
         utils::Pool<CmdArgsPtr> args_pool_;
 
         // register buffer
-        std::unique_ptr<char[]>    buf_space_;
-        std::vector<size_t>        free_list_;
+        std::unique_ptr<char[]> buf_space_;
+        std::vector<size_t>     free_list_;
         std::optional<asio::buffer_registration<std::vector<asio::mutable_buffer>>>
             buffer_registration_;
     };

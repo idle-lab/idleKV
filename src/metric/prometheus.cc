@@ -103,7 +103,8 @@ auto PrometheusMetrics::Histogram::AppendPrometheus(std::string_view name, std::
 
     out += name;
     out += "_sum ";
-    AppendDouble(out, static_cast<double>(sum_ns_.load(std::memory_order_relaxed)) / 1'000'000'000.0);
+    AppendDouble(out,
+                 static_cast<double>(sum_ns_.load(std::memory_order_relaxed)) / 1'000'000'000.0);
     out += '\n';
 
     out += name;

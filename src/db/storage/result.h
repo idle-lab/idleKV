@@ -16,11 +16,11 @@ inline auto OpStatusToString(OpStatus ops) -> std::string {
     case OpStatus::OK:
         return "OK";
     case OpStatus::DupKey:
-        return "duplicate key";
+        return "Duplicate Key";
     case OpStatus::NoSuchKey:
-        return "no such key";
+        return "No Such Key";
     case OpStatus::Unknown:
-        return "unknown error";
+        return "Unknown Error";
     default:
         UNREACHABLE();
     }
@@ -28,6 +28,7 @@ inline auto OpStatusToString(OpStatus ops) -> std::string {
 
 template <class PayLoad>
 struct Result {
+    Result() = default;
     Result(OpStatus s, const std::optional<PayLoad>& res) : s_(s), res_(std::move(res)) {}
 
     auto operator==(const OpStatus& s) const -> bool { return s_ == s; }

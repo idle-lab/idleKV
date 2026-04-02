@@ -124,19 +124,20 @@ public:
     TaskQueue(size_t capacity) : queue_(capacity) {}
 
     auto Start() -> void {
-        for (int i = 0 ;i < 1; i++) {
-            consumers_.emplace_back(LaunchFiber(FiberProps{"TaskQueueConsumer", FiberPriority::HIGH}, [this] {
-                Task task;
-                while (true) {
-                    auto res = queue_.pop(task);
+        for (int i = 0; i < 1; i++) {
+            consumers_.emplace_back(
+                LaunchFiber(FiberProps{"TaskQueueConsumer", FiberPriority::HIGH}, [this] {
+                    Task task;
+                    while (true) {
+                        auto res = queue_.pop(task);
 
-                    if (res == boost::fibers::channel_op_status::closed) {
-                        return;
+                        if (res == boost::fibers::channel_op_status::closed) {
+                            return;
+                        }
+
+                        task();
                     }
-
-                    task();
-                }
-            }));
+                }));
         }
     }
 
@@ -147,7 +148,7 @@ public:
 
     auto Stop() -> void {
         queue_.close();
-        for(auto& consumer : consumers_) {
+        for (auto& consumer : consumers_) {
             if (consumer.joinable()) {
                 consumer.join();
             }
@@ -232,5 +233,10 @@ private:
 
     ShardId id_;
 };
+
+static constexpr uint64_t kSeed = 0x9E3779B97F4A7C15ULL;
+inline auto CalculateShardId(std::string_view s, size_t shard_num) -> ShardId {
+    return static_cast<ShardId>(XXH64(s.data(), s.size(), kSeed) % shard_num);
+}
 
 } // namespace idlekv

@@ -6,7 +6,7 @@
 #include "server/fiber_runtime.h"
 #include "server/handler.h"
 #include "server/thread_state.h"
-#include "utils/timer/timer.h"
+#include "utils/time/time.h"
 
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
@@ -85,8 +85,8 @@ auto Server::DoAccept(Handler* h) -> void {
         return;
     }
 
-    LOG(info, "start handler {}, listening on {}:{}", h->Name(), h->Endpoint().address().to_string(),
-        h->Endpoint().port());
+    LOG(info, "start handler {}, listening on {}:{}", h->Name(),
+        h->Endpoint().address().to_string(), h->Endpoint().port());
 
     for (;;) {
         boost::system::error_code accept_ec;
@@ -101,7 +101,7 @@ auto Server::DoAccept(Handler* h) -> void {
 
             if (accept_ec == ToStdErrorCode(asio::error::no_descriptors)) {
                 LOG(warn, "FD limit reached");
-                DISCARD_RESULT(SetTimeout(std::chrono::seconds(1)));
+                DISCARD_RESULT(utils::SetTimeout(std::chrono::seconds(1)));
                 continue;
             }
 
@@ -137,11 +137,10 @@ auto Server::DoAccept(Handler* h) -> void {
             continue;
         }
 
-        target_el->Dispatch(
-            [h, socket = std::move(socket)]() mutable { 
-                boost::this_fiber::properties<FiberProps>().SetName("ConnectionHandler");
-                h->Handle(std::move(socket)); 
-            });
+        target_el->Dispatch([h, socket = std::move(socket)]() mutable {
+            boost::this_fiber::properties<FiberProps>().SetName("ConnectionHandler");
+            h->Handle(std::move(socket));
+        });
     }
 }
 

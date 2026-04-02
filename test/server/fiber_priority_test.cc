@@ -1,9 +1,8 @@
 #include "server/el_pool.h"
 
-#include <gtest/gtest.h>
-
 #include <atomic>
 #include <chrono>
+#include <gtest/gtest.h>
 #include <vector>
 
 namespace idlekv {

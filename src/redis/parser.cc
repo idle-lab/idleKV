@@ -150,7 +150,6 @@ auto Reader::SkipCRLF() noexcept -> std::error_code {
     return std::error_code{};
 }
 
-
 auto Reader::Fill() -> std::error_code {
     ResultT<size_t> res{std::error_code{}};
     if (reg_buf_.data()) {

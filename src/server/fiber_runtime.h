@@ -6,8 +6,8 @@
 // modified for boost.asio >= 1.70
 #pragma once
 
-#include "common/asio_no_exceptions.h"
 #include "absl/base/internal/cycleclock.h"
+#include "common/asio_no_exceptions.h"
 #include "common/logger.h"
 
 #include <boost/asio/execution_context.hpp>
@@ -32,22 +32,19 @@
 
 namespace idlekv {
 enum class FiberPriority : uint8_t {
-    NORMAL = 0,      // default priority
-    BACKGROUND = 1,  // background priority, runs when no NORMAL fibers are ready.
-    HIGH = 2,        // high priority, scheduled before other worker fibers.
+    NORMAL     = 0, // default priority
+    BACKGROUND = 1, // background priority, runs when no NORMAL fibers are ready.
+    HIGH       = 2, // high priority, scheduled before other worker fibers.
 };
 
 class FiberProps : public boost::fibers::fiber_properties {
 public:
     explicit FiberProps(boost::fibers::context* ctx,
-                           FiberPriority         priority = FiberPriority::NORMAL) noexcept
-        : boost::fibers::fiber_properties(ctx),
-          priority_(priority) {}
+                        FiberPriority           priority = FiberPriority::NORMAL) noexcept
+        : boost::fibers::fiber_properties(ctx), priority_(priority) {}
 
     FiberProps(std::string name, FiberPriority priority = FiberPriority::NORMAL) noexcept
-        : boost::fibers::fiber_properties(nullptr),
-          priority_(priority),
-          name_(std::move(name)) {}
+        : boost::fibers::fiber_properties(nullptr), priority_(priority), name_(std::move(name)) {}
 
     auto Priority() const noexcept -> FiberPriority { return priority_; }
 
@@ -63,13 +60,12 @@ public:
     auto Name() const noexcept -> const std::string& { return name_; }
     auto SetName(std::string name) noexcept -> void { name_ = std::move(name); }
 
-    // internal fields
     uint64_t last_resume_cycle{0};
     uint64_t switch_count{0};
 
 private:
     FiberPriority priority_{FiberPriority::NORMAL};
-    std::string name_;
+    std::string   name_;
 };
 
 class FiberCycleClock {
@@ -103,8 +99,7 @@ public:
     }
 };
 
-
-} // namepsace idlekv
+} // namespace idlekv
 
 namespace boost::fibers {
 
@@ -118,7 +113,6 @@ struct no_op_lock {
 } // namespace boost::fibers
 
 namespace boost::fibers::asio {
-
 
 class round_robin : public algo::algorithm_with_properties<idlekv::FiberProps> {
 private:
@@ -143,8 +137,7 @@ public:
         boost::asio::add_service(io_ctx, new service(io_ctx));
     }
 
-    void property_change(boost::fibers::context* ctx,
-                         idlekv::FiberProps&  props) noexcept override {
+    void property_change(boost::fibers::context* ctx, idlekv::FiberProps& props) noexcept override {
         BOOST_ASSERT(nullptr != ctx);
         if (ctx->is_context(boost::fibers::type::dispatcher_context) || !ctx->ready_is_linked()) {
             return;
@@ -181,9 +174,7 @@ public:
         return nullptr;
     }
 
-    auto has_ready_fibers() const noexcept -> bool override {
-        return counter_ > 0;
-    }
+    auto has_ready_fibers() const noexcept -> bool override { return counter_ > 0; }
 
     void suspend_until(std::chrono::steady_clock::time_point const& abs_time) noexcept override {
         if (abs_time != (std::chrono::steady_clock::time_point::max)()) {
@@ -204,8 +195,8 @@ public:
     }
 
 private:
-    auto ReadyQueueFor(boost::fibers::context*      ctx,
-                       idlekv::FiberProps const* props) noexcept -> ready_queue_type& {
+    auto ReadyQueueFor(boost::fibers::context* ctx, idlekv::FiberProps const* props) noexcept
+        -> ready_queue_type& {
         if (ctx->is_context(boost::fibers::type::dispatcher_context)) {
             return background_queue_;
         }
@@ -256,8 +247,8 @@ private:
     void AccountRunningFiber() noexcept {
         auto* props = PropsOf(running_ctx_);
         if (props == nullptr || running_since_cycle_ == 0) {
-            running_ctx_          = nullptr;
-            running_since_cycle_  = 0;
+            running_ctx_         = nullptr;
+            running_since_cycle_ = 0;
             return;
         }
 
@@ -273,7 +264,7 @@ private:
             return;
         }
 
-        const uint64_t now      = idlekv::FiberCycleClock::Now();
+        const uint64_t now       = idlekv::FiberCycleClock::Now();
         props->last_resume_cycle = now;
 
         running_ctx_         = ctx;
@@ -600,11 +591,11 @@ auto LaunchFiber(FiberPriority priority, Fn&& fn) -> boost::fibers::fiber {
 
 template <typename Fn>
 auto LaunchFiber(FiberProps props, Fn&& fn) -> boost::fibers::fiber {
-    auto* props_ptr = static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, props.Priority()));
+    auto* props_ptr =
+        static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, props.Priority()));
     return boost::fibers::fiber(props_ptr, std::allocator_arg, boost::fibers::default_stack(),
                                 std::forward<Fn>(fn));
 }
-
 
 template <typename Fn>
 auto LaunchFiber(Fn&& fn) -> boost::fibers::fiber {

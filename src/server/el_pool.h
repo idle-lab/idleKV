@@ -29,9 +29,10 @@
 #include <vector>
 namespace idlekv {
 
-inline const uint64_t kMaxParseCpuCycles = 200 /* us */ * FiberCycleClock::Frequency() / 1'000'000ULL;
-inline const uint64_t kMaxSquashCpuCycles = 500 /* us */ * FiberCycleClock::Frequency() / 1'000'000ULL;
-
+inline const uint64_t kMaxParseCpuCycles =
+    200 /* us */ * FiberCycleClock::Frequency() / 1'000'000ULL;
+inline const uint64_t kMaxSquashCpuCycles =
+    500 /* us */ * FiberCycleClock::Frequency() / 1'000'000ULL;
 
 // manages a single io_context thread and runs submitted tasks on its bound cpu.
 class EventLoop {
@@ -122,7 +123,8 @@ public:
         auto fut = task->get_future();
 
         asio::post(io_, [task, priority]() mutable {
-            idlekv::LaunchFiberDetached(priority, [task = std::move(task)]() mutable { (*task)(); });
+            idlekv::LaunchFiberDetached(priority,
+                                        [task = std::move(task)]() mutable { (*task)(); });
         });
         return std::future<R>(std::move(fut));
     }
@@ -158,14 +160,18 @@ public:
             LaunchFiber(priority, [task = std::move(task), prom = std::move(prom)]() mutable {
                 try {
                     if constexpr (std::is_void_v<R>) {
-                        std::apply([](auto& fn, auto&... inner_args) {
-                            std::invoke(fn, std::move(inner_args)...);
-                        }, *task);
+                        std::apply(
+                            [](auto& fn, auto&... inner_args) {
+                                std::invoke(fn, std::move(inner_args)...);
+                            },
+                            *task);
                         prom->set_value();
                     } else {
-                        prom->set_value(std::apply([](auto& fn, auto&... inner_args) {
-                            return std::invoke(fn, std::move(inner_args)...);
-                        }, *task));
+                        prom->set_value(std::apply(
+                            [](auto& fn, auto&... inner_args) {
+                                return std::invoke(fn, std::move(inner_args)...);
+                            },
+                            *task));
                     }
                 } catch (...) {
                     prom->set_exception(std::current_exception());

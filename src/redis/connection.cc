@@ -5,6 +5,7 @@
 #include "db/command.h"
 #include "db/engine.h"
 #include "metric/prometheus.h"
+#include "redis/client.h"
 #include "redis/error.h"
 #include "redis/parser.h"
 #include "redis/service.h"
@@ -22,6 +23,7 @@
 #include <boost/fiber/type.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <spdlog/spdlog.h>
 #include <sys/uio.h>
@@ -162,9 +164,7 @@ auto Connection::WritevImpl(const std::vector<BufView>& bufs) noexcept -> Result
 }
 
 auto Connection::HandleRequests() noexcept -> void {
-    cur_args_ = RedisService::Tlocal()->GetCmdArgsOrCreate();
-
-    for (uint32_t count = 0; !IsClosed(); count++) {
+    while (!IsClosed()) {
         auto parse_res = p_.ParseOne(*cur_args_);
 
         if (!parse_res.Ok()) [[unlikely]] {
@@ -206,17 +206,17 @@ auto Connection::HandleRequests() noexcept -> void {
         if (can_sync_dispatch) {
             const auto started_at = RequestClock::now();
             s_.SetBatch(false);
-            engine->DispatchCmd(this, args);
+            engine->DispatchCmd(client_.get(), args);
             PrometheusMetrics::Instance().ObserveRequestDuration(RequestClock::now() - started_at);
 
             args.ClearForReuse();
         } else {
             if (!async_fiber_.joinable()) [[unlikely]] {
-                async_fiber_ = boost::fibers::fiber(boost::fibers::launch::post, [this] { AsyncHandle(); });
+                async_fiber_ =
+                    boost::fibers::fiber(boost::fibers::launch::post, [this] { AsyncHandle(); });
             }
 
-            pipeline_queue_.emplace_back(
-                PendingRequest{.args = std::move(cur_args_), .started_at = RequestClock::now()});
+            pipeline_queue_.emplace_back(std::move(cur_args_), RequestClock::now());
             cur_args_ = RedisService::Tlocal()->GetCmdArgsOrCreate();
 
             async_cv_.notify_one();
@@ -231,7 +231,7 @@ auto Connection::AsyncHandle() noexcept -> void {
     boost::fibers::no_op_lock mu;
 
     std::unique_lock<boost::fibers::no_op_lock> lk(mu);
-    bool yielded_for_batch = false;
+    bool                                        yielded_for_batch = false;
 
     while (!IsClosed()) {
         async_cv_.wait(lk, [this]() -> bool { return IsClosed() || !pipeline_queue_.empty(); });
@@ -248,31 +248,39 @@ auto Connection::AsyncHandle() noexcept -> void {
 
         s_.SetBatch(pipeline_queue_.size() > 1);
 
-        // If the pipeline queue is too long, we squash all pending requests in the queue without yielding.
+        // If the pipeline queue is too long, we squash all pending requests in the queue without
+        // yielding.
         if (pipeline_queue_.size() > kPipelineSquashThreshold) {
             // Squash pipeline cmd
-            while (!pipeline_queue_.empty()) {
+            auto gen = [this]() -> utils::Generator<PendingRequest> {
+                for (size_t idx = 0; idx < pipeline_queue_.size(); idx++) {
+                    auto& req = pipeline_queue_[idx];
+                    co_yield PendingRequest{.args = req.args_ptr.get(), .started_at = req.started_at};
+                }
+            }();
 
-                auto gen = [this]() -> utils::Generator<PendingRequest> {
-                    while (!pipeline_queue_.empty()) {
-                        auto req = std::move(pipeline_queue_.front());
-                        pipeline_queue_.pop_front();
-                        co_yield std::move(req);
-                    }
-                }();
+            size_t squash_limit = pipeline_queue_.size();
 
-                engine->DispatchManyCmd(this, gen);
+            // ======= start squash =======
+            size_t processed = engine->DispatchManyCmd(client_.get(), gen, squash_limit);
+            // ======== end squash ========
 
+            for (size_t i = 0; i < processed; i++) {
+                auto& request = pipeline_queue_.front();
+                RedisService::Tlocal()->RecycleCmdArgs(std::move(request.args_ptr));
+                pipeline_queue_.pop_front();
             }
+
+            pipeline_queue_.erase(pipeline_queue_.begin(), pipeline_queue_.begin() + processed);
         } else {
             auto request = std::move(pipeline_queue_.front());
             pipeline_queue_.pop_front();
 
-            engine->DispatchCmd(this, *request.args);
+            engine->DispatchCmd(client_.get(), *request.args_ptr);
 
             PrometheusMetrics::Instance().ObserveRequestDuration(RequestClock::now() -
-                                                        request.started_at);
-            RedisService::Tlocal()->RecycleCmdArgs(std::move(request.args));
+                                                                 request.started_at);
+            RedisService::Tlocal()->RecycleCmdArgs(std::move(request.args_ptr));
         }
 
         if (!p_.HashMore() && pipeline_queue_.empty()) {
@@ -292,10 +300,12 @@ auto Connection::Flush() -> void {
     s_.Flush();
 }
 
-auto Connection::Reset(asio::ip::tcp::socket&& socket) -> void {
+auto Connection::Init(asio::ip::tcp::socket&& socket) -> void {
     CHECK(socket_.has_value() == false) << "override a connection that is currently in use";
     socket_.emplace(std::move(socket));
     db_index_ = 0;
+    cur_args_ = RedisService::Tlocal()->GetCmdArgsOrCreate();
+    client_ = std::make_unique<Client>(this);
 }
 
 auto Connection::Reset() -> void {
@@ -317,6 +327,7 @@ auto Connection::Reset() -> void {
     p_.Clear();
     s_.Clear();
     ec_ = std::error_code{};
+    client_.reset();
 }
 
 } // namespace idlekv

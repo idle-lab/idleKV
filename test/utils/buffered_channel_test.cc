@@ -1,13 +1,12 @@
 #include "server/el_pool.h"
 #include "utils/fiber/buffered_channel.h"
 
-#include <boost/fiber/channel_op_status.hpp>
-#include <gtest/gtest.h>
-
 #include <algorithm>
 #include <atomic>
+#include <boost/fiber/channel_op_status.hpp>
 #include <chrono>
 #include <future>
+#include <gtest/gtest.h>
 #include <thread>
 #include <vector>
 
@@ -22,10 +21,10 @@ TEST(BufferedChannelTest, DISABLED_MpmcAcrossEventLoopsDeliversEveryValue) {
 
     utils::buffered_channel<int> channel(8);
 
-    constexpr int kProducerCount      = 4;
-    constexpr int kConsumerCount      = 4;
-    constexpr int kValuesPerProducer  = 512;
-    constexpr int kTotalValues        = kProducerCount * kValuesPerProducer;
+    constexpr int kProducerCount     = 4;
+    constexpr int kConsumerCount     = 4;
+    constexpr int kValuesPerProducer = 512;
+    constexpr int kTotalValues       = kProducerCount * kValuesPerProducer;
 
     std::atomic<int> producer_failures{0};
     std::atomic<int> consumer_failures{0};
@@ -44,8 +43,8 @@ TEST(BufferedChannelTest, DISABLED_MpmcAcrossEventLoopsDeliversEveryValue) {
         pool.At(static_cast<size_t>(i % 2))->Dispatch([&channel, &consumer_failures, promise]() {
             std::vector<int> values;
             for (;;) {
-                int value = 0;
-                auto st   = channel.pop(value);
+                int  value = 0;
+                auto st    = channel.pop(value);
                 if (st == boost::fibers::channel_op_status::success) {
                     values.push_back(value);
                     continue;
@@ -65,21 +64,20 @@ TEST(BufferedChannelTest, DISABLED_MpmcAcrossEventLoopsDeliversEveryValue) {
         auto promise = std::make_shared<std::promise<void>>();
         producer_futures.push_back(promise->get_future());
 
-        pool.At(static_cast<size_t>(producer_id % 2))
-            ->Dispatch([&, producer_id, promise]() {
-                for (int value = 0; value < kValuesPerProducer; ++value) {
-                    const int payload = producer_id * kValuesPerProducer + value;
-                    if (channel.push(payload) != boost::fibers::channel_op_status::success) {
-                        producer_failures.fetch_add(1, std::memory_order_relaxed);
-                        break;
-                    }
+        pool.At(static_cast<size_t>(producer_id % 2))->Dispatch([&, producer_id, promise]() {
+            for (int value = 0; value < kValuesPerProducer; ++value) {
+                const int payload = producer_id * kValuesPerProducer + value;
+                if (channel.push(payload) != boost::fibers::channel_op_status::success) {
+                    producer_failures.fetch_add(1, std::memory_order_relaxed);
+                    break;
                 }
+            }
 
-                if (producers_left.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-                    channel.close();
-                }
-                promise->set_value();
-            });
+            if (producers_left.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                channel.close();
+            }
+            promise->set_value();
+        });
     }
 
     for (auto& future : producer_futures) {

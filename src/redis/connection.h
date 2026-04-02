@@ -3,6 +3,7 @@
 #include "absl/functional/function_ref.h"
 #include "common/asio_no_exceptions.h"
 #include "db/command.h"
+#include "redis/client.h"
 #include "redis/parser.h"
 #include "server/el_pool.h"
 
@@ -18,21 +19,16 @@
 #include <boost/fiber/fiber.hpp>
 #include <boost/system/detail/error_code.hpp>
 #include <cassert>
-#include <chrono>
 #include <cstddef>
 #include <cstring>
 #include <deque>
 #include <memory>
 #include <optional>
-#include <queue>
 #include <vector>
 
 namespace idlekv {
 
 static constexpr size_t kPipelineSquashThreshold = 2;
-
-class DB;
-class IdleEngine;
 
 class Connection : public Reader, public Writer {
 public:
@@ -63,7 +59,7 @@ public:
 
     auto Flush() -> void;
 
-    auto Reset(asio::ip::tcp::socket&& socket) -> void;
+    auto Init(asio::ip::tcp::socket&& socket) -> void;
     auto Reset() -> void;
 
     auto GetSender() -> Sender& { return s_; }
@@ -91,6 +87,11 @@ public:
     }
 
 private:
+    struct PipelineMsg {
+        CmdArgsPtr args_ptr;
+        TimePoint  started_at;
+    };
+
     std::optional<asio::ip::tcp::socket> socket_;
     boost::system::error_code            ec_;
 
@@ -105,8 +106,10 @@ private:
     boost::fibers::fiber                  async_fiber_;
     boost::fibers::condition_variable_any async_cv_;
 
-    std::deque<PendingRequest> pipeline_queue_;
+    std::deque<PipelineMsg> pipeline_queue_;
     CmdArgsPtr                 cur_args_;
+
+    std::unique_ptr<Client> client_;
 };
 
 } // namespace idlekv

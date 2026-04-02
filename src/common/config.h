@@ -60,9 +60,10 @@ public:
     Config() : opts_(SERVER_NAME) {
         opts_.add_option("--ip", ip_, "Listen IP")->default_val("0.0.0.0");
         opts_.add_option("--port", port_, "Listen port")->default_val(DEFAULT_PORT);
-        opts_.add_option("--metrics-ip", metrics_ip_, "Prometheus listen IP")->default_val("0.0.0.0");
-        opts_.add_option("--metrics-port", metrics_port_,
-                         "Prometheus metrics port")->default_val(9108);
+        opts_.add_option("--metrics-ip", metrics_ip_, "Prometheus listen IP")
+            ->default_val("0.0.0.0");
+        opts_.add_option("--metrics-port", metrics_port_, "Prometheus metrics port")
+            ->default_val(9108);
 
         opts_.add_option("-c,--config", config_file_path, "Config file path");
         opts_.add_option("--DbNum", db_num_, "number of DB");

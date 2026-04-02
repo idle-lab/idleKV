@@ -1,21 +1,18 @@
-#include "common/result.h"
 #include "db/command.h"
 #include "db/context.h"
 #include "db/engine.h"
 #include "db/shard.h"
 #include "db/storage/result.h"
-#include "redis/connection.h"
 #include "redis/error.h"
+#include "db/transaction.h"
 
 #include <absl/functional/function_ref.h>
 #include <boost/fiber/future/future.hpp>
 #include <boost/fiber/future/promise.hpp>
-#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace idlekv {
 
@@ -35,7 +32,7 @@ auto SingleWriteKey(const CmdArgs& args) -> WRSet {
     return {{1}, {}};
 }
 
-template<class Fn>
+template <class Fn>
 auto Schedule(Shard* shard, ShardId curr_shard_id, Fn&& task) -> decltype(task()) {
     using namespace boost::fibers;
 
@@ -44,9 +41,7 @@ auto Schedule(Shard* shard, ShardId curr_shard_id, Fn&& task) -> decltype(task()
     } else {
         auto prom = std::make_shared<promise<decltype(task())>>();
         auto fut  = prom->get_future();
-        shard->Add([task = std::move(task), prom]() mutable {
-            prom->set_value(task());
-        });
+        shard->Add([task = std::move(task), prom]() mutable { prom->set_value(task()); });
         return fut.get();
     }
 }
@@ -54,66 +49,67 @@ auto Schedule(Shard* shard, ShardId curr_shard_id, Fn&& task) -> decltype(task()
 } // namespace
 
 auto Set(ExecContext* ctx, CmdArgs& args) -> void {
-    auto& sender = ctx->GetConnection()->GetSender();
+    auto* sender = ctx->sender;
+    Result<bool> res;
 
-    DB*  db   = ctx->GetDb();
-
-    auto res = Schedule(ctx->GetShard(), ctx->OwnerId(),  [db, ags = std::move(args)]() mutable {
-        return db->Set(std::string(ags[1]), DataEntity::FromString(std::string(ags[2])));
+    ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
+        auto* db = shard->DbAt(ctx->client->db_index);
+        res = db->Set(std::string(args[1]), DataEntity::FromString(std::string(args[2])));
     });
 
     if (!res.Ok()) {
-        return sender.SendError(res.Message());
+        return sender->SendError(res.Message());
     }
-    sender.SendOk();
+    sender->SendOk();
 }
 
 auto Get(ExecContext* ctx, CmdArgs& args) -> void {
-    auto& sender = ctx->GetConnection()->GetSender();
-    DB*   db     = ctx->GetDb();
+    auto* sender = ctx->sender;
+    Result<std::shared_ptr<DataEntity>> res;
 
-    auto res = Schedule(
-        ctx->GetShard(), ctx->OwnerId(), [db, ags = std::move(args)]() mutable {
-            return db->Get(ags[1]);
-        });
+    ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
+        auto* db = shard->DbAt(ctx->client->db_index);
+        res = db->Get(args[1]);
+    });
 
     if (res == OpStatus::NoSuchKey) {
-        return sender.SendNullBulkString();
+        return sender->SendNullBulkString();
     }
 
     const auto& value = res.Get();
     if (!value) {
-        return sender.SendNullBulkString();
+        return sender->SendNullBulkString();
     }
 
     if (!value->IsString()) {
-        return sender.SendError(kWrongTypeErr);
+        return sender->SendError(kWrongTypeErr);
     }
 
-    sender.SendBulkString(value);
+    sender->SendBulkString(value);
 }
 
 auto Del(ExecContext* ctx, CmdArgs& args) -> void {
     using namespace boost::fibers;
-    auto& sender = ctx->GetConnection()->GetSender();
-    DB*   db     = ctx->GetDb();
+    auto* sender = ctx->sender;
 
-    auto res =Schedule(
-        ctx->GetShard(), ctx->OwnerId(), [db, ags = std::move(args)]() mutable {
-            return db->Del(ags[1]);
-        });
+    Result<bool> res;
+
+    ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
+        auto* db = shard->DbAt(ctx->client->db_index);
+        res = db->Del(args[1]);
+    });
 
     if (res == OpStatus::NoSuchKey) {
-        return sender.SendInteger(0);
+        return sender->SendInteger(0);
     }
 
-    sender.SendInteger(res.Get() ? 1 : 0);
+    sender->SendInteger(res.Get() ? 1 : 0);
 }
 
 auto InitStrings(IdleEngine* eng) -> void {
-    eng->RegisterCmd("set", 3, 1, 1, Set, SingleWriteKey);
-    eng->RegisterCmd("get", 2, 1, 1, Get, SingleReadKey);
-    eng->RegisterCmd("del", 2, 1, 1, Del, SingleWriteKey);
+    eng->RegisterCmd("set", 3, 1, 1, Set, SingleWriteKey, CmdFlags::Transactional);
+    eng->RegisterCmd("get", 2, 1, 1, Get, SingleReadKey, CmdFlags::Transactional);
+    eng->RegisterCmd("del", 2, 1, 1, Del, SingleWriteKey, CmdFlags::Transactional);
 }
 
 } // namespace idlekv

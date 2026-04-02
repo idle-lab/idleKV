@@ -1,30 +1,21 @@
 #pragma once
 
 #include "db/shard.h"
+#include "redis/client.h"
 #include "redis/connection.h"
+#include "redis/parser.h"
 
 namespace idlekv {
 
-class ExecContext {
-public:
-    ExecContext(Connection* conn, size_t OwnerId) : conn_(conn), owner_id_(OwnerId) {
-        db_index_ = conn_->DbIndex();
+struct ExecContext {
+    auto CurTxn() -> Transaction* {
+        CHECK(client->txn != nullptr);
+        return client->txn;
     }
 
-    auto GetConnection() -> Connection* { return conn_; }
-
-    auto InitShard(Shard* shard) -> void { shard_ = shard; }
-
-    auto GetDb() -> DB* { return shard_->DbAt(db_index_); }
-    auto GetShard() -> Shard* { return shard_; }
-    auto OwnerId() -> size_t { return owner_id_; }
-
-private:
-    Connection* conn_;
-
-    Shard* shard_;
-    size_t db_index_;
-    size_t owner_id_;
+    Client*      client;
+    SenderBase* sender;
+    size_t owner_id;
 };
 
 } // namespace idlekv

@@ -1,9 +1,9 @@
+#include "banner.h"
 #include "common/config.h"
 #include "db/engine.h"
 #include "redis/service.h"
 #include "server/metrics_service.h"
 #include "server/server.h"
-#include "banner.h"
 
 #include <CLI11/CLI11.hpp>
 #include <cstdio>
@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
 
         spdlog::set_default_logger(idlekv::MakeDefaultLogger());
 
-#ifdef NDEBUG 
+#ifdef NDEBUG
         LOG(info, "you are running in release mode");
 #elif
         LOG(warn, "you are running in debug mode, performance may be significantly degraded");

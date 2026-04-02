@@ -54,8 +54,8 @@ auto MetricsService::Handle(asio::ip::tcp::socket socket) -> void {
     boost::system::error_code ec;
     asio::streambuf           request_buf;
 
-    DISCARD_RESULT(asio::async_read_until(socket, request_buf, "\r\n\r\n",
-                                          boost::fibers::asio::yield[ec]));
+    DISCARD_RESULT(
+        asio::async_read_until(socket, request_buf, "\r\n\r\n", boost::fibers::asio::yield[ec]));
     if (ec && ec != asio::error::eof) {
         CloseSocket(socket);
         return;
@@ -66,9 +66,9 @@ auto MetricsService::Handle(asio::ip::tcp::socket socket) -> void {
     std::getline(request_stream, request_line);
     TrimCr(request_line);
 
-    std::string method;
-    std::string target;
-    std::string version;
+    std::string        method;
+    std::string        target;
+    std::string        version;
     std::istringstream request_line_stream(request_line);
     request_line_stream >> method >> target >> version;
 
@@ -93,7 +93,7 @@ auto MetricsService::Handle(asio::ip::tcp::socket socket) -> void {
         body = PrometheusMetrics::Instance().Render();
     }
 
-    auto header = BuildHttpResponse(status, content_type, body);
+    auto                              header = BuildHttpResponse(status, content_type, body);
     std::array<asio::const_buffer, 2> response{
         asio::buffer(header.data(), header.size()),
         asio::buffer(body.data(), body.size()),

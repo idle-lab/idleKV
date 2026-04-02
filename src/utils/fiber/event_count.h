@@ -25,8 +25,7 @@ public:
         Key(const Key&)                    = delete;
         auto operator=(const Key&) -> Key& = delete;
 
-        Key(Key&& other) noexcept
-            : me_(std::exchange(other.me_, nullptr)), epoch_(other.epoch_) {}
+        Key(Key&& other) noexcept : me_(std::exchange(other.me_, nullptr)), epoch_(other.epoch_) {}
 
         auto operator=(Key&& other) noexcept -> Key& {
             if (this != &other) {
@@ -145,7 +144,7 @@ public:
         }
 
         return wait_queue_.suspend_and_wait_until(lk, active_ctx, tp) ? cv_status::no_timeout
-                                                                       : cv_status::timeout;
+                                                                      : cv_status::timeout;
     }
 
 private:

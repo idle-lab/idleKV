@@ -37,9 +37,7 @@ auto RedisService::ServiceTLData::Init(asio::any_io_executor exector, size_t buf
     // TODO(cyb): backpressure
     // no limit
     args_pool_.SetPoolSize(0);
-    args_pool_.SetNew([]() -> CmdArgsPtr {
-        return std::make_unique<CmdArgs>();
-    });
+    args_pool_.SetNew([]() -> CmdArgsPtr { return std::make_unique<CmdArgs>(); });
 
     conn_pool_.SetPoolSize(ServiceTLData::kConnPoolSize);
     conn_pool_.SetNew([]() -> ConnectionPtr {
@@ -72,9 +70,7 @@ auto RedisService::ServiceTLData::FreeBuffer(size_t i) -> void { free_list_.empl
 
 auto RedisService::ServiceTLData::GetCmdArgsOrCreate() -> CmdArgsPtr {
     auto ptr = args_pool_.Get();
-
     ptr->ClearForReuse();
-
     return ptr;
 }
 
@@ -93,7 +89,7 @@ auto RedisService::Handle(asio::ip::tcp::socket socket) -> void {
 
     // get a connection from the pool and put it to the front of the list.
     auto conn = ConnPool.Get();
-    conn->Reset(std::move(socket));
+    conn->Init(std::move(socket));
     ConnList.emplace_front(conn.get());
     auto it = ConnList.begin();
 

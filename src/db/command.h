@@ -1,14 +1,12 @@
 #pragma once
 
 #include "absl/container/inlined_vector.h"
+#include "utils/time/time.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <type_traits>
-#include <utility>
-#include <vector>
-#include <chrono>
 
 namespace idlekv {
 
@@ -169,38 +167,39 @@ public:
 
 private:
     absl::InlinedVector<uint32_t, 5> offsets_;
-    absl::InlinedVector<char, 88>    storage_;
+    StorageType    storage_;
 };
 
 using CmdArgsPtr = std::unique_ptr<CmdArgs>;
 struct PendingRequest {
-    CmdArgsPtr                            args;
-    std::chrono::steady_clock::time_point started_at;
+    CmdArgs* args;
+    TimePoint  started_at;
 };
 
-template <typename I> void CmdArgs::Assign(I begin, I end, size_t len) {
-  offsets_.resize(len);
-  size_t total_size = 0;
-  unsigned idx = 0;
-  for (auto it = begin; it != end; ++it) {
-    offsets_[idx++] = total_size;
-    total_size += (*it).size() + 1;  // +1 for '\0'
-  }
-  storage_.resize(total_size);
-
-  // Reclaim memory if we have too much allocated.
-  if (storage_.capacity() > kStorageCap && total_size < storage_.capacity() / 2)
-    storage_.shrink_to_fit();
-
-  char* next = storage_.data();
-  for (auto it = begin; it != end; ++it) {
-    size_t sz = (*it).size();
-    if (sz > 0) {
-      memcpy(next, (*it).data(), sz);
+template <typename I>
+void CmdArgs::Assign(I begin, I end, size_t len) {
+    offsets_.resize(len);
+    size_t   total_size = 0;
+    unsigned idx        = 0;
+    for (auto it = begin; it != end; ++it) {
+        offsets_[idx++] = total_size;
+        total_size += (*it).size() + 1; // +1 for '\0'
     }
-    next[sz] = '\0';
-    next += sz + 1;
-  }
+    storage_.resize(total_size);
+
+    // Reclaim memory if we have too much allocated.
+    if (storage_.capacity() > kStorageCap && total_size < storage_.capacity() / 2)
+        storage_.shrink_to_fit();
+
+    char* next = storage_.data();
+    for (auto it = begin; it != end; ++it) {
+        size_t sz = (*it).size();
+        if (sz > 0) {
+            memcpy(next, (*it).data(), sz);
+        }
+        next[sz] = '\0';
+        next += sz + 1;
+    }
 }
 
 class ExecContext;
@@ -209,7 +208,8 @@ class ExecContext;
 using Exector = auto (*)(ExecContext* ctx, CmdArgs& args) -> void;
 
 // key index in CmdArgs.
-using KeySet = absl::InlinedVector<size_t, 4>;
+// For single key command, we use stack allocation to avoid unnecessary heap allocation. 
+using KeySet = absl::InlinedVector<size_t, 1>;
 
 struct WRSet {
     KeySet read_keys;
@@ -222,9 +222,10 @@ struct WRSet {
 using Prepare = auto (*)(const CmdArgs& args) -> WRSet;
 
 enum class CmdFlags : uint32_t {
-    None          = 0,
+    None           = 0,
     CanExecInPlace = 1U << 0,
-    NoKey        = 1U << 1, 
+    NoKey          = 1U << 1,
+    Transactional = 1U << 2, // command should be executed in transaction, e.g. multi/exec block
 };
 
 constexpr auto operator|(CmdFlags lhs, CmdFlags rhs) -> CmdFlags {
@@ -249,13 +250,9 @@ public:
         : name_(name), arity_(arity), first_key_(FirstKey), last_key_(LastKey), exec_(exector),
           prepare_(prepare), flags_(flags) {}
 
-    auto Exec(ExecContext* ctx, CmdArgs& args) const -> void {
-        return exec_(ctx, args);
-    }
+    auto Exec(ExecContext* ctx, CmdArgs& args) const -> void { return exec_(ctx, args); }
 
-    auto PrepareKeys(CmdArgs& args) const -> WRSet {
-        return prepare_(args);
-    }
+    auto PrepareKeys(CmdArgs& args) const -> WRSet { return prepare_(args); }
 
     auto Verification(CmdArgs& args) const -> bool {
         if (arity_ == 0)
@@ -274,6 +271,7 @@ public:
     auto Flags() const -> CmdFlags { return flags_; }
     auto HasFlag(CmdFlags flag) const -> bool { return idlekv::HasFlag(flags_, flag); }
     auto CanExecInPlace() const -> bool { return HasFlag(CmdFlags::CanExecInPlace); }
+    auto IsTransactional() const -> bool { return HasFlag(CmdFlags::Transactional); }
 
 private:
     // name in lowercase letters
@@ -295,11 +293,14 @@ private:
     CmdFlags flags_{CmdFlags::None};
 };
 
-// 包含一条指令所需的上下文信息，包括指令，参数，读写键值。
+// Contains the context information required for a single instruction, including the instruction
+// itself, parameters, and read/write key values.
 struct CommandContext {
-    Cmd*      cmd_;
-    CmdArgsPtr args_;
-    WRSet     keys_;
+    Cmd*       cmd;
+    CmdArgs    args;
+    WRSet      keys;
+
+    TimePoint start_at;
 };
 
 } // namespace idlekv
