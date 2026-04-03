@@ -1,5 +1,4 @@
 #include "db/command.h"
-#include "db/context.h"
 #include "db/engine.h"
 #include "redis/connection.h"
 #include "redis/error.h"
@@ -43,7 +42,7 @@ auto Select(ExecContext* ctx, CmdArgs& args) -> void {
         return sender->SendError("ERR DB index is out of range");
     }
 
-    ctx->client->db_index = db_index;
+    ctx->db_index = db_index;
     sender->SendOk();
 }
 
@@ -52,7 +51,7 @@ auto Select(ExecContext* ctx, CmdArgs& args) -> void {
 auto InitSystemCmd(IdleEngine* eng) -> void {
     eng->RegisterCmd("ping", -1, -1, -1, Ping, NoKeys, CmdFlags::CanExecInPlace | CmdFlags::NoKey);
     eng->RegisterCmd("select", 2, -1, -1, Select, NoKeys,
-                     CmdFlags::CanExecInPlace | CmdFlags::NoKey);
+                     CmdFlags::CanExecInPlace | CmdFlags::NoKey | CmdFlags::StateChange);
 }
 
 } // namespace idlekv

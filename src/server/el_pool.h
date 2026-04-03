@@ -38,7 +38,7 @@ inline const uint64_t kMaxSquashCpuCycles =
 class EventLoop {
 public:
     EventLoop(unsigned cpu, size_t pool_index)
-        : io_(1), cpu_(cpu), stop_waiter_(io_), pool_index_(pool_index) {}
+        : io_(1), cpu_(cpu), pool_index_(pool_index) {}
 
     auto Run() -> void;
 
@@ -198,11 +198,10 @@ public:
     // this function does not block, but instead simply signals the EventLoop to stop.
     auto Stop() -> void;
 
+
 private:
     asio::io_context   io_;
     unsigned           cpu_;
-    asio::steady_timer stop_waiter_;
-    std::atomic_bool   stop_requested_{false};
     size_t             pool_index_;
 
     std::jthread th_;

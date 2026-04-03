@@ -1,12 +1,15 @@
 #pragma once
 
 #include "absl/container/inlined_vector.h"
+#include "utils/range/concat_view.h"
 #include "utils/time/time.h"
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <type_traits>
+#include <utility>
 
 namespace idlekv {
 
@@ -214,6 +217,10 @@ using KeySet = absl::InlinedVector<size_t, 1>;
 struct WRSet {
     KeySet read_keys;
     KeySet write_keys;
+
+    auto AllKeys() const {
+        return utils::MakeConcatView(read_keys, write_keys);
+    }
 };
 
 // PreFunc analyses command line when queued command to `multi`
@@ -226,6 +233,7 @@ enum class CmdFlags : uint32_t {
     CanExecInPlace = 1U << 0,
     NoKey          = 1U << 1,
     Transactional = 1U << 2, // command should be executed in transaction, e.g. multi/exec block
+    StateChange  = 1U << 3, // command may be change connection state.
 };
 
 constexpr auto operator|(CmdFlags lhs, CmdFlags rhs) -> CmdFlags {
@@ -272,6 +280,7 @@ public:
     auto HasFlag(CmdFlags flag) const -> bool { return idlekv::HasFlag(flags_, flag); }
     auto CanExecInPlace() const -> bool { return HasFlag(CmdFlags::CanExecInPlace); }
     auto IsTransactional() const -> bool { return HasFlag(CmdFlags::Transactional); }
+    auto IsStateChange() const -> bool { return HasFlag(CmdFlags::StateChange); }
 
 private:
     // name in lowercase letters
@@ -297,7 +306,7 @@ private:
 // itself, parameters, and read/write key values.
 struct CommandContext {
     Cmd*       cmd;
-    CmdArgs    args;
+    CmdArgs*    args;
     WRSet      keys;
 
     TimePoint start_at;

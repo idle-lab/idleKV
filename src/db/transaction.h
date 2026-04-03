@@ -31,8 +31,8 @@ public:
 
     auto Size() -> size_t { return cmds_.size(); }
 
-    auto Append(Cmd* cmd, CmdArgs args, WRSet keys) -> void {
-        cmds_.emplace_back(cmd, std::move(args), keys);
+    auto Append(CommandContext cmdctx) -> void {
+        cmds_.emplace_back(cmdctx);
     }
 
     auto Mode() -> MultiMode { return mode_; }
@@ -42,6 +42,10 @@ public:
         CommandContext ctx = std::move(cmds_[progress_]);
         progress_++;
         return ctx;
+    }
+
+    auto IsFinished() -> bool {
+        return progress_ == cmds_.size();
     }
 
 private:
@@ -66,7 +70,7 @@ enum class TxnType : uint8_t {
     Uninitialized,
     Normal,
     Multi,
-    MultiSub,
+    MultiSub, // for use inside shard
 };
 
 class Transaction {
@@ -80,27 +84,39 @@ public:
         multi_ = std::make_unique<MultiCmd>(mode);
     }
 
-    auto InitMultiSub(MultiMode mode = MultiMode::Default) -> void {
-        type_ = TxnType::MultiSub;
-        multi_ = std::make_unique<MultiCmd>(mode);
+    auto CreateMultiSub(Shard* local_shard) -> std::unique_ptr<Transaction> {
+        CHECK_EQ(type_, TxnType::Multi);
+        auto sub = std::make_unique<Transaction>();
+
+        sub->type_ = TxnType::MultiSub;
+        sub->multi_ = std::make_unique<MultiCmd>(multi_->Mode());
+        sub->unique_shard_ = local_shard;
+        sub->active_shard_count = 1;
+
+        return sub;
     }
 
-    auto CollectCmd(Cmd* cmd, CmdArgs args, WRSet keys) -> void {
+    auto CollectCmd(CommandContext cmdctx) -> void {
         CHECK(multi_ != nullptr);
-        multi_->Append(cmd, std::move(args), keys);
+        multi_->Append(std::move(cmdctx));
     }
 
     auto MultiNext() -> CommandContext {
         auto cmdctx = multi_->Next();
 
-        InitByArgs(cmdctx.args, cmdctx.keys);
+        if (type_ != TxnType::MultiSub) {
+            InitByArgs(*cmdctx.args, cmdctx.keys);
+        }
+
         return cmdctx;
     }
 
-    auto InitSingle(Cmd* cmd, CmdArgs args, WRSet keys) -> void {
+    auto IsFinished() -> bool { return multi_->IsFinished(); }
+
+    auto InitSingle(Cmd* cmd, CmdArgs* args, WRSet keys) -> void {
         type_ = TxnType::Normal;
-        single_ = std::make_unique<CommandContext>(cmd, std::move(args), keys);
-        InitByArgs(single_->args, single_->keys);
+        single_ = std::make_unique<CommandContext>(cmd, args, keys);
+        InitByArgs(*single_->args, single_->keys);
     }
 
     template <class Fn>
@@ -113,7 +129,7 @@ public:
         }
 
         // TODO(cyb): support multi-shard transaction.
-        CHECK(shards_.size() == 1); 
+        CHECK(active_shard_count == 1); 
 
         if (active_shard_count == 1 && unique_shard_ == engine->LocalShard()) {
             task(this, unique_shard_);
@@ -132,6 +148,15 @@ public:
         block_counter_.Wait();
     }
 
+    auto Done() -> void {
+        type_ = TxnType::Uninitialized;
+        multi_.reset();
+        single_.reset();
+        shards_.clear();
+        active_shard_count = 0;
+        unique_shard_ = nullptr;
+    }
+
 private:
     auto ActiveShards() -> utils::Generator<Shard*> {
         for (auto* shard : shards_) {
@@ -143,12 +168,13 @@ private:
 
     auto InitByArgs(const CmdArgs& args, const WRSet& wr_set) -> void {
         shards_.resize(engine->ShardNum());
-        InitByKeySet(args, wr_set.read_keys);
-        InitByKeySet(args, wr_set.write_keys);
-    }
+        active_shard_count = 0;
 
-    auto InitByKeySet(const CmdArgs& args, const KeySet& kset) -> void {
-        for (auto& i : kset) {
+        for (size_t i = 0;i < shards_.size();i++) {
+            shards_[i] = nullptr;
+        }
+
+        for (auto i : wr_set.AllKeys()) {
             ShardId shard_id = CalculateShardId(args[i], engine->ShardNum());
 
             if (!shards_[shard_id]) {

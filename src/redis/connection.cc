@@ -5,7 +5,6 @@
 #include "db/command.h"
 #include "db/engine.h"
 #include "metric/prometheus.h"
-#include "redis/client.h"
 #include "redis/error.h"
 #include "redis/parser.h"
 #include "redis/service.h"
@@ -22,7 +21,6 @@
 #include <boost/fiber/policy.hpp>
 #include <boost/fiber/type.hpp>
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <spdlog/spdlog.h>
@@ -206,7 +204,7 @@ auto Connection::HandleRequests() noexcept -> void {
         if (can_sync_dispatch) {
             const auto started_at = RequestClock::now();
             s_.SetBatch(false);
-            engine->DispatchCmd(client_.get(), args);
+            engine->DispatchCmd(ctx_.get(), args);
             PrometheusMetrics::Instance().ObserveRequestDuration(RequestClock::now() - started_at);
 
             args.ClearForReuse();
@@ -262,7 +260,7 @@ auto Connection::AsyncHandle() noexcept -> void {
             size_t squash_limit = pipeline_queue_.size();
 
             // ======= start squash =======
-            size_t processed = engine->DispatchManyCmd(client_.get(), gen, squash_limit);
+            size_t processed = engine->DispatchManyCmd(ctx_.get(), gen, squash_limit);
             // ======== end squash ========
 
             for (size_t i = 0; i < processed; i++) {
@@ -270,13 +268,11 @@ auto Connection::AsyncHandle() noexcept -> void {
                 RedisService::Tlocal()->RecycleCmdArgs(std::move(request.args_ptr));
                 pipeline_queue_.pop_front();
             }
-
-            pipeline_queue_.erase(pipeline_queue_.begin(), pipeline_queue_.begin() + processed);
         } else {
             auto request = std::move(pipeline_queue_.front());
             pipeline_queue_.pop_front();
 
-            engine->DispatchCmd(client_.get(), *request.args_ptr);
+            engine->DispatchCmd(ctx_.get(), *request.args_ptr);
 
             PrometheusMetrics::Instance().ObserveRequestDuration(RequestClock::now() -
                                                                  request.started_at);
@@ -305,7 +301,7 @@ auto Connection::Init(asio::ip::tcp::socket&& socket) -> void {
     socket_.emplace(std::move(socket));
     db_index_ = 0;
     cur_args_ = RedisService::Tlocal()->GetCmdArgsOrCreate();
-    client_ = std::make_unique<Client>(this);
+    ctx_ = std::make_unique<ExecContext>(this);
 }
 
 auto Connection::Reset() -> void {
@@ -327,7 +323,7 @@ auto Connection::Reset() -> void {
     p_.Clear();
     s_.Clear();
     ec_ = std::error_code{};
-    client_.reset();
+    ctx_.reset();
 }
 
 } // namespace idlekv

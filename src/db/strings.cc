@@ -1,6 +1,6 @@
 #include "db/command.h"
-#include "db/context.h"
 #include "db/engine.h"
+#include "db/client.h"
 #include "db/shard.h"
 #include "db/storage/result.h"
 #include "redis/error.h"
@@ -22,14 +22,14 @@ auto SingleReadKey(const CmdArgs& args) -> WRSet {
     if (args.size() < 2) {
         return {};
     }
-    return {{}, {1}};
+    return {{1}, {}};
 }
 
 auto SingleWriteKey(const CmdArgs& args) -> WRSet {
     if (args.size() < 2) {
         return {};
     }
-    return {{1}, {}};
+    return {{}, {1}};
 }
 
 template <class Fn>
@@ -53,7 +53,7 @@ auto Set(ExecContext* ctx, CmdArgs& args) -> void {
     Result<bool> res;
 
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
-        auto* db = shard->DbAt(ctx->client->db_index);
+        auto* db = shard->DbAt(ctx->db_index);
         res = db->Set(std::string(args[1]), DataEntity::FromString(std::string(args[2])));
     });
 
@@ -68,7 +68,7 @@ auto Get(ExecContext* ctx, CmdArgs& args) -> void {
     Result<std::shared_ptr<DataEntity>> res;
 
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
-        auto* db = shard->DbAt(ctx->client->db_index);
+        auto* db = shard->DbAt(ctx->db_index);
         res = db->Get(args[1]);
     });
 
@@ -95,7 +95,7 @@ auto Del(ExecContext* ctx, CmdArgs& args) -> void {
     Result<bool> res;
 
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
-        auto* db = shard->DbAt(ctx->client->db_index);
+        auto* db = shard->DbAt(ctx->db_index);
         res = db->Del(args[1]);
     });
 

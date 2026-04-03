@@ -1,11 +1,16 @@
 #pragma once
 
 #include "common/logger.h"
+#include "db/engine.h"
+#include "db/shard.h"
 #include "db/storage/data_entity.h"
 #include "db/transaction.h"
+#include "db/client.h"
 #include "redis/parser.h"
 
+#include <absl/container/inlined_vector.h>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <variant>
@@ -71,22 +76,36 @@ private:
 class CmdSquasher {
 public:
     struct ShardExecInfo {
-        std::vector<CommandContext> pending_cmds;
         std::vector<Payload>        results;
+        size_t send_idx{0};
+        ExecContext sub_ctx;
     };
 
-    explicit CmdSquasher() {
+    explicit CmdSquasher(ExecContext* client) : parent_ctx_(client) {}
 
-    }
+    static auto Squash(std::vector<CommandContext>& cmds, Sender* sender, ExecContext* client) -> size_t;
 
-    static auto Squash(std::vector<CommandContext>& cmds, Sender& sender) -> void;
+    auto Squash(std::vector<CommandContext>& cmds, Sender* sender) -> void;
+
+    auto ExecuteSquash(Sender* sender) -> void;
+
+    enum struct DetermineResult : uint8_t {
+        OK,
+        CanNotSquash,
+        Full, // TODO(cyb): control squash batch size.
+    };
+    auto TrySquash(CommandContext& cmd) -> DetermineResult;
+    auto ShardInfo(ShardId id) -> ShardExecInfo&;
 
 private:
-    ResultCapturer capturer_;
 
-    std::vector<ShardExecInfo> shard_infos_;
+    absl::InlinedVector<ShardExecInfo, 6> shards_info_;
+    size_t active_shard_count_{0};
+    std::vector<ShardId> cmd_order_;
 
-    Transaction pipeline_txn_;
+    ExecContext* parent_ctx_;
+
+    size_t processed_{0};
 };
 
 } // namespace idlekv

@@ -1,10 +1,11 @@
 #include "db/engine.h"
 
 #include "common/asio_no_exceptions.h"
+#include "common/logger.h"
 #include "db/command.h"
-#include "db/context.h"
 #include "db/shard.h"
 #include "db/squasher.h"
+#include "db/transaction.h"
 #include "redis/connection.h"
 #include "redis/error.h"
 #include "server/el_pool.h"
@@ -56,9 +57,8 @@ auto IdleEngine::InitCommand() -> void {
     InitList(this);
 }
 
-auto IdleEngine::DispatchCmd(Client* client, CmdArgs& args) noexcept -> void {
-    size_t id     = ThreadState::Tlocal()->PoolIndex();
-    auto* conn = client->conn;
+auto IdleEngine::DispatchCmd(ExecContext* ctx, CmdArgs& args) noexcept -> void {
+    auto* conn = ctx->conn;
     auto&  sender = conn->GetSender();
 
     auto cmd = GetCmd(args[0]);
@@ -70,30 +70,49 @@ auto IdleEngine::DispatchCmd(Client* client, CmdArgs& args) noexcept -> void {
         return sender.SendError(fmt::format(kArgNumErrFmt, cmd->Name()));
     }
 
+    ctx->sender = &sender;
     if (cmd->CanExecInPlace()) {
-        ExecContext execctx{.client = client, .sender = &sender, .owner_id = id};
-        cmd->Exec(&execctx, args);
+        cmd->Exec(ctx, args);
         return;
     }
 
     if (cmd->IsTransactional()) {
-        if (client->txn == nullptr) {
-            client->txn = new Transaction();
+        if (ctx->txn == nullptr) {
+            ctx->txn = std::make_unique<Transaction>();
         }
 
-        client->txn->InitSingle(cmd, args, cmd->PrepareKeys(args));
+        ctx->txn->InitSingle(cmd, &args, cmd->PrepareKeys(args));
     }
 
-    ExecContext execctx{.client = client, .sender = &sender, .owner_id = id};
-    cmd->Exec(&execctx, args);
+    cmd->Exec(ctx, args);
+
+    if (cmd->IsTransactional()) {
+        ctx->txn->Done();
+    }
 }
 
-auto IdleEngine::DispatchManyCmd(Client* client, utils::Generator<PendingRequest>& gen, size_t limit) noexcept
+auto IdleEngine::DispatchManyCmd(ExecContext* ctx, utils::Generator<PendingRequest>& gen, size_t limit) noexcept
     -> size_t {
     std::vector<CommandContext> pipeline_cmds;
     pipeline_cmds.reserve(limit);
-    auto* conn = client->conn;
+    auto* conn = ctx->conn;
     size_t count = 0;
+    
+    if (ctx->txn == nullptr) {
+        ctx->txn = std::make_unique<Transaction>();
+    }
+    ctx->txn->InitMulti(MultiMode::Squash);
+
+    auto squash = [&]() {
+        if (pipeline_cmds.empty()) {
+            return;
+        }
+
+        size_t processed = CmdSquasher::Squash(pipeline_cmds, &ctx->conn->GetSender(), ctx);
+
+        CHECK_EQ(processed, pipeline_cmds.size());
+        pipeline_cmds.clear();
+    };
 
     for (auto& req : gen) {
         if (count >= limit) {
@@ -103,27 +122,35 @@ auto IdleEngine::DispatchManyCmd(Client* client, utils::Generator<PendingRequest
         auto& args = *req.args;
         auto  cmd  = GetCmd(args[0]);
 
-        bool should_squash = cmd != nullptr && !cmd->Verification(args);
+
+        bool verify_failure = cmd != nullptr && !cmd->Verification(args);
+        bool should_squash = cmd == nullptr || verify_failure || cmd->IsStateChange();
 
         count++;
         if (!should_squash) {
-            pipeline_cmds.emplace_back(cmd, std::move(*req.args), cmd->PrepareKeys(args),
+            pipeline_cmds.emplace_back(cmd, req.args, cmd->PrepareKeys(args),
                                        req.started_at);
             continue;
         }
 
-        CmdSquasher::Squash(pipeline_cmds, client->conn->GetSender());
+        squash();
 
         if (cmd == nullptr) {
             conn->GetSender().SendError(fmt::format(kUnknownCmdErrFmt, args[0]));
             continue;
         }
 
-        conn->GetSender().SendError(fmt::format(kArgNumErrFmt, cmd->Name()));
+        if (verify_failure) {
+            conn->GetSender().SendError(fmt::format(kArgNumErrFmt, cmd->Name()));
+            continue;
+        }
+
+        DispatchCmd(ctx, args);
     }
 
-    CmdSquasher::Squash(pipeline_cmds, client->conn->GetSender());
+    squash();
 
+    ctx->txn->Done();
     return count;
 }
 

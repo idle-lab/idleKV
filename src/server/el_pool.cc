@@ -43,16 +43,10 @@ auto EventLoop::Run() -> void {
 }
 
 auto EventLoop::Stop() -> void {
-    bool expected = false;
-    if (!stop_requested_.compare_exchange_strong(expected, true, std::memory_order_acq_rel,
-                                                 std::memory_order_acquire)) {
-        return;
-    }
-
-    asio::post(io_, [this]() {
-        boost::system::error_code ec;
-        stop_waiter_.cancel(ec);
-    });
+    io_.stop();
+    // if (th_.joinable()) {
+    //     th_.join();
+    // }
 }
 
 auto EventLoopPool::Run() -> void {

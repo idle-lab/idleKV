@@ -3,7 +3,7 @@
 #include "absl/functional/function_ref.h"
 #include "common/asio_no_exceptions.h"
 #include "db/command.h"
-#include "redis/client.h"
+#include "db/client.h"
 #include "redis/parser.h"
 #include "server/el_pool.h"
 
@@ -109,7 +109,7 @@ private:
     std::deque<PipelineMsg> pipeline_queue_;
     CmdArgsPtr                 cur_args_;
 
-    std::unique_ptr<Client> client_;
+    std::unique_ptr<ExecContext> ctx_;
 };
 
 } // namespace idlekv

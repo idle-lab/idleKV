@@ -20,6 +20,7 @@
 namespace idlekv {
 
 using ShardId              = uint8_t;
+constexpr ShardId kInvalidShardId = -1;
 constexpr size_t kQueueLen = 64;
 
 // class TaskQueue {

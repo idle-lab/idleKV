@@ -26,6 +26,7 @@ target_link_libraries(idlekv_core
 )
 
 if (DISABLE_CHECK)
+    message(STATUS "Disable runtime check macros")
     target_compile_definitions(idlekv_core
         PUBLIC
             DISABLE_CHECK=1

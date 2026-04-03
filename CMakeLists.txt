@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.17)
 project(idlekv)
 
-option(ENABLE_TEST "是否编译单元测试" ON)
-option(ENABLE_BENCHMARK "是否编译基准测试" ON)
-option(DISABLE_CHECK "Disable runtime CHECK macros" ON)
+option(ENABLE_TEST "Compile unit tests or not" ON)
+option(ENABLE_BENCHMARK "Compile benchmark tests or not" ON)
+option(DISABLE_CHECK "Disable runtime CHECK macros" OFF)
 
 include(cmake/utils.cmake)
 

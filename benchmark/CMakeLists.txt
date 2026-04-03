@@ -17,8 +17,8 @@ target_include_directories(index_bench
 )
 
 if (DISABLE_CHECK)
-    # target_compile_definitions(index_bench
-    #     PRIVATE
-    #         DISABLE_CHECK=1
-    # )
+    target_compile_definitions(index_bench
+        PRIVATE
+            DISABLE_CHECK=1
+    )
 endif()

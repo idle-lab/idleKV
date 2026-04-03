@@ -1,11 +1,9 @@
 #pragma once
 
 #include "common/logger.h"
-#include <atomic>
-#include <boost/fiber/context.hpp>
-#include <boost/fiber/mutex.hpp>
-#include <boost/fiber/operations.hpp>
-#include <mutex>
+
+#include <boost/fiber/condition_variable.hpp>
+#include <boost/fiber/detail/spinlock.hpp>
 
 namespace idlekv::utils {
 
@@ -14,47 +12,51 @@ class SingleWaiterBlockCounter {
 public:
     auto Start(size_t count) -> void {
         CHECK(count > 0);
-        CHECK(count_.load(std::memory_order_acquire) == 0);
-        count_.store(count, std::memory_order_release);
+        std::unique_lock<boost::fibers::detail::spinlock> lk(state_splk_);
+
+        CHECK_EQ(count_, size_t{0});
+        count_ = count;
+        ++generation_;
     }
 
     auto Done() -> void {
-        size_t prev = count_.fetch_sub(1, std::memory_order_acq_rel);
-        CHECK(prev > 0);
-        if (prev == 1) {
-            waiting_ctx_splk_.lock();
-            auto* ctx = waiting_ctx_;
-            waiting_ctx_ = nullptr;
-            waiting_ctx_splk_.unlock();
+        bool notify = false;
 
-            if (ctx != nullptr) {
-                boost::fibers::context::active()->schedule(ctx);
-            }
+        {
+            std::unique_lock<boost::fibers::detail::spinlock> lk(state_splk_);
+
+            CHECK_GT(count_, size_t{0});
+            --count_;
+            notify = count_ == 0;
+        }
+
+        if (notify) {
+            cv_.notify_one();
         }
     }
 
     auto Wait() -> void {
-        if (count_.load(std::memory_order_acquire) == 0) {
+        std::unique_lock<boost::fibers::detail::spinlock> lk(state_splk_);
+        if (count_ == 0) {
             return;
         }
 
-        std::unique_lock<boost::fibers::detail::spinlock> lk(waiting_ctx_splk_);
+        CHECK(!waiter_active_);
+        waiter_active_ = true;
 
-        if (count_.load(std::memory_order_acquire) == 0) {
-            waiting_ctx_splk_.unlock();
-            return;
-        }
+        const size_t wait_generation = generation_;
+        cv_.wait(lk, [&]() { return count_ == 0 || generation_ != wait_generation; });
 
-        CHECK(waiting_ctx_ == nullptr);
-        waiting_ctx_ = boost::fibers::context::active();
-        waiting_ctx_->suspend(lk);
+        waiter_active_ = false;
     }
 
 private:
-    std::atomic<size_t> count_{0};
+    size_t count_{0};
+    size_t generation_{0};
+    bool   waiter_active_{false};
 
-    boost::fibers::context* waiting_ctx_{nullptr};
-    boost::fibers::detail::spinlock waiting_ctx_splk_;
+    boost::fibers::detail::spinlock    state_splk_;
+    boost::fibers::condition_variable_any cv_;
 };
 
 } // namespace idlekv::utils

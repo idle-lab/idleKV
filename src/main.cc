@@ -1,5 +1,6 @@
 #include "banner.h"
 #include "common/config.h"
+#include "common/logger.h"
 #include "db/engine.h"
 #include "redis/service.h"
 #include "server/metrics_service.h"
@@ -41,7 +42,7 @@ int main(int argc, char** argv) {
 
 #ifdef NDEBUG
         LOG(info, "you are running in release mode");
-#elif
+#else
         LOG(warn, "you are running in debug mode, performance may be significantly degraded");
 #endif
 
