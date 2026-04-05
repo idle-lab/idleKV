@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstring>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -36,7 +37,7 @@ public:
         : Reader(kDefaultReadBufferSize), Writer(kDefaultWriteBufferSize), p_(this), s_(this) {}
 
     explicit Connection(asio::mutable_registered_buffer buf,
-                        absl::FunctionRef<void()>       buffer_releaser)
+                    std::function<void()>       buffer_releaser)
         : Reader(buf), Writer(kDefaultWriteBufferSize), p_(this), s_(this),
           buffer_releaser_(buffer_releaser) {}
 
@@ -83,7 +84,7 @@ public:
     }
 
     auto IsClosed() const -> bool {
-        return ec_ || !(socket_.has_value() && socket_->is_open()) || s_.GetError();
+        return !(socket_.has_value() && socket_->is_open()) || s_.GetError();
     }
 
 private:
@@ -93,12 +94,11 @@ private:
     };
 
     std::optional<asio::ip::tcp::socket> socket_;
-    boost::system::error_code            ec_;
 
     Parser p_;
     Sender s_;
 
-    std::optional<absl::FunctionRef<void()>> buffer_releaser_;
+    std::optional<std::function<void()> > buffer_releaser_;
 
     EventLoop* el_;
     size_t     db_index_ = 0;

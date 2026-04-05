@@ -3,7 +3,7 @@ project(idlekv)
 
 option(ENABLE_TEST "Compile unit tests or not" ON)
 option(ENABLE_BENCHMARK "Compile benchmark tests or not" ON)
-option(DISABLE_CHECK "Disable runtime CHECK macros" OFF)
+option(DISABLE_CHECK "Disable runtime CHECK macros" ON)
 
 include(cmake/utils.cmake)
 

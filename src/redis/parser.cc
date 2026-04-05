@@ -10,6 +10,7 @@
 #include <climits>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
@@ -322,28 +323,12 @@ auto Sender::SendPong() -> void {
     ec_ = wr_->WritePieces("+PONG\r\n");
 }
 
-auto Sender::SendBulkString(std::string_view s) -> void {
+auto Sender::SendBulkString(std::string_view s, std::shared_ptr<const void> holder) -> void {
     BatchGuard bg(this);
+
     ec_ = wr_->WritePieces(BULK_STRING_PREFIX, s.size(), CRLF);
     if (!ec_) {
-        ec_ = wr_->WriteView(s);
-    }
-    if (!ec_) {
-        ec_ = wr_->WritePieces(CRLF);
-    }
-}
-
-auto Sender::SendBulkString(const std::shared_ptr<const DataEntity>& data) -> void {
-    BatchGuard bg(this);
-    if (!data) {
-        SendNullBulkString();
-        return;
-    }
-
-    const auto& value = data->AsString();
-    ec_               = wr_->WritePieces(BULK_STRING_PREFIX, value.size(), CRLF);
-    if (!ec_) {
-        ec_ = wr_->WriteRef(value, data);
+        ec_ = wr_->WriteRef(s, holder);
     }
     if (!ec_) {
         ec_ = wr_->Write(CRLF);

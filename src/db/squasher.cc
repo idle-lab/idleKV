@@ -6,6 +6,7 @@
 #include "db/client.h"
 #include "redis/parser.h"
 #include "utils/fiber/block_counter.h"
+
 #include <variant>
 
 namespace idlekv {
@@ -30,7 +31,6 @@ auto CmdSquasher::Squash(std::vector<CommandContext>& cmds, Sender* sender) -> v
 }
 
 auto CmdSquasher::ExecuteSquash(Sender* sender) -> void {
-
     utils::SingleWaiterBlockCounter bc;
     bc.Start(active_shard_count_);
 
@@ -38,14 +38,15 @@ auto CmdSquasher::ExecuteSquash(Sender* sender) -> void {
         auto* shard = engine->LocalShard();
         auto& si = shards_info_[shard->GetShardId()];
         auto& sub_ctx = si.sub_ctx;
-        ResultCapturer capturer;
+        si.results.reserve(sub_ctx.txn->MultiSize());
+        ReplyCapturer capturer;
         sub_ctx.sender = &capturer;
 
         while(!sub_ctx.txn->IsFinished()) {
             auto cmdctx = sub_ctx.txn->MultiNext();
 
-            cmdctx.cmd->Exec(&sub_ctx, *cmdctx.args);
-            si.results.emplace_back(std::move(capturer.GetPayload()));
+            cmdctx.cmd->Exec(&sub_ctx, *cmdctx.args);   
+            si.results.emplace_back(capturer.TakePayload());
         }
 
         bc.Done();
@@ -60,16 +61,16 @@ auto CmdSquasher::ExecuteSquash(Sender* sender) -> void {
     bc.Wait();
 
     PayloadVisitor pv(sender);
-    for (auto id : cmd_order_) {
-        auto& si = shards_info_[id];
+    for (auto i : order_) {
+        auto& si = shards_info_[i];
 
         std::visit(pv, si.results[si.send_idx]);
         si.send_idx++;
     }
 
     shards_info_.clear();
-    processed_ += cmd_order_.size();
-    cmd_order_.clear();
+    processed_ += order_.size();
+    order_.clear();
     active_shard_count_ = 0;
 }
 
@@ -109,7 +110,7 @@ auto CmdSquasher::TrySquash(CommandContext& cmd) -> DetermineResult {
     auto& sf = ShardInfo(last_shard_id);
 
     sf.sub_ctx.txn->CollectCmd(std::move(cmd));
-    cmd_order_.push_back(last_shard_id);
+    order_.push_back(last_shard_id);
     return DetermineResult::OK;
 }
 

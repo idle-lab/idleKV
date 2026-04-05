@@ -110,19 +110,19 @@ auto EventLoopPool::SetupEls() -> void {
 
         els_[i]->Run();
 
-        // pthread_t tid = els_[i]->ThreadId();
+        pthread_t tid = els_[i]->ThreadId();
 
-        // CPU_SET(abs_cpu, &cps);
+        CPU_SET(abs_cpu, &cps);
 
-        // int rc = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cps);
-        // if (rc == 0) {
-        //     LOG(debug, "Setting affinity of thread {} on cpu {}", i, abs_cpu);
-        //     cpu_threads_[abs_cpu].push_back(i);
-        // } else {
-        //     LOG(warn, "Error calling pthread_setaffinity_np: {}", strerror(rc));
-        // }
+        int rc = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cps);
+        if (rc == 0) {
+            LOG(debug, "Setting affinity of thread {} on cpu {}", i, abs_cpu);
+            cpu_threads_[abs_cpu].push_back(i);
+        } else {
+            LOG(warn, "Error calling pthread_setaffinity_np: {}", strerror(rc));
+        }
 
-        // CPU_CLR(abs_cpu, &cps);
+        CPU_CLR(abs_cpu, &cps);
     }
 }
 

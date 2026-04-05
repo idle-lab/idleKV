@@ -397,8 +397,7 @@ public:
     virtual auto SendSimpleString(std::string_view s) -> void                          = 0;
     virtual auto SendOk() -> void                                                      = 0;
     virtual auto SendPong() -> void                                                    = 0;
-    virtual auto SendBulkString(std::string_view s) -> void                            = 0;
-    virtual auto SendBulkString(const std::shared_ptr<const DataEntity>& data) -> void = 0;
+    virtual auto SendBulkString(std::string_view s, std::shared_ptr<const void> holder) -> void = 0;
     virtual auto SendNullBulkString() -> void                                          = 0;
     virtual auto SendInteger(int64_t value) -> void                                    = 0;
     virtual auto SendError(std::string_view s) -> void                                 = 0;
@@ -426,8 +425,7 @@ public:
     auto SendSimpleString(std::string_view s) -> void override;
     auto SendOk() -> void override;
     auto SendPong() -> void override;
-    auto SendBulkString(std::string_view s) -> void override;
-    auto SendBulkString(const std::shared_ptr<const DataEntity>& data) -> void override;
+    auto SendBulkString(std::string_view s, std::shared_ptr<const void> holder) -> void override;
     auto SendNullBulkString() -> void override;
     auto SendInteger(int64_t value) -> void override;
     auto SendError(std::string_view s) -> void override;

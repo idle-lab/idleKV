@@ -85,7 +85,7 @@ auto Get(ExecContext* ctx, CmdArgs& args) -> void {
         return sender->SendError(kWrongTypeErr);
     }
 
-    sender->SendBulkString(value);
+    sender->SendBulkString(value->AsString(), value);
 }
 
 auto Del(ExecContext* ctx, CmdArgs& args) -> void {

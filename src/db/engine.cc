@@ -108,7 +108,7 @@ auto IdleEngine::DispatchManyCmd(ExecContext* ctx, utils::Generator<PendingReque
             return;
         }
 
-        size_t processed = CmdSquasher::Squash(pipeline_cmds, &ctx->conn->GetSender(), ctx);
+        [[maybe_unused]] size_t processed = CmdSquasher::Squash(pipeline_cmds, &ctx->conn->GetSender(), ctx);
 
         CHECK_EQ(processed, pipeline_cmds.size());
         pipeline_cmds.clear();

@@ -60,7 +60,7 @@ public:
 
     template <class U, class V>
     auto SetImpl(U&& key, V&& value) -> Result<bool> {
-        data_.insert(std::make_pair(std::string(key), std::forward<V>(value)));
+        data_[key] = std::forward<V>(value);
         return {OpStatus::OK, true};
     }
 

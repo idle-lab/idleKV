@@ -98,26 +98,28 @@ auto Connection::ReadImpl(char* buf, size_t size) noexcept -> ResultT<size_t> {
         return ResultT<size_t>(ToStdErrorCode(asio::error::not_connected));
     }
 
-    auto n = socket_->async_read_some(asio::buffer(buf, size), boost::fibers::asio::yield[ec_]);
-    if (ec_) {
-        if (!IsConnectionClosedError(ec_) && !IsTransientIoError(ec_)) {
-            LOG(warn, "read failed: {}", ec_.message());
+    boost::system::error_code ec;
+    auto n = socket_->async_read_some(asio::buffer(buf, size), boost::fibers::asio::yield[ec]);
+    if (ec) {
+        if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
+            LOG(warn, "read failed: {}", ec.message());
         }
     }
-    return ResultT{ec_, size_t(n)};
+    return ResultT{ec, size_t(n)};
 }
 
 auto Connection::ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept -> ResultT<size_t> {
     if (IsClosed()) {
         return ResultT<size_t>(ToStdErrorCode(asio::error::not_connected));
     }
-    auto n = socket_->async_read_some(reg_buf, boost::fibers::asio::yield[ec_]);
-    if (ec_) {
-        if (!IsConnectionClosedError(ec_) && !IsTransientIoError(ec_)) {
-            LOG(warn, "read register failed: {}", ec_.message());
+    boost::system::error_code ec;
+    auto n = socket_->async_read_some(reg_buf, boost::fibers::asio::yield[ec]);
+    if (ec) {
+        if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
+            LOG(warn, "read register failed: {}", ec.message());
         }
     }
-    return ResultT{ec_, size_t(n)};
+    return ResultT{ec, size_t(n)};
 }
 
 auto Connection::ReadvImpl(const std::array<Buf, 2>& bufs) noexcept -> ResultT<size_t> {
@@ -125,26 +127,28 @@ auto Connection::ReadvImpl(const std::array<Buf, 2>& bufs) noexcept -> ResultT<s
         return ResultT<size_t>(ToStdErrorCode(asio::error::not_connected));
     }
 
-    auto n = socket_->async_read_some(bufs, boost::fibers::asio::yield[ec_]);
-    if (ec_) {
-        if (!IsConnectionClosedError(ec_) && !IsTransientIoError(ec_)) {
-            LOG(warn, "read vector failed: {}", ec_.message());
+    boost::system::error_code ec;
+    auto n = socket_->async_read_some(bufs, boost::fibers::asio::yield[ec]);
+    if (ec) {
+        if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
+            LOG(warn, "read vector failed: {}", ec.message());
         }
     }
-    return ResultT{ec_, size_t(n)};
+    return ResultT{ec, size_t(n)};
 }
 
 auto Connection::WriteImpl(const char* data, size_t size) noexcept -> ResultT<size_t> {
     if (IsClosed()) {
         return ResultT<size_t>(ToStdErrorCode(asio::error::not_connected));
     }
-    auto n = asio::async_write(*socket_, asio::buffer(data, size), boost::fibers::asio::yield[ec_]);
-    if (ec_) {
-        if (!IsConnectionClosedError(ec_) && !IsTransientIoError(ec_)) {
-            LOG(warn, "write failed: {}", ec_.message());
+    boost::system::error_code ec;
+    auto n = asio::async_write(*socket_, asio::buffer(data, size), boost::fibers::asio::yield[ec]);
+    if (ec) {
+        if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
+            LOG(warn, "write failed: {}", ec.message());
         }
     }
-    return ResultT{ec_, size_t(n)};
+    return ResultT{ec, size_t(n)};
 }
 
 auto Connection::WritevImpl(const std::vector<BufView>& bufs) noexcept -> ResultT<size_t> {
@@ -152,13 +156,14 @@ auto Connection::WritevImpl(const std::vector<BufView>& bufs) noexcept -> Result
         return ResultT<size_t>(ToStdErrorCode(asio::error::not_connected));
     }
 
-    auto n = asio::async_write(*socket_, bufs, boost::fibers::asio::yield[ec_]);
-    if (ec_) {
-        if (!IsConnectionClosedError(ec_) && !IsTransientIoError(ec_)) {
-            LOG(warn, "write vector failed: {}", ec_.message());
+    boost::system::error_code ec;
+    auto n = asio::async_write(*socket_, bufs, boost::fibers::asio::yield[ec]);
+    if (ec) {
+        if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
+            LOG(warn, "write vector failed: {}", ec.message());
         }
     }
-    return ResultT{ec_, size_t(n)};
+    return ResultT{ec, size_t(n)};
 }
 
 auto Connection::HandleRequests() noexcept -> void {
@@ -279,12 +284,12 @@ auto Connection::AsyncHandle() noexcept -> void {
             RedisService::Tlocal()->RecycleCmdArgs(std::move(request.args_ptr));
         }
 
-        if (!p_.HashMore() && pipeline_queue_.empty()) {
-            s_.Flush();
-        }
 
         if (pipeline_queue_.empty()) {
             yielded_for_batch = false;
+            if (!p_.HashMore()) {
+                s_.Flush();
+            }
         }
     }
 };
@@ -322,7 +327,6 @@ auto Connection::Reset() -> void {
     }
     p_.Clear();
     s_.Clear();
-    ec_ = std::error_code{};
     ctx_.reset();
 }
 

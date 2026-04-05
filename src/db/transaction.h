@@ -111,6 +111,11 @@ public:
         return cmdctx;
     }
 
+    auto MultiSize() -> size_t {
+        CHECK(multi_);
+        return multi_->Size();
+    }
+
     auto IsFinished() -> bool { return multi_->IsFinished(); }
 
     auto InitSingle(Cmd* cmd, CmdArgs* args, WRSet keys) -> void {

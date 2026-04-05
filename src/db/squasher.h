@@ -1,10 +1,10 @@
 #pragma once
 
+#include "common/config.h"
 #include "common/logger.h"
 #include "db/engine.h"
 #include "db/shard.h"
 #include "db/storage/data_entity.h"
-#include "db/transaction.h"
 #include "db/client.h"
 #include "redis/parser.h"
 
@@ -12,34 +12,34 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
 
 namespace idlekv {
 
+struct Ok {};
+struct Pong {};
 struct SimpleString : std::string {};
-struct BulkString {
-    std::string                       data;
-    std::shared_ptr<const DataEntity> holder;
-};
+struct BulkString : std::shared_ptr<const DataEntity> {};
 using Integer = int64_t;
 struct Error : std::string {};
 using Null = std::nullptr_t;
 
-using Payload = std::variant<SimpleString, BulkString, Integer, Error, Null>;
+using Payload = std::variant<std::monostate, Ok, Pong, SimpleString, BulkString, Integer, Error, Null>;
 
 class PayloadVisitor {
 public:
     PayloadVisitor(Sender* sender) : sender_(sender) {}
 
+
+    auto operator()(std::monostate) -> void { UNREACHABLE(); }
+    auto operator()(const Ok&) -> void { sender_->SendOk(); }
+    auto operator()(const Pong&) -> void { sender_->SendPong(); }
     auto operator()(const SimpleString& s) -> void { sender_->SendSimpleString(s); }
     auto operator()(const BulkString& s) -> void {
-        if (s.holder) {
-            sender_->SendBulkString(s.holder);
-        } else {
-            sender_->SendBulkString(s.data);
-        }
+        sender_->SendBulkString(s->AsString(), s);
     }
     auto operator()(const Integer& i) -> void { sender_->SendInteger(i); }
     auto operator()(const Error& e) -> void { sender_->SendError(e); }
@@ -49,25 +49,26 @@ private:
     Sender* sender_;
 };
 
-class ResultCapturer : public SenderBase {
+class ReplyCapturer : public SenderBase {
 public:
     auto SendSimpleString(std::string_view s) -> void override {
         payload_ = SimpleString(std::string(s));
     }
-    auto SendOk() -> void override { payload_ = SimpleString("OK"); }
-    auto SendPong() -> void override { payload_ = SimpleString("PONG"); }
-    auto SendBulkString(std::string_view s) -> void override {
-        payload_ = BulkString(std::string(s));
-    }
-    auto SendBulkString(const std::shared_ptr<const DataEntity>& data) -> void override {
-        CHECK(data);
-        payload_ = BulkString{.holder = data};
+    auto SendOk() -> void override { payload_ = Ok{}; }
+    auto SendPong() -> void override { payload_ = Pong{}; }
+    auto SendBulkString(std::string_view, std::shared_ptr<const void> holder) -> void override {
+        CHECK(holder);
+        payload_ = BulkString(std::static_pointer_cast<const DataEntity>(holder));
     }
     auto SendNullBulkString() -> void override { payload_ = Null{}; }
     auto SendInteger(int64_t value) -> void override { payload_ = Integer(value); }
     auto SendError(std::string_view s) -> void override { payload_ = Error(std::string(s)); }
 
-    auto GetPayload() -> Payload& { return payload_; }
+    auto TakePayload() -> Payload {
+        Payload payload = std::move(payload_);
+        payload_ = std::monostate{};
+        return payload;
+    }
 
 private:
     Payload payload_;
@@ -76,7 +77,7 @@ private:
 class CmdSquasher {
 public:
     struct ShardExecInfo {
-        std::vector<Payload>        results;
+        std::vector<Payload> results;
         size_t send_idx{0};
         ExecContext sub_ctx;
     };
@@ -101,7 +102,7 @@ private:
 
     absl::InlinedVector<ShardExecInfo, 6> shards_info_;
     size_t active_shard_count_{0};
-    std::vector<ShardId> cmd_order_;
+    std::vector<size_t> order_;
 
     ExecContext* parent_ctx_;
 
