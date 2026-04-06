@@ -204,10 +204,6 @@ auto Writer::Write(std::string_view s) -> std::error_code {
         }
     }
 
-    if (buf_.WriteSize() < s.size()) {
-        buf_.Reserve(buf_.Buffered() + s.size());
-    }
-
     const size_t offset = buf_.Buffered();
     char*        begin  = buf_.Data() + offset;
     std::memcpy(begin, s.data(), s.size());
@@ -244,6 +240,10 @@ auto Writer::WriteRef(std::string_view s, std::shared_ptr<const void> holder) ->
 auto Writer::Flush() -> std::error_code {
     if (vecs_.empty()) {
         return std::error_code{};
+    }
+
+    for (auto& vec : vecs_) {
+        
     }
 
     // vecs_ preserves the original enqueue order, so a single writev keeps
@@ -294,7 +294,7 @@ auto Parser::ParseOne(CmdArgs& args) noexcept -> ParserResut {
             continue;
         }
 
-        args.PushArg(strLen);
+        args.PreAlloc(strLen);
 
         if (auto ec = rd_->ReadBytesTo(const_cast<char*>(args[i].data()), strLen); ec) {
             return ec;

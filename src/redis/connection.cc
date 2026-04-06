@@ -304,27 +304,50 @@ auto Connection::Flush() -> void {
 auto Connection::Init(asio::ip::tcp::socket&& socket) -> void {
     CHECK(socket_.has_value() == false) << "override a connection that is currently in use";
     socket_.emplace(std::move(socket));
+    closing_ = false;
     db_index_ = 0;
     cur_args_ = RedisService::Tlocal()->GetCmdArgsOrCreate();
     ctx_ = std::make_unique<ExecContext>(this);
 }
 
 auto Connection::Reset() -> void {
+    closing_ = true;
+
+    if (socket_.has_value() && socket_->is_open()) {
+        boost::system::error_code ignored_ec;
+        DISCARD_RESULT(socket_->cancel(ignored_ec));
+        if (ignored_ec && !IsConnectionClosedError(ignored_ec) && !IsTransientIoError(ignored_ec)) {
+            LOG(warn, "cancel socket failed: {}", ignored_ec.message());
+        }
+    }
+
+    if (async_fiber_.joinable()) {
+        async_cv_.notify_all();
+        async_fiber_.join();
+    }
+
     if (socket_.has_value()) {
         if (socket_->is_open()) {
             boost::system::error_code ignored_ec;
             DISCARD_RESULT(socket_->close(ignored_ec));
 
-            if (ignored_ec) {
+            if (ignored_ec && !IsConnectionClosedError(ignored_ec) &&
+                !IsTransientIoError(ignored_ec)) {
                 LOG(warn, "close socket failed: {}", ignored_ec.message());
             }
         }
         socket_.reset();
     }
-    if (async_fiber_.joinable()) {
-        async_cv_.notify_all();
-        async_fiber_.join();
+
+    while (!pipeline_queue_.empty()) {
+        auto& request = pipeline_queue_.front();
+        RedisService::Tlocal()->RecycleCmdArgs(std::move(request.args_ptr));
+        pipeline_queue_.pop_front();
     }
+    if (cur_args_) {
+        RedisService::Tlocal()->RecycleCmdArgs(std::move(cur_args_));
+    }
+
     p_.Clear();
     s_.Clear();
     ctx_.reset();

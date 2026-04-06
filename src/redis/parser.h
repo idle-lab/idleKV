@@ -103,17 +103,7 @@ class IOBuf {
 public:
     IOBuf(size_t cap) : owner_(true) { Reserve(cap); }
     IOBuf(char* data, size_t size) : buf_(data), cap_(size), owner_(false) {}
-    IOBuf(const IOBuf&)                    = delete;
-    auto operator=(const IOBuf&) -> IOBuf& = delete;
-
-    IOBuf(IOBuf&& other) noexcept { MoveFrom(std::move(other)); }
-    auto operator=(IOBuf&& other) noexcept -> IOBuf& {
-        if (this != &other) {
-            ReleaseOwnedBuffer();
-            MoveFrom(std::move(other));
-        }
-        return *this;
-    }
+    DISABLE_COPY_MOVE(IOBuf)
 
     ~IOBuf() { ReleaseOwnedBuffer(); }
 
@@ -150,6 +140,7 @@ public:
     auto Data() -> char* { return buf_; }
     auto Data() const -> const char* { return buf_; }
 
+private:
     auto Reserve(size_t sz) -> void {
         CHECK(owner_);
         if (sz <= cap_)
@@ -172,7 +163,6 @@ public:
         cap_ = sz;
     }
 
-private:
     auto ReleaseOwnedBuffer() -> void {
         if (owner_ && buf_) {
             ::operator delete[](buf_, std::align_val_t{alignment_});

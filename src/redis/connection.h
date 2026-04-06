@@ -84,7 +84,7 @@ public:
     }
 
     auto IsClosed() const -> bool {
-        return !(socket_.has_value() && socket_->is_open()) || s_.GetError();
+        return closing_ || !(socket_.has_value() && socket_->is_open()) || s_.GetError();
     }
 
 private:
@@ -107,9 +107,10 @@ private:
     boost::fibers::condition_variable_any async_cv_;
 
     std::deque<PipelineMsg> pipeline_queue_;
-    CmdArgsPtr                 cur_args_;
+    CmdArgsPtr              cur_args_;
 
     std::unique_ptr<ExecContext> ctx_;
+    bool                         closing_{false};
 };
 
 } // namespace idlekv
