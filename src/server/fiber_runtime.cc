@@ -8,11 +8,12 @@
 
 namespace boost::fibers::asio {
 
-boost::asio::io_context::id round_robin::service::id;
 
 } // namespace boost::fibers::asio
 
 namespace idlekv {
+    
+boost::asio::io_context::id Priority::service::id;
 
 auto CurrentIoContext() -> asio::io_context& {
     auto* state = ThreadState::Tlocal();

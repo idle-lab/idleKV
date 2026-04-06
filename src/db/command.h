@@ -4,18 +4,13 @@
 #include "utils/range/concat_view.h"
 #include "utils/time/time.h"
 
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <type_traits>
-#include <utility>
 
 namespace idlekv {
 
-// using CmdArgs = std::vector<std::string>;
-
-// Same as BackedArguments of dragonflydb.
 class CmdArgs {
     constexpr static size_t kLenCap     = 5;
     constexpr static size_t kStorageCap = 88;
@@ -140,14 +135,14 @@ public:
     }
 
     // Reserves space for additional argument of given length at the end.
-    void PushArg(size_t len) {
+    void PreAlloc(size_t len) {
         size_t old_size = storage_.size();
         offsets_.push_back(old_size);
         storage_.resize(old_size + len + 1);
     }
 
     void PushArg(std::string_view arg) {
-        PushArg(arg.size());
+        PreAlloc(arg.size());
         char* dest = storage_.data() + offsets_.back();
         if (arg.size() > 0)
             memcpy(dest, arg.data(), arg.size());
@@ -178,32 +173,6 @@ struct PendingRequest {
     CmdArgs* args;
     TimePoint  started_at;
 };
-
-template <typename I>
-void CmdArgs::Assign(I begin, I end, size_t len) {
-    offsets_.resize(len);
-    size_t   total_size = 0;
-    unsigned idx        = 0;
-    for (auto it = begin; it != end; ++it) {
-        offsets_[idx++] = total_size;
-        total_size += (*it).size() + 1; // +1 for '\0'
-    }
-    storage_.resize(total_size);
-
-    // Reclaim memory if we have too much allocated.
-    if (storage_.capacity() > kStorageCap && total_size < storage_.capacity() / 2)
-        storage_.shrink_to_fit();
-
-    char* next = storage_.data();
-    for (auto it = begin; it != end; ++it) {
-        size_t sz = (*it).size();
-        if (sz > 0) {
-            memcpy(next, (*it).data(), sz);
-        }
-        next[sz] = '\0';
-        next += sz + 1;
-    }
-}
 
 class ExecContext;
 

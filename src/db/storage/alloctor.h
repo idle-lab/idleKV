@@ -10,6 +10,7 @@
 #include <list>
 #include <memory_resource>
 #include <mimalloc.h>
+#include <type_traits>
 #include <utility>
 #include <vector>
 namespace idlekv {
@@ -112,6 +113,7 @@ public:
     static constexpr size_t Size        = sizeof(Type);
     static constexpr size_t Alignment   = alignof(Type);
     static constexpr size_t kMaxSlotNum = 256;
+    static_assert(Alignment > 0);
 
     template <class... Args>
     auto New(Args&&... args) -> Type* {
@@ -129,7 +131,7 @@ public:
         std::pair<Block*, uint16_t> idx = memeory_blocks_.free_list_.front();
         memeory_blocks_.free_list_.pop_front();
         idx.first->allocd++;
-        ptr = static_cast<void*>(idx.first->data + static_cast<ptrdiff_t>(idx.second * Size));
+        ptr = static_cast<void*>(&idx.first->slots[idx.second]);
 
         return new (ptr) Type(std::forward<Args>(args)...);
     }
@@ -154,10 +156,15 @@ private:
     auto Recycle(void* ptr) -> void {
         for (auto it = memeory_blocks_.blocks_.begin(); it != memeory_blocks_.blocks_.end(); it++) {
             Block* block = *it;
-            if (ptr >= block->data && ptr < static_cast<void*>(block->data + kMaxSlotNum * Size)) {
+            auto* begin = reinterpret_cast<std::byte*>(block->slots);
+            auto* end   = begin + sizeof(block->slots);
+            auto* raw   = static_cast<std::byte*>(ptr);
+
+            if (raw >= begin && raw < end) {
                 block->allocd--;
-                uint8_t slot_id =
-                    static_cast<uint8_t>((static_cast<uint8_t*>(ptr) - block->data) / Size);
+                ptrdiff_t offset = raw - begin;
+                CHECK_EQ(offset % static_cast<ptrdiff_t>(sizeof(Slot)), ptrdiff_t{0});
+                uint16_t slot_id = static_cast<uint16_t>(offset / static_cast<ptrdiff_t>(sizeof(Slot)));
 
                 memeory_blocks_.free_list_.emplace_back(block, slot_id);
                 return;
@@ -166,9 +173,10 @@ private:
         UNREACHABLE();
     }
 
+    using Slot = std::aligned_storage_t<Size, Alignment>;
     struct Block {
-        uint8_t data[kMaxSlotNum * Size];
-        uint8_t allocd{0};
+        Slot     slots[kMaxSlotNum];
+        uint16_t allocd{0};
     };
 
     struct MemoryBlocks {
@@ -178,7 +186,7 @@ private:
     MemoryBlocks memeory_blocks_;
 
     size_t free_num_{0}, alloced_{0};
-    size_t usage_;
+    size_t usage_{0};
 
     EBRManager*                ebr_mgr_;
     std::pmr::memory_resource* mr_{std::pmr::get_default_resource()};

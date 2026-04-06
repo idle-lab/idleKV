@@ -2,17 +2,20 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <string>
 #include <thread>
 namespace idlekv {
 
-class Record {
-public:
-private:
-    uint64_t    lsn_;
-    uint32_t    crc_;
-    std::string payload_;
+struct Record {
+    uint64_t    lsn;
+    uint32_t    crc;
+    std::string payload;
+};
+
+class WALFile {
+
+
+
 };
 
 class WAL {
@@ -29,6 +32,8 @@ public:
             return;
         }
         std::filesystem::create_directory(dir);
+
+        
     }
 
     auto Write(Record r) -> void;

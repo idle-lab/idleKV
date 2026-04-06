@@ -109,7 +109,7 @@ auto CmdSquasher::TrySquash(CommandContext& cmd) -> DetermineResult {
 
     auto& sf = ShardInfo(last_shard_id);
 
-    sf.sub_ctx.txn->CollectCmd(std::move(cmd));
+    sf.sub_ctx.txn->CollectCmd(CommandContext{cmd.cmd, cmd.args, {}, cmd.start_at});
     order_.push_back(last_shard_id);
     return DetermineResult::OK;
 }

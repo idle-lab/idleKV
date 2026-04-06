@@ -32,7 +32,7 @@ public:
     auto Size() -> size_t { return cmds_.size(); }
 
     auto Append(CommandContext cmdctx) -> void {
-        cmds_.emplace_back(cmdctx);
+        cmds_.emplace_back(std::move(cmdctx));
     }
 
     auto Mode() -> MultiMode { return mode_; }
@@ -53,17 +53,22 @@ private:
     size_t                      progress_{0};
     MultiMode                   mode_;
 };
+
 /*
-1. normal: 单指令事务
+1. normal: single-command transaction
 
-2. multi：
-    - multi...exec 的多指令原子事务
+2. multi:
+    - atomic multi-command transaction for MULTI...EXEC
 
-    - pipeline 的多指令执行，不需要保证整个 pipeline 的原子性，只需要按顺序执行。
+    - multi-command pipeline execution. The entire pipeline does not need to be atomic;
+      commands only need to be executed in order.
 
-        pipeline 需要创建多个 MultiSub 的子事务（取决于当前批次中指令涉及的 shard 数量），每个子事务创建 Squash 模式的 MultiCmd
+        A pipeline needs to create multiple MultiSub child transactions
+        (depending on how many shards are involved in the current batch of commands),
+        and each child transaction creates a MultiCmd in Squash mode.
 
-        MultiSub 类型的子事务直接运行在对应的 shard 的 worker fiber 上，不需要进行调度
+        A MultiSub child transaction runs directly on the worker fiber of the
+        corresponding shard and does not need to be scheduled.
 
 */
 enum class TxnType : uint8_t {

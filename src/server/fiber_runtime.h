@@ -99,24 +99,10 @@ public:
     }
 };
 
-} // namespace idlekv
 
-namespace boost::fibers {
-
-struct no_op_lock {
-    void lock() {}
-    void unlock() {}
-
-    bool try_lock() { return true; }
-};
-
-} // namespace boost::fibers
-
-namespace boost::fibers::asio {
-
-class round_robin : public algo::algorithm_with_properties<idlekv::FiberProps> {
+class Priority : public boost::fibers::algo::algorithm_with_properties<idlekv::FiberProps> {
 private:
-    using ready_queue_type = scheduler::ready_queue_type;
+    using ready_queue_type = boost::fibers::scheduler::ready_queue_type;
 
     class service : public boost::asio::io_context::service {
     public:
@@ -133,7 +119,7 @@ private:
     };
 
 public:
-    explicit round_robin(boost::asio::io_context& io_ctx) : suspend_timer_(io_ctx) {
+    explicit Priority(boost::asio::io_context& io_ctx) : suspend_timer_(io_ctx) {
         boost::asio::add_service(io_ctx, new service(io_ctx));
     }
 
@@ -282,6 +268,21 @@ private:
     boost::fibers::context* running_ctx_{nullptr};
     uint64_t                running_since_cycle_{0};
 };
+
+} // namespace idlekv
+
+namespace boost::fibers {
+
+struct no_op_lock {
+    void lock() {}
+    void unlock() {}
+
+    bool try_lock() { return true; }
+};
+
+} // namespace boost::fibers
+
+namespace boost::fibers::asio {
 
 //[fibers_asio_yield_t
 class yield_t {

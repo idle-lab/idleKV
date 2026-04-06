@@ -30,8 +30,8 @@ public:
     std::unique_ptr<Transaction> txn{nullptr};
     ExecState   exec_state{ExecState::MultiInactive};
     size_t db_index{0};
-    Connection* conn;
-    SenderBase* sender;
+    Connection* conn{nullptr};
+    SenderBase* sender{nullptr};
 
     // TODO(cyb): Track memory usage of a client.
 };

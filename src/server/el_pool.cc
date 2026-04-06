@@ -19,7 +19,7 @@ namespace idlekv {
 auto EventLoop::Run() -> void {
     th_ = std::jthread([this]() mutable {
         io_.restart();
-        boost::fibers::use_scheduling_algorithm<boost::fibers::asio::round_robin>(io_);
+        boost::fibers::use_scheduling_algorithm<idlekv::Priority>(io_);
 
         auto& prop = boost::this_fiber::properties<FiberProps>();
         prop.SetName("EventLoopFiber");
