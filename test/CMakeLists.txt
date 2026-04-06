@@ -23,3 +23,27 @@ target_compile_definitions(
     PRIVATE
         ASIOCHAN_USE_STANDALONE_ASIO=ON
 )
+
+add_executable(block_counter_test
+    ${PROJECT_SOURCE_DIR}/test/utils/block_counter_test.cc
+)
+
+target_link_libraries(
+    block_counter_test
+    PRIVATE
+        GTest::gtest_main
+        idlekv_core
+        third_part
+)
+
+target_include_directories(
+    block_counter_test
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/src
+)
+
+target_compile_definitions(
+    block_counter_test
+    PRIVATE
+        ASIOCHAN_USE_STANDALONE_ASIO=ON
+)

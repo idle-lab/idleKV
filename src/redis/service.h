@@ -1,22 +1,18 @@
 #pragma once
 
 #include "common/config.h"
+#include "db/command.h"
 #include "redis/connection.h"
-#include "redis/parser.h"
 #include "server/el_pool.h"
 #include "server/handler.h"
 #include "utils/pool/pool.h"
 
-#include <array>
-#include <asio/any_io_executor.hpp>
-#include <asio/awaitable.hpp>
-#include <asio/buffer.hpp>
-#include <asio/buffer_registration.hpp>
-#include <asio/io_context.hpp>
-#include <asio/registered_buffer.hpp>
-#include <asio/steady_timer.hpp>
-#include <asio/this_coro.hpp>
 #include <atomic>
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/buffer_registration.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/registered_buffer.hpp>
 #include <cstddef>
 #include <cstdlib>
 #include <list>
@@ -31,11 +27,12 @@ namespace idlekv {
 class RedisService : public Handler {
 public:
     using ConnectionPtr = std::unique_ptr<Connection>;
-    class ServiceTLState {
+    class ServiceTLData {
         struct Slot {
             asio::mutable_registered_buffer buffer;
-            size_t index;
+            size_t                          index;
         };
+
     public:
         static constexpr auto kConnPoolSize = 64;
 
@@ -45,21 +42,29 @@ public:
         auto FreeBuffer(size_t) -> void;
         auto ConnPool() -> utils::Pool<ConnectionPtr>& { return conn_pool_; }
         auto ConnList() -> std::list<Connection*>& { return conn_list_; }
+        auto GetCmdArgsOrCreate() -> CmdArgsPtr;
+        auto RecycleCmdArgs(CmdArgsPtr ptr) -> void;
 
     private:
-        utils::Pool<ConnectionPtr>                            conn_pool_;
-        std::list<Connection*>                                conn_list_;
-        std::unique_ptr<byte[]> buf_space_;
-        std::vector<size_t> free_list_;
-        std::optional<asio::buffer_registration<std::vector<asio::mutable_buffer>>> buffer_registration_;
+        utils::Pool<ConnectionPtr> conn_pool_;
+        std::list<Connection*>     conn_list_;
+
+        // pipeline cmd args pool
+        utils::Pool<CmdArgsPtr> args_pool_;
+
+        // register buffer
+        std::unique_ptr<char[]> buf_space_;
+        std::vector<size_t>     free_list_;
+        std::optional<asio::buffer_registration<std::vector<asio::mutable_buffer>>>
+            buffer_registration_;
     };
 
     RedisService(const Config& cfg) : Handler(cfg.ip_, std::atoi(cfg.port_.c_str())) {}
 
     virtual auto Init(EventLoop* el) -> void override;
-    virtual auto Handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> override;
+    virtual auto Handle(asio::ip::tcp::socket socket) -> void override;
 
-    static auto Tlocal() -> ServiceTLState* { return tl_; }
+    static auto Tlocal() -> ServiceTLData* { return tl_; }
 
     auto Stopped() -> bool { return stop_.load(std::memory_order_acquire); }
 
@@ -68,10 +73,11 @@ public:
     virtual std::string Name() override { return "Redis"; }
 
     virtual ~RedisService() override = default;
+
 private:
     std::atomic<bool> stop_{false};
 
-    static thread_local ServiceTLState* tl_;
+    static thread_local ServiceTLData* tl_;
 };
 
 } // namespace idlekv

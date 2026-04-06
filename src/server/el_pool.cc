@@ -2,29 +2,51 @@
 #include "server/el_pool.h"
 
 #include "common/logger.h"
+#include "server/fiber_runtime.h"
 #include "utils/cpu/basic.h"
 
-#include <asio/co_spawn.hpp>
-#include <asio/use_future.hpp>
 #include <atomic>
+#include <boost/fiber/fiber.hpp>
+#include <boost/fiber/operations.hpp>
+#include <boost/fiber/scheduler.hpp>
 #include <cassert>
-#include <memory>
 #include <pthread.h>
 #include <sched.h>
 #include <spdlog/spdlog.h>
-#include <thread>
 
 namespace idlekv {
 
 auto EventLoop::Run() -> void {
-    // start the io loop on its dedicated worker thread.
-    th_ = std::jthread([this]() mutable { io_.run(); });
+    th_ = std::jthread([this]() mutable {
+        io_.restart();
+        boost::fibers::use_scheduling_algorithm<idlekv::Priority>(io_);
+
+        auto& prop = boost::this_fiber::properties<FiberProps>();
+        prop.SetName("EventLoopFiber");
+        prop.SetPriority(FiberPriority::BACKGROUND);
+
+        // main fiber loop: run the io_context and yield to ready fibers when possible.
+        while (!io_.stopped()) {
+            if (boost::fibers::has_ready_fibers()) {
+                while (io_.poll())
+                    ;
+
+                // yield this fiber to processe pending (ready) fibers.
+                boost::this_fiber::yield();
+            } else {
+                if (!io_.run_one()) {
+                    break;
+                }
+            }
+        }
+    });
 }
 
 auto EventLoop::Stop() -> void {
-    // release the work guard first so io_.run() can exit cleanly.
     io_.stop();
-    wg_.reset();
+    // if (th_.joinable()) {
+    //     th_.join();
+    // }
 }
 
 auto EventLoopPool::Run() -> void {
@@ -84,23 +106,23 @@ auto EventLoopPool::SetupEls() -> void {
         // pin each event loop thread to a cpu to keep scheduling predictable.
         int      rel_indx = i % num_online_cpus;
         unsigned abs_cpu  = rel_to_abs_cpu[rel_indx];
-        els_[i]           = std::make_unique<EventLoop>(abs_cpu);
+        els_[i]           = std::make_unique<EventLoop>(abs_cpu, i);
 
         els_[i]->Run();
 
-        // pthread_t tid = els_[i]->ThreadId();
+        pthread_t tid = els_[i]->ThreadId();
 
-        // CPU_SET(abs_cpu, &cps);
+        CPU_SET(abs_cpu, &cps);
 
-        // int rc = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cps);
-        // if (rc == 0) {
-        //     LOG(debug, "Setting affinity of thread {} on cpu {}", i, abs_cpu);
-        //     cpu_threads_[abs_cpu].push_back(i);
-        // } else {
-        //     LOG(warn, "Error calling pthread_setaffinity_np: {}", strerror(rc));
-        // }
+        int rc = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cps);
+        if (rc == 0) {
+            LOG(debug, "Setting affinity of thread {} on cpu {}", i, abs_cpu);
+            cpu_threads_[abs_cpu].push_back(i);
+        } else {
+            LOG(warn, "Error calling pthread_setaffinity_np: {}", strerror(rc));
+        }
 
-        // CPU_CLR(abs_cpu, &cps);
+        CPU_CLR(abs_cpu, &cps);
     }
 }
 

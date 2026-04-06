@@ -4,10 +4,8 @@
 
 #include <cstddef>
 #include <functional>
-
 #include <type_traits>
 #
-
 
 namespace idlekv::dash {
 
@@ -22,7 +20,6 @@ class DashEH {
 public:
     using SegmentType = detail::Segment<Key, Value, RegularBuckets, StashBuckets, SlotsPerBucket>;
     using RecordType  = typename SegmentType::RecordType;
-
 };
 
 } // namespace idlekv::dash

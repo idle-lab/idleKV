@@ -2,69 +2,65 @@
 
 #include "absl/functional/function_ref.h"
 #include "common/asio_no_exceptions.h"
-#include "db/result.h"
-#include "db/storage/data_entity.h"
+#include "db/command.h"
+#include "db/client.h"
 #include "redis/parser.h"
 #include "server/el_pool.h"
-#include "utils/condition_variable/condition_variable.h"
 
-#include <array>
-#include <asio/any_io_executor.hpp>
-#include <asio/as_tuple.hpp>
-#include <asio/asio.hpp>
-#include <asio/asio/awaitable.hpp>
-#include <asio/buffer.hpp>
-#include <asio/buffer_registration.hpp>
-#include <asio/detail/is_buffer_sequence.hpp>
-#include <asio/error.hpp>
-#include <asio/io_context.hpp>
-#include <asio/registered_buffer.hpp>
-#include <asio/use_awaitable.hpp>
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/buffer.hpp>
+#include <boost/asio/buffer_registration.hpp>
+#include <boost/asio/detail/is_buffer_sequence.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/registered_buffer.hpp>
+#include <boost/fiber/condition_variable.hpp>
+#include <boost/fiber/fiber.hpp>
+#include <boost/system/detail/error_code.hpp>
 #include <cassert>
-#include <atomic>
 #include <cstddef>
 #include <cstring>
+#include <deque>
 #include <functional>
+#include <memory>
 #include <optional>
-#include <system_error>
 #include <vector>
 
 namespace idlekv {
 
-class DB;
-class IdleEngine;
+static constexpr size_t kPipelineSquashThreshold = 2;
 
 class Connection : public Reader, public Writer {
 public:
     explicit Connection()
         : Reader(kDefaultReadBufferSize), Writer(kDefaultWriteBufferSize), p_(this), s_(this) {}
 
-    explicit Connection(asio::mutable_registered_buffer buf, absl::FunctionRef<void()> buffer_releaser)
-        : Reader(buf), Writer(kDefaultWriteBufferSize), p_(this), s_(this), buffer_releaser_(buffer_releaser) {}
+    explicit Connection(asio::mutable_registered_buffer buf,
+                    std::function<void()>       buffer_releaser)
+        : Reader(buf), Writer(kDefaultWriteBufferSize), p_(this), s_(this),
+          buffer_releaser_(buffer_releaser) {}
 
-    ~Connection() { 
+    ~Connection() {
         if (buffer_releaser_.has_value()) {
             (*buffer_releaser_)();
         }
     }
 
-    virtual auto ReadImpl(char* buf, size_t size) noexcept
-        -> asio::awaitable<ResultT<size_t>> override;
+    virtual auto ReadImpl(char* buf, size_t size) noexcept -> ResultT<size_t> override;
     virtual auto ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept
-        -> asio::awaitable<ResultT<size_t>> override;
-    virtual auto ReadvImpl(const std::vector<Buf>& bufs) noexcept
-        -> asio::awaitable<ResultT<size_t>> override;
+        -> ResultT<size_t> override;
+    virtual auto ReadvImpl(const std::array<Buf, 2>& bufs) noexcept -> ResultT<size_t> override;
 
-    virtual auto WriteImpl(const char* data, size_t size) noexcept
-        -> asio::awaitable<ResultT<size_t>> override;
-    virtual auto WritevImpl(const std::vector<BufView>& bufs) noexcept
-        -> asio::awaitable<ResultT<size_t>> override;
+    virtual auto WriteImpl(const char* data, size_t size) noexcept -> ResultT<size_t> override;
+    virtual auto WritevImpl(const std::vector<BufView>& bufs) noexcept -> ResultT<size_t> override;
 
-    auto HandleRequests() noexcept -> asio::awaitable<void>;
+    auto HandleRequests() noexcept -> void;
+    auto AsyncHandle() noexcept -> void;
 
-    auto Flush() -> asio::awaitable<void>;
+    auto Flush() -> void;
 
-    auto Reset(asio::ip::tcp::socket&& socket) -> void;
+    auto Init(asio::ip::tcp::socket&& socket) -> void;
     auto Reset() -> void;
 
     auto GetSender() -> Sender& { return s_; }
@@ -82,26 +78,39 @@ public:
             return {};
         }
 
-        std::error_code ec;
-        auto            ep = socket_->remote_endpoint(ec);
+        boost::system::error_code ec;
+        auto                      ep = socket_->remote_endpoint(ec);
         return ec ? asio::ip::tcp::endpoint{} : ep;
     }
 
     auto IsClosed() const -> bool {
-        return ec_ || !(socket_.has_value() && socket_->is_open()) || s_.GetError();
+        return closing_ || !(socket_.has_value() && socket_->is_open()) || s_.GetError();
     }
-private:
 
-    std::optional<asio::ip::tcp::socket>           socket_;
-    std::error_code                                ec_;
+private:
+    struct PipelineMsg {
+        CmdArgsPtr args_ptr;
+        TimePoint  started_at;
+    };
+
+    std::optional<asio::ip::tcp::socket> socket_;
 
     Parser p_;
     Sender s_;
 
-    std::optional<absl::FunctionRef<void()>> buffer_releaser_;
+    std::optional<std::function<void()> > buffer_releaser_;
 
-    EventLoop*        el_;
-    size_t            db_index_ = 0;
+    EventLoop* el_;
+    size_t     db_index_ = 0;
+
+    boost::fibers::fiber                  async_fiber_;
+    boost::fibers::condition_variable_any async_cv_;
+
+    std::deque<PipelineMsg> pipeline_queue_;
+    CmdArgsPtr              cur_args_;
+
+    std::unique_ptr<ExecContext> ctx_;
+    bool                         closing_{false};
 };
 
 } // namespace idlekv

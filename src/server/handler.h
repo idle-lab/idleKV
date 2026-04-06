@@ -3,8 +3,8 @@
 #include "common/asio_no_exceptions.h"
 #include "server/el_pool.h"
 
-#include <asio/asio.hpp>
-#include <asio/awaitable.hpp>
+#include <boost/asio/ip/address.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -14,8 +14,8 @@ namespace idlekv {
 namespace detail {
 
 inline auto MakeTcpEndpoint(const std::string& ip, uint16_t port) -> asio::ip::tcp::endpoint {
-    std::error_code ec;
-    auto            addr = asio::ip::make_address(ip, ec);
+    boost::system::error_code ec;
+    auto                      addr = asio::ip::make_address(ip, ec);
     if (ec) {
         std::fprintf(stderr, "invalid listen address '%s': %s\n", ip.c_str(), ec.message().c_str());
         std::abort();
@@ -34,7 +34,7 @@ public:
 
     virtual auto Init(EventLoop* el) -> void = 0;
 
-    virtual auto Handle(asio::ip::tcp::socket socket) -> asio::awaitable<void> = 0;
+    virtual auto Handle(asio::ip::tcp::socket socket) -> void = 0;
 
     virtual void Stop() = 0;
 

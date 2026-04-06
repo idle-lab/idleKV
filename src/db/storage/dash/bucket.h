@@ -19,7 +19,7 @@ struct Record {
     Record(uint64_t h, uint16_t home, K&& k, V&& v)
         : hash(h), HomeBucket(home), key(std::forward<K>(k)), value(std::forward<V>(v)) {}
 
-    uint64_t hash        = 0;
+    uint64_t hash       = 0;
     uint16_t HomeBucket = 0;
     Key      key;
     Value    value;

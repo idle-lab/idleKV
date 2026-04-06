@@ -235,8 +235,8 @@ TEST(ArtTest, InsertingFortyNineDistinctKeysExercisesNode48ToNode256Growth) {
 TEST(ArtTest, LargeSharedPrefixDatasetSupportsBulkInsertLookupDeleteAndReinsert) {
     std::pmr::monotonic_buffer_resource mr;
     Art<std::string>                    art(&mr);
-    auto                               user_keys  = MakeSharedPrefixKeys("user:", 256);
-    auto                               order_keys = MakeSharedPrefixKeys("order:", 256);
+    auto                                user_keys  = MakeSharedPrefixKeys("user:", 256);
+    auto                                order_keys = MakeSharedPrefixKeys("order:", 256);
 
     for (size_t i = 0; i < user_keys.size(); ++i) {
         ASSERT_EQ(InsertValue(art, user_keys[i], "u-" + std::to_string(i)), InsertResutl::OK);
@@ -244,8 +244,10 @@ TEST(ArtTest, LargeSharedPrefixDatasetSupportsBulkInsertLookupDeleteAndReinsert)
     }
 
     for (size_t i = 0; i < user_keys.size(); ++i) {
-        EXPECT_EQ(LookupValue(art, user_keys[i]), std::optional<std::string>("u-" + std::to_string(i)));
-        EXPECT_EQ(LookupValue(art, order_keys[i]), std::optional<std::string>("o-" + std::to_string(i)));
+        EXPECT_EQ(LookupValue(art, user_keys[i]),
+                  std::optional<std::string>("u-" + std::to_string(i)));
+        EXPECT_EQ(LookupValue(art, order_keys[i]),
+                  std::optional<std::string>("o-" + std::to_string(i)));
     }
 
     EXPECT_EQ(LookupValue(art, "user:zzzz"), std::nullopt);
@@ -263,8 +265,10 @@ TEST(ArtTest, LargeSharedPrefixDatasetSupportsBulkInsertLookupDeleteAndReinsert)
             EXPECT_EQ(LookupValue(art, user_keys[i]), std::nullopt);
             EXPECT_EQ(LookupValue(art, order_keys[i]), std::nullopt);
         } else {
-            EXPECT_EQ(LookupValue(art, user_keys[i]), std::optional<std::string>("u-" + std::to_string(i)));
-            EXPECT_EQ(LookupValue(art, order_keys[i]), std::optional<std::string>("o-" + std::to_string(i)));
+            EXPECT_EQ(LookupValue(art, user_keys[i]),
+                      std::optional<std::string>("u-" + std::to_string(i)));
+            EXPECT_EQ(LookupValue(art, order_keys[i]),
+                      std::optional<std::string>("o-" + std::to_string(i)));
         }
     }
 
@@ -330,7 +334,7 @@ TEST(ArtTest, LargeWideFanoutDatasetSurvivesMultiStageShrinkAndCompression) {
 TEST(ArtTest, DeterministicMixedLargeWorkloadMatchesReferenceMap) {
     std::pmr::monotonic_buffer_resource mr;
     Art<std::string>                    art(&mr);
-    std::vector<std::string>            keys = MakeSharedPrefixKeys("tenant:", 512);
+    std::vector<std::string>            keys      = MakeSharedPrefixKeys("tenant:", 512);
     auto                                wide_keys = MakeWideFanoutKeys(512);
     keys.insert(keys.end(), wide_keys.begin(), wide_keys.end());
     keys.push_back("a");
@@ -347,8 +351,8 @@ TEST(ArtTest, DeterministicMixedLargeWorkloadMatchesReferenceMap) {
     std::uniform_int_distribution<int>           op_dist(0, 99);
 
     for (size_t step = 0; step < 20000; ++step) {
-        const std::string& key = keys[key_dist(rng)];
-        const int          op = op_dist(rng);
+        const std::string& key   = keys[key_dist(rng)];
+        const int          op    = op_dist(rng);
         const std::string  value = "value-" + std::to_string(step);
 
         if (op < 35) {
@@ -360,9 +364,8 @@ TEST(ArtTest, DeterministicMixedLargeWorkloadMatchesReferenceMap) {
             }
         } else if (op < 60) {
             const bool exists = expected.contains(key);
-            EXPECT_EQ(
-                InsertValue(art, key, value, InsertMode::Upsert),
-                exists ? InsertResutl::UpsertValue : InsertResutl::OK);
+            EXPECT_EQ(InsertValue(art, key, value, InsertMode::Upsert),
+                      exists ? InsertResutl::UpsertValue : InsertResutl::OK);
             expected[key] = value;
         } else if (op < 80) {
             auto it = expected.find(key);
@@ -385,8 +388,7 @@ TEST(ArtTest, DeterministicMixedLargeWorkloadMatchesReferenceMap) {
                 if (it == expected.end()) {
                     EXPECT_EQ(LookupValue(art, verify_key), std::nullopt);
                 } else {
-                    EXPECT_EQ(LookupValue(art, verify_key),
-                              std::optional<std::string>(it->second));
+                    EXPECT_EQ(LookupValue(art, verify_key), std::optional<std::string>(it->second));
                 }
             }
         }

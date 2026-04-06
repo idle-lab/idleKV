@@ -23,7 +23,8 @@
 //     void reset() { pos_ = 0; }
 
 // private:
-//     auto read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> override {
+//     auto read_impl(byte* buf, size_t size) noexcept -> asio::awaitable<ResultT<size_t>> override
+//     {
 //         if (pos_ >= data_.size()) {
 //             co_return ResultT<size_t>(std::make_error_code(std::errc::no_message));
 //         }
@@ -49,7 +50,8 @@
 //         std::optional<std::error_code> ec;
 //         asio::co_spawn(
 //             ctx,
-//             [this, &ec, ... pieces = std::forward<Ts>(pieces)]() mutable -> asio::awaitable<void> {
+//             [this, &ec, ... pieces = std::forward<Ts>(pieces)]() mutable -> asio::awaitable<void>
+//             {
 //                 ec = co_await write_pieces(pieces...);
 //                 co_return;
 //             },

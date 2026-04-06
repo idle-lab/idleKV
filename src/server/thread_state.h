@@ -2,13 +2,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "common/asio_no_exceptions.h"
-#include "server/el_pool.h"
 
-#include <asio/awaitable.hpp>
-#include <asio/co_spawn.hpp>
-#include <asio/detached.hpp>
-#include <asio/io_context.hpp>
-#include <asio/ip/tcp.hpp>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -18,26 +12,15 @@
 
 namespace idlekv {
 
+class EventLoop;
+
 // stores per-thread runtime state such as allocator heap and bound event loop.
 class ThreadState {
-    using Clock = std::chrono::steady_clock;
-    using TimePoint  = std::chrono::steady_clock::time_point;
-    struct CoroState {
-        uint64_t coro_id;
-        uint64_t sched_epoch;
-        TimePoint entered_at;
-    };
 public:
     ThreadState() = default;
 
     static auto Init(size_t PoolIndex, EventLoop* el, std::thread::native_handle_type ThreadId)
         -> void;
-
-    // OnStartup should call on every coro start up.
-    static auto OnStartup() -> uint64_t;
-    static auto OnResume(uint64_t coro_id) -> void;
-    static auto OnSuspendOrFinish(uint64_t coro_id, bool done) -> void;
-    static auto CurCoro() -> CoroState*;
 
     static auto Tlocal() -> ThreadState* { return state_; }
 
@@ -55,9 +38,7 @@ private:
     std::thread::native_handle_type thread_id_;
     size_t                          pool_index_;
 
-    absl::flat_hash_map<uint64_t, CoroState> coro_state_;
-    CoroState*                              cur_coro_     = nullptr;
-    uint64_t                                next_coro_id_ = 1;
+    uint64_t next_coro_id_ = 1;
 
     static thread_local ThreadState* state_;
 };

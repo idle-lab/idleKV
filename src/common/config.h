@@ -24,11 +24,11 @@ constexpr uint64_t GB = 1024 * MB;
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-  #define LIKELY(x)   (__builtin_expect(!!(x), 1))
-  #define UNLIKELY(x) (__builtin_expect(!!(x), 0))
+#define LIKELY(x) (__builtin_expect(!!(x), 1))
+#define UNLIKELY(x) (__builtin_expect(!!(x), 0))
 #else
-  #define LIKELY(x)   (!!(x))
-  #define UNLIKELY(x) (!!(x))
+#define LIKELY(x) (!!(x))
+#define UNLIKELY(x) (!!(x))
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -41,6 +41,18 @@ constexpr uint64_t GB = 1024 * MB;
 #define PREFETCH_W(p)
 #endif
 
+#define DISABLE_COPY(type)                                                                         \
+    type(const type&)            = delete;                                                         \
+    type& operator=(const type&) = delete;
+
+#define DISABLE_MOVE(type)                                                                         \
+    type(type&&)            = delete;                                                              \
+    type& operator=(type&&) = delete;
+
+#define DISABLE_COPY_MOVE(type)                                                                    \
+    DISABLE_COPY(type)                                                                             \
+    DISABLE_MOVE(type)
+
 namespace idlekv {
 
 class Config {
@@ -48,16 +60,16 @@ public:
     Config() : opts_(SERVER_NAME) {
         opts_.add_option("--ip", ip_, "Listen IP")->default_val("0.0.0.0");
         opts_.add_option("--port", port_, "Listen port")->default_val(DEFAULT_PORT);
+        opts_.add_option("--metrics-ip", metrics_ip_, "Prometheus listen IP")
+            ->default_val("0.0.0.0");
+        opts_.add_option("--metrics-port", metrics_port_, "Prometheus metrics port")
+            ->default_val(9108);
 
         opts_.add_option("-c,--config", config_file_path, "Config file path");
         opts_.add_option("--DbNum", db_num_, "number of DB");
     }
 
-    // 不能拷贝不能移动
-    Config(const Config&)            = delete;
-    Config(Config&&)                 = delete;
-    Config& operator=(const Config&) = delete;
-    Config& operator=(Config&&)      = delete;
+    DISABLE_COPY_MOVE(Config);
 
     void Parse(int argc, char** argv) { opts_.parse(argc, argv); }
 
@@ -66,12 +78,16 @@ public:
     bool HasConfigFile() const { return !config_file_path.empty(); }
 
     std::string ip_, port_;
+    std::string metrics_ip_;
     uint16_t    io_threads_     = 1;
     uint16_t    worker_threads_ = 0;
+    uint16_t    metrics_port_   = 0;
 
     std::string config_file_path;
 
     uint8_t db_num_{16};
+
+    uint8_t shard_num_{6};
 
 private:
     CLI::App opts_;
