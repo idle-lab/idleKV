@@ -58,5 +58,6 @@ auto InitSystemCmd(IdleEngine*) -> void;
 auto InitStrings(IdleEngine*) -> void;
 auto InitHash(IdleEngine*) -> void;
 auto InitList(IdleEngine*) -> void;
+auto InitZSet(IdleEngine*) -> void;
 
 } // namespace idlekv

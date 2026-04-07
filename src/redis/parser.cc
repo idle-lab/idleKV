@@ -242,10 +242,6 @@ auto Writer::Flush() -> std::error_code {
         return std::error_code{};
     }
 
-    for (auto& vec : vecs_) {
-        
-    }
-
     // vecs_ preserves the original enqueue order, so a single writev keeps
     // mixed owned/external pieces in the same packet order they were queued.
     auto res = WritevImpl(vecs_);

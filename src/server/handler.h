@@ -1,6 +1,5 @@
 #pragma once
 
-#include "common/asio_no_exceptions.h"
 #include "server/el_pool.h"
 
 #include <boost/asio/ip/address.hpp>

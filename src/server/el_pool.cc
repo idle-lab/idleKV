@@ -5,7 +5,6 @@
 #include "server/fiber_runtime.h"
 #include "utils/cpu/basic.h"
 
-#include <atomic>
 #include <boost/fiber/fiber.hpp>
 #include <boost/fiber/operations.hpp>
 #include <boost/fiber/scheduler.hpp>

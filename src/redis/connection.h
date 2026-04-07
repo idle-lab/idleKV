@@ -1,9 +1,8 @@
 #pragma once
 
 #include "absl/functional/function_ref.h"
-#include "common/asio_no_exceptions.h"
 #include "db/command.h"
-#include "db/client.h"
+#include "db/context.h"
 #include "redis/parser.h"
 #include "server/el_pool.h"
 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "common/asio_no_exceptions.h"
 #include "server/fiber_runtime.h"
 #include "server/thread_state.h"
 #include "utils/cpu/basic.h"
@@ -28,6 +27,8 @@
 #include <variant>
 #include <vector>
 namespace idlekv {
+
+using namespace boost;
 
 inline const uint64_t kMaxParseCpuCycles =
     200 /* us */ * FiberCycleClock::Frequency() / 1'000'000ULL;

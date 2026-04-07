@@ -1,8 +1,6 @@
 #pragma once
 
 #include "absl/container/flat_hash_map.h"
-#include "db/storage/art/art.h"
-#include "db/storage/art/art_key.h"
 #include "db/storage/result.h"
 #include "result.h"
 

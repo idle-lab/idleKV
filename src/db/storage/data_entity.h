@@ -33,12 +33,4 @@ private:
     std::string string_value_;
 };
 
-class String : public DataEntity {
-public:
-    auto GetType() const -> Type { return Type::kString; }
-
-private:
-    std::string string_value_;
-};
-
 } // namespace idlekv

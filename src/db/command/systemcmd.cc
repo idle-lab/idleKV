@@ -1,11 +1,10 @@
 #include "db/command.h"
 #include "db/engine.h"
-#include "redis/connection.h"
+#include "db/context.h"
 #include "redis/error.h"
 
 #include <charconv>
 #include <string>
-#include <vector>
 
 namespace idlekv {
 

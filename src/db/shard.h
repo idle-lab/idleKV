@@ -3,6 +3,7 @@
 #include "common/config.h"
 #include "db/db.h"
 #include "db/storage/alloctor.h"
+#include "db/storage/value.h"
 #include "server/el_pool.h"
 #include "server/fiber_runtime.h"
 
@@ -15,7 +16,6 @@
 #include <memory_resource>
 #include <mimalloc.h>
 #include <new>
-#include <utility>
 #include <vector>
 namespace idlekv {
 
@@ -208,6 +208,8 @@ public:
         for (auto& db : db_slice_) {
             db = std::make_shared<DB>(&mr_);
         }
+
+        PrimeValue::InitMr(&mr_);
     }
 
     template <class Fn>

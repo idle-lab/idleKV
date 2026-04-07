@@ -1,6 +1,5 @@
 #include "db/engine.h"
 
-#include "common/asio_no_exceptions.h"
 #include "common/logger.h"
 #include "db/command.h"
 #include "db/shard.h"

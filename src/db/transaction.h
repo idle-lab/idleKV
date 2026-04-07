@@ -69,7 +69,6 @@ private:
 
         A MultiSub child transaction runs directly on the worker fiber of the
         corresponding shard and does not need to be scheduled.
-
 */
 enum class TxnType : uint8_t {
     Uninitialized,

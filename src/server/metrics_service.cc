@@ -7,7 +7,7 @@
 #include <array>
 #include <boost/asio/read_until.hpp>
 #include <boost/asio/streambuf.hpp>
-#include <cstddef>
+#include <boost/asio/write.hpp>
 #include <sstream>
 #include <string>
 

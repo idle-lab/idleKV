@@ -7,8 +7,6 @@
 #pragma once
 
 #include "absl/base/internal/cycleclock.h"
-#include "common/asio_no_exceptions.h"
-#include "common/logger.h"
 
 #include <boost/asio/execution_context.hpp>
 #include <boost/asio/io_context.hpp>
@@ -567,7 +565,7 @@ public:
 
 namespace idlekv {
 
-auto CurrentIoContext() -> asio::io_context&;
+auto CurrentIoContext() -> boost::asio::io_context&;
 auto FiberSleepFor(std::chrono::steady_clock::duration dur) -> std::error_code;
 
 template <typename Fn>

@@ -1,6 +1,6 @@
 #include "db/command.h"
 #include "db/engine.h"
-#include "db/client.h"
+#include "db/context.h"
 #include "db/shard.h"
 #include "db/storage/result.h"
 #include "redis/error.h"

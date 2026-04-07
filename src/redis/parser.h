@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "absl/container/inlined_vector.h"
-#include "common/asio_no_exceptions.h"
 #include "common/config.h"
 #include "common/logger.h"
 #include "common/result.h"
@@ -30,6 +29,8 @@
 namespace idlekv {
 
 class DataEntity;
+
+using namespace boost;
 
 constexpr size_t kDefaultReadBufferSize  = 4096;
 constexpr size_t kDefaultWriteBufferSize = 2048;

@@ -15,6 +15,7 @@
 #include <array>
 #include <boost/asio/read.hpp>
 #include <boost/asio/registered_buffer.hpp>
+#include <boost/asio/write.hpp>
 #include <boost/fiber/context.hpp>
 #include <boost/fiber/mutex.hpp>
 #include <boost/fiber/operations.hpp>

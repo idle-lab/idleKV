@@ -1,9 +1,9 @@
 #pragma once
 
-#include "common/asio_no_exceptions.h"
 #include "db/storage/data_entity.h"
 #include "db/storage/kvstore.h"
 #include "db/storage/result.h"
+#include "db/storage/value.h"
 
 #include <memory>
 #include <memory_resource>
@@ -16,7 +16,7 @@ namespace idlekv {
 // DB stores data and execute user's commands
 class DB {
 public:
-    using StoreType = KvStore<DummyImpl<std::string, std::shared_ptr<DataEntity>>>;
+    using PrimeTable = KvStore<DummyImpl<std::string, PrimeValue>>;
 
     explicit DB(std::pmr::memory_resource* mr) : prime_(mr) {}
 
@@ -32,7 +32,7 @@ public:
     auto MemoryUsage() -> size_t;
 
 private:
-    StoreType prime_;
+    PrimeTable prime_;
 };
 
 } // namespace idlekv

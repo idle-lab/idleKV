@@ -12,7 +12,6 @@
 #include <cstring>
 #include <memory>
 #include <memory_resource>
-#include <optional>
 #include <type_traits>
 #include <utility>
 
@@ -114,7 +113,7 @@ public:
         PREFETCH_R(root_, 3);
         size_t erased = EraseInternal(root_, &root_, key);
         if (erased != 0) {
-            --size_;
+            size_ -= erased;
         }
         return erased;
     }

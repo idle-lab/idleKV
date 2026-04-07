@@ -1,6 +1,5 @@
 #pragma once
 
-#include "common/asio_no_exceptions.h"
 #include "common/config.h"
 #include "server/el_pool.h"
 #include "server/handler.h"
@@ -13,6 +12,8 @@
 
 namespace idlekv {
 
+using namespace boost::asio::ip;
+
 // coordinates listeners, event loops, and request handlers for the server process.
 class Server {
 public:
@@ -20,7 +21,7 @@ public:
 
     auto DoAccept(Handler* h) -> void;
 
-    auto PickUpConnEl(asio::ip::tcp::socket& sock) -> EventLoop*;
+    auto PickUpConnEl(tcp::socket& sock) -> EventLoop*;
 
     void ListenAndServe();
 

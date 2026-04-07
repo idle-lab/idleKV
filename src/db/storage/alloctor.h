@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common/config.h"
-#include "server/el_pool.h"
+#include "common/logger.h"
 
 #include <array>
 #include <atomic>
