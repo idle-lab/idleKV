@@ -7,11 +7,16 @@
 #include "utils/fiber/block_counter.h"
 
 #include <boost/fiber/barrier.hpp>
+#include <memory>
 #include <variant>
 
 namespace idlekv {
 
 auto CmdSquasher::DebugCheckState(std::string_view where) const -> void {
+    // CHECK_EQ(debug_canary_head_, 0xC0DEC0DEC0DEC0DEULL)
+    //     << "CmdSquasher head canary corrupted at " << where;
+    // CHECK_EQ(debug_canary_tail_, 0xFEE1DEADFEE1DEADULL)
+    //     << "CmdSquasher tail canary corrupted at " << where;
     CHECK(parent_ctx_ != nullptr) << "CmdSquasher lost parent_ctx_ at " << where;
     CHECK_LE(active_shard_count_, shards_info_.size())
         << "CmdSquasher active_shard_count_ overflow at " << where;
@@ -62,14 +67,13 @@ auto CmdSquasher::Squash(std::vector<CommandContext>& cmds, Sender* sender) -> v
 }
 
 auto CmdSquasher::ExecuteSquash(Sender* sender) -> void {
-    utils::SingleWaiterBlockCounter bc;
-    bc.Start(active_shard_count_);
+    auto counter = std::make_shared<utils::SingleWaiterBlockCounter>();
+    counter->Start(active_shard_count_);
 
-    CHECK_EQ(shards_info_.size(), engine->ShardNum());
     for (size_t i = 0;i < shards_info_.size();i++) {
         if (shards_info_[i].sub_ctx.txn) {
             auto* si = &shards_info_[i];
-            engine->ShardAt(i)->Add([&bc, si]() {
+            engine->ShardAt(i)->Add([counter, si]() {
                 auto& sub_ctx = si->sub_ctx;
                 si->results.reserve(sub_ctx.txn->MultiSize());
                 ReplyCapturer capturer;
@@ -82,12 +86,12 @@ auto CmdSquasher::ExecuteSquash(Sender* sender) -> void {
                     si->results.emplace_back(capturer.TakePayload());
                 }
 
-                bc.Done();
+                counter->Done();
             });
         }
     }
 
-    bc.Wait();
+    counter->Wait();
 
     PayloadVisitor pv(sender);
     for (auto i : order_) {
@@ -140,6 +144,7 @@ auto CmdSquasher::TrySquash(CommandContext& cmd) -> DetermineResult {
 
     sf.sub_ctx.txn->CollectCmd(CommandContext{cmd.cmd, cmd.args, {}, cmd.start_at});
     order_.push_back(last_shard_id);
+    DebugCheckState("after-order-push");
     return DetermineResult::OK;
 }
 

@@ -64,13 +64,11 @@ public:
 
     auto GetSender() -> Sender& { return s_; }
 
-    auto DbIndex() const -> size_t { return db_index_; }
     auto GetSocket() -> asio::ip::tcp::socket& { return *socket_; }
     auto GetExecutor() -> const asio::any_io_executor& {
         CHECK(socket_.has_value());
         return socket_->get_executor();
     }
-    void SetDbIndex(size_t DbIndex) { db_index_ = DbIndex; }
 
     auto RemoteEndpoint() const -> asio::ip::tcp::endpoint {
         if (!socket_.has_value()) {
@@ -100,8 +98,6 @@ private:
     std::optional<std::function<void()> > buffer_releaser_;
 
     EventLoop* el_;
-    size_t     db_index_ = 0;
-
     boost::fibers::fiber                  async_fiber_;
     boost::fibers::condition_variable_any async_cv_;
 

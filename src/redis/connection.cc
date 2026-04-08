@@ -306,7 +306,6 @@ auto Connection::Init(asio::ip::tcp::socket&& socket) -> void {
     CHECK(socket_.has_value() == false) << "override a connection that is currently in use";
     socket_.emplace(std::move(socket));
     closing_ = false;
-    db_index_ = 0;
     cur_args_ = RedisService::Tlocal()->GetCmdArgsOrCreate();
     ctx_ = std::make_unique<ExecContext>(this);
 }

@@ -98,9 +98,10 @@ public:
 private:
     auto DebugCheckState(std::string_view where) const -> void;
 
-    absl::InlinedVector<ShardExecInfo, 6> shards_info_;
+    std::vector<ShardExecInfo> shards_info_;
     size_t active_shard_count_{0};
     std::vector<size_t> order_;
+
 
     ExecContext* parent_ctx_;
 
