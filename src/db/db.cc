@@ -1,6 +1,7 @@
 #include "db/db.h"
+#include "db/storage/value.h"
 
-#include <memory>
+#include <optional>
 #include <string_view>
 
 namespace idlekv {
@@ -11,14 +12,14 @@ auto DB::Locks(const std::vector<std::string>& ws, const std::vector<std::string
     return true;
 }
 
-auto DB::Set(std::string key, DataEntity value) -> Result<bool> {
-    return prime_.Set(std::move(key), std::make_shared<DataEntity>(std::move(value)));
+auto DB::Set(std::string key, PrimeValue value) -> Result<void> {
+    return prime_.Set(std::move(key), std::move(value));
 }
 
-auto DB::Get(std::string_view key) -> Result<std::shared_ptr<DataEntity>> {
+auto DB::Get(std::string_view key) -> Result<PrimeValue> {
     return prime_.Get(key);
 }
 
-auto DB::Del(std::string_view key) -> Result<bool> { return prime_.Del(key); }
+auto DB::Del(std::string_view key) -> Result<void> { return prime_.Del(key); }
 
 } // namespace idlekv

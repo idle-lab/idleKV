@@ -105,6 +105,10 @@ public:
         return LookupInternal(root_, key);
     }
 
+    auto Range(ArtKey max, ArtKey min) noexcept -> ValueType* {
+        // TODO(c113)
+    }
+
     auto Erase(ArtKey key) noexcept -> size_t {
         if (UNLIKELY(!root_)) [[unlikely]] {
             return 0;

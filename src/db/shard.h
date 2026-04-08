@@ -209,7 +209,7 @@ public:
             db = std::make_shared<DB>(&mr_);
         }
 
-        PrimeValue::InitMr(&mr_);
+        Value::InitMr(&mr_);
     }
 
     template <class Fn>
@@ -218,6 +218,7 @@ public:
     }
 
     auto MemoryUsage() -> size_t { return mr_.MemoryUsage(); }
+    auto MemoryResource() -> std::pmr::memory_resource* { return &mr_; }
 
     auto DbAt(size_t index) -> DB* {
         CHECK_LT(index, db_slice_.size());

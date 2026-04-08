@@ -2,8 +2,12 @@
 
 namespace idlekv {
 
-auto InitZSet(IdleEngine* eng) -> void {
+auto ZAdd(ExecContext* ctx, CmdArgs& args) -> void {
 
+}
+
+auto InitZSet(IdleEngine* eng) -> void {
+    
 }
 
 } // namespace idlekv

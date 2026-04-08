@@ -2,6 +2,7 @@
 
 #include "common/logger.h"
 #include "common/result.h"
+#include "db/storage/value.h"
 #include "metric/prometheus.h"
 
 #include <algorithm>
@@ -173,7 +174,6 @@ auto Reader::HasMore() -> bool { return buf_.Buffered() > 0; }
 auto Writer::ResetWriteState() -> void {
     buf_.Clear();
     vecs_.clear();
-    keepalive_.clear();
     queued_size_ = 0;
 }
 
@@ -196,26 +196,7 @@ auto Writer::WriteView(std::string_view s) -> std::error_code {
     return std::error_code{};
 }
 
-auto Writer::Write(std::string_view s) -> std::error_code {
-    if (buf_.WriteSize() < s.size() || queued_size_ + s.size() >= kMaxReplyFlushBytes) {
-        auto ec = Flush();
-        if (ec) {
-            return ec;
-        }
-    }
-
-    const size_t offset = buf_.Buffered();
-    char*        begin  = buf_.Data() + offset;
-    std::memcpy(begin, s.data(), s.size());
-
-    queued_size_ += s.size();
-    buf_.Commit(s.size());
-    vecs_.emplace_back(begin, s.size());
-
-    return std::error_code{};
-}
-
-auto Writer::WriteRef(std::string_view s, std::shared_ptr<const void> holder) -> std::error_code {
+auto Writer::WriteRef(std::string_view s) -> std::error_code {
     if (s.empty()) {
         return std::error_code{};
     }
@@ -230,9 +211,6 @@ auto Writer::WriteRef(std::string_view s, std::shared_ptr<const void> holder) ->
 
     queued_size_ += s.size();
     vecs_.emplace_back(s.data(), s.size());
-    if (holder) {
-        keepalive_.push_back(std::move(holder));
-    }
 
     return std::error_code{};
 }
@@ -319,15 +297,16 @@ auto Sender::SendPong() -> void {
     ec_ = wr_->WritePieces("+PONG\r\n");
 }
 
-auto Sender::SendBulkString(std::string_view s, std::shared_ptr<const void> holder) -> void {
+auto Sender::SendBulkString(std::string_view s, PrimeValue holder) -> void {
     BatchGuard bg(this);
 
+    keepalive_.emplace_back(std::move(holder));
     ec_ = wr_->WritePieces(BULK_STRING_PREFIX, s.size(), CRLF);
     if (!ec_) {
-        ec_ = wr_->WriteRef(s, holder);
+        ec_ = wr_->WriteRef(s);
     }
     if (!ec_) {
-        ec_ = wr_->Write(CRLF);
+        ec_ = wr_->WritePieces(CRLF);
     }
 }
 
@@ -347,6 +326,9 @@ auto Sender::SendError(std::string_view s) -> void {
     ec_ = wr_->WritePieces(ERROR_PREFIX, s, CRLF);
 }
 
-auto Sender::Flush() -> void { ec_ = wr_->Flush(); }
+auto Sender::Flush() -> void { 
+    ec_ = wr_->Flush();
+    keepalive_.clear();
+}
 
 } // namespace idlekv

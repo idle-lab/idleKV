@@ -1,17 +1,17 @@
 #pragma once
 
 #include "common/config.h"
-#include "common/logger.h"
 #include "db/engine.h"
 #include "db/shard.h"
-#include "db/storage/data_entity.h"
 #include "db/context.h"
+#include "db/storage/value.h"
 #include "redis/parser.h"
 
 #include <absl/container/inlined_vector.h>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string_view>
 #include <string>
 #include <variant>
 #include <vector>
@@ -21,7 +21,7 @@ namespace idlekv {
 struct Ok {};
 struct Pong {};
 struct SimpleString : std::string {};
-struct BulkString : std::shared_ptr<const DataEntity> {};
+struct BulkString : PrimeValue {};
 using Integer = int64_t;
 struct Error : std::string {};
 using Null = std::nullptr_t;
@@ -37,7 +37,7 @@ public:
     auto operator()(const Pong&) -> void { sender_->SendPong(); }
     auto operator()(const SimpleString& s) -> void { sender_->SendSimpleString(s); }
     auto operator()(const BulkString& s) -> void {
-        sender_->SendBulkString(s->AsString(), s);
+        sender_->SendBulkString(s->GetString(), std::move(s));
     }
     auto operator()(const Integer& i) -> void { sender_->SendInteger(i); }
     auto operator()(const Error& e) -> void { sender_->SendError(e); }
@@ -54,9 +54,8 @@ public:
     }
     auto SendOk() -> void override { payload_ = Ok{}; }
     auto SendPong() -> void override { payload_ = Pong{}; }
-    auto SendBulkString(std::string_view, std::shared_ptr<const void> holder) -> void override {
-        CHECK(holder);
-        payload_ = BulkString(std::static_pointer_cast<const DataEntity>(holder));
+    auto SendBulkString(std::string_view, PrimeValue holder) -> void override {
+        payload_ = BulkString(std::move(holder));
     }
     auto SendNullBulkString() -> void override { payload_ = Null{}; }
     auto SendInteger(int64_t value) -> void override { payload_ = Integer(value); }
@@ -97,6 +96,7 @@ public:
     auto ShardInfo(ShardId id) -> ShardExecInfo&;
 
 private:
+    auto DebugCheckState(std::string_view where) const -> void;
 
     absl::InlinedVector<ShardExecInfo, 6> shards_info_;
     size_t active_shard_count_{0};

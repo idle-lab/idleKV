@@ -47,6 +47,7 @@ public:
         const size_t wait_generation = generation_;
         cv_.wait(lk, [&]() { return count_ == 0 || generation_ != wait_generation; });
 
+        CHECK_EQ(wait_generation, generation_);
         waiter_active_ = false;
     }
 

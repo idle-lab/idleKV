@@ -67,3 +67,10 @@ target_link_libraries(idlekv
     PRIVATE
         idlekv_core
 )
+
+option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
+
+if(ENABLE_ASAN)
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer -g)
+    add_link_options(-fsanitize=address)
+endif()

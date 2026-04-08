@@ -254,16 +254,16 @@ auto Connection::AsyncHandle() noexcept -> void {
 
         // If the pipeline queue is too long, we squash all pending requests in the queue without
         // yielding.
-        if (pipeline_queue_.size() > kPipelineSquashThreshold) {
-            // Squash pipeline cmd
-            auto gen = [this]() -> utils::Generator<PendingRequest> {
-                for (size_t idx = 0; idx < pipeline_queue_.size(); idx++) {
+        if (pipeline_queue_.size() >= kPipelineSquashThreshold) {
+            // Keep the coroutine lambda alive while DispatchManyCmd iterates the generator.
+            size_t squash_limit = pipeline_queue_.size();
+            auto make_gen = [this, squash_limit]() -> utils::Generator<PendingRequest> {
+                for (size_t idx = 0; idx < squash_limit; idx++) {
                     auto& req = pipeline_queue_[idx];
                     co_yield PendingRequest{.args = req.args_ptr.get(), .started_at = req.started_at};
                 }
-            }();
-
-            size_t squash_limit = pipeline_queue_.size();
+            };
+            auto gen = make_gen();
 
             // ======= start squash =======
             size_t processed = engine->DispatchManyCmd(ctx_.get(), gen, squash_limit);

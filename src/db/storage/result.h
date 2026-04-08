@@ -3,13 +3,18 @@
 #include "common/config.h"
 
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <utility>
 
 namespace idlekv {
 
-enum struct OpStatus : uint8_t { OK, DupKey, NoSuchKey, Unknown };
+enum struct OpStatus : uint8_t { 
+    OK, 
+    DupKey, 
+    NoSuchKey,
+    WrongType,
+    Unknown
+};
 
 inline auto OpStatusToString(OpStatus ops) -> std::string {
     switch (ops) {
@@ -29,18 +34,29 @@ inline auto OpStatusToString(OpStatus ops) -> std::string {
 template <class PayLoad>
 struct Result {
     Result() = default;
-    Result(OpStatus s, const std::optional<PayLoad>& res) : s_(s), res_(std::move(res)) {}
+    Result(OpStatus s) : status(s) {}
+    Result(OpStatus s, PayLoad res) : status(s), payload(std::move(res)) {}
 
-    auto operator==(const OpStatus& s) const -> bool { return s_ == s; }
+    auto operator==(const OpStatus& s) const -> bool { return status == s; }
 
     auto Ok() const -> bool { return *this == OpStatus::OK; }
-    auto Message() const -> std::string { return OpStatusToString(s_); }
+    auto Message() const -> std::string { return OpStatusToString(status); }
 
-    auto Get() -> PayLoad& { return res_.value(); }
-    auto Get() const -> const PayLoad& { return res_.value(); }
+    auto Get() -> PayLoad& { return payload; }
+    auto Get() const -> const PayLoad& { return payload; }
 
-    OpStatus               s_;
-    std::optional<PayLoad> res_;
+    OpStatus               status;
+    PayLoad payload;
+};
+
+template <>
+struct Result<void> {
+    Result() = default;
+    Result(OpStatus s) : status(s) {}
+    auto operator==(const OpStatus& s) const -> bool { return status == s; }
+    auto Ok() const -> bool { return *this == OpStatus::OK; }
+    auto Message() const -> std::string { return OpStatusToString(status); }
+    OpStatus               status;
 };
 
 } // namespace idlekv

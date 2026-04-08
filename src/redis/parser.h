@@ -5,7 +5,7 @@
 #include "common/logger.h"
 #include "common/result.h"
 #include "db/command.h"
-#include "db/storage/data_entity.h"
+#include "db/storage/value.h"
 
 #include <array>
 #include <boost/asio/buffer.hpp>
@@ -235,12 +235,9 @@ public:
     // caller should ensure that s is valid until the next flush.
     auto WriteView(std::string_view s) -> std::error_code;
 
-    // caller should ensure that s is valid until the next flush.
-    auto Write(std::string_view s) -> std::error_code;
-
     // Queue an external slice without copying and keep `holder` alive until the
     // pending reply batch is flushed.
-    auto WriteRef(std::string_view s, std::shared_ptr<const void> holder) -> std::error_code;
+    auto WriteRef(std::string_view s) -> std::error_code;
 
     // Flush all queued slices, including both owned buffer slices and
     // externally referenced views added via write().
@@ -275,7 +272,6 @@ private:
 
     IOBuf                                    buf_;
     std::vector<BufView>                     vecs_;
-    std::vector<std::shared_ptr<const void>> keepalive_;
     size_t                                   queued_size_{0};
 };
 
@@ -388,7 +384,7 @@ public:
     virtual auto SendSimpleString(std::string_view s) -> void                          = 0;
     virtual auto SendOk() -> void                                                      = 0;
     virtual auto SendPong() -> void                                                    = 0;
-    virtual auto SendBulkString(std::string_view s, std::shared_ptr<const void> holder) -> void = 0;
+    virtual auto SendBulkString(std::string_view s, PrimeValue holder) -> void = 0;
     virtual auto SendNullBulkString() -> void                                          = 0;
     virtual auto SendInteger(int64_t value) -> void                                    = 0;
     virtual auto SendError(std::string_view s) -> void                                 = 0;
@@ -397,6 +393,7 @@ public:
 };
 
 class Sender : public SenderBase {
+    using LifecycleProtector = std::shared_ptr<const void>;
 public:
     Sender(Writer* wr) : wr_(wr) {}
 
@@ -416,7 +413,7 @@ public:
     auto SendSimpleString(std::string_view s) -> void override;
     auto SendOk() -> void override;
     auto SendPong() -> void override;
-    auto SendBulkString(std::string_view s, std::shared_ptr<const void> holder) -> void override;
+    auto SendBulkString(std::string_view s, PrimeValue holder) -> void override;
     auto SendNullBulkString() -> void override;
     auto SendInteger(int64_t value) -> void override;
     auto SendError(std::string_view s) -> void override;
@@ -429,12 +426,14 @@ public:
     auto Clear() -> void {
         ec_ = std::error_code{};
         wr_->Clear();
+        keepalive_.clear();
     }
 
 private:
     std::error_code ec_;
 
     bool    batched_{true};
+    absl::InlinedVector<LifecycleProtector, 32> keepalive_;
     Writer* wr_;
 };
 

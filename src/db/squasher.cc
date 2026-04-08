@@ -2,14 +2,45 @@
 #include "common/logger.h"
 #include "db/engine.h"
 #include "db/shard.h"
-#include "db/transaction.h"
 #include "db/context.h"
 #include "redis/parser.h"
 #include "utils/fiber/block_counter.h"
 
+#include <boost/fiber/barrier.hpp>
 #include <variant>
 
 namespace idlekv {
+
+auto CmdSquasher::DebugCheckState(std::string_view where) const -> void {
+    CHECK(parent_ctx_ != nullptr) << "CmdSquasher lost parent_ctx_ at " << where;
+    CHECK_LE(active_shard_count_, shards_info_.size())
+        << "CmdSquasher active_shard_count_ overflow at " << where;
+    CHECK(shards_info_.empty() || shards_info_.size() == engine->ShardNum())
+        << "CmdSquasher shards_info_ size mismatch at " << where;
+
+    for (size_t shard_id = 0; shard_id < shards_info_.size(); ++shard_id) {
+        const auto& si = shards_info_[shard_id];
+        if (si.sub_ctx.txn) {
+            CHECK_GE(si.results.size(), si.send_idx)
+                << "CmdSquasher send_idx overflow at " << where << ", shard=" << shard_id;
+        } else {
+            CHECK_EQ(si.send_idx, 0U)
+                << "CmdSquasher inactive shard has send progress at " << where
+                << ", shard=" << shard_id;
+            CHECK(si.results.empty())
+                << "CmdSquasher inactive shard has buffered replies at " << where
+                << ", shard=" << shard_id;
+        }
+    }
+
+    for (auto shard_id : order_) {
+        CHECK_LT(shard_id, shards_info_.size())
+            << "CmdSquasher order_ corrupted at " << where << ", shard=" << shard_id;
+        CHECK(shards_info_[shard_id].sub_ctx.txn)
+            << "CmdSquasher order_ points to inactive shard at " << where
+            << ", shard=" << shard_id;
+    }
+}
 
 auto CmdSquasher::Squash(std::vector<CommandContext>& cmds, Sender* sender, ExecContext* client) -> size_t {
     CmdSquasher cs{client};
@@ -34,27 +65,25 @@ auto CmdSquasher::ExecuteSquash(Sender* sender) -> void {
     utils::SingleWaiterBlockCounter bc;
     bc.Start(active_shard_count_);
 
-    auto cb = [&]() {
-        auto* shard = engine->LocalShard();
-        auto& si = shards_info_[shard->GetShardId()];
-        auto& sub_ctx = si.sub_ctx;
-        si.results.reserve(sub_ctx.txn->MultiSize());
-        ReplyCapturer capturer;
-        sub_ctx.sender = &capturer;
-
-        while(!sub_ctx.txn->IsFinished()) {
-            auto cmdctx = sub_ctx.txn->MultiNext();
-
-            cmdctx.cmd->Exec(&sub_ctx, *cmdctx.args);   
-            si.results.emplace_back(capturer.TakePayload());
-        }
-
-        bc.Done();
-    };
-
+    CHECK_EQ(shards_info_.size(), engine->ShardNum());
     for (size_t i = 0;i < shards_info_.size();i++) {
         if (shards_info_[i].sub_ctx.txn) {
-            engine->ShardAt(i)->Add(cb);
+            auto* si = &shards_info_[i];
+            engine->ShardAt(i)->Add([&bc, si]() {
+                auto& sub_ctx = si->sub_ctx;
+                si->results.reserve(sub_ctx.txn->MultiSize());
+                ReplyCapturer capturer;
+                sub_ctx.sender = &capturer;
+
+                while (!sub_ctx.txn->IsFinished()) {
+                    auto cmdctx = sub_ctx.txn->MultiNext();
+
+                    cmdctx.cmd->Exec(&sub_ctx, *cmdctx.args);
+                    si->results.emplace_back(capturer.TakePayload());
+                }
+
+                bc.Done();
+            });
         }
     }
 
