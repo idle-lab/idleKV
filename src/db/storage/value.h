@@ -72,7 +72,7 @@ public:
 
     static auto InitMr(std::pmr::memory_resource* mr) -> void { value_mr = mr; }
 
-    explicit Value(std::pmr::memory_resource* mr) : mr_(mr) {}
+    explicit Value() {}
   
     DISABLE_COPY_MOVE(Value);
 
@@ -128,14 +128,14 @@ private:
 
         switch (len_tag_) {
         case STR_TAG:
-            mr_->deallocate(value_.str.ptr_, value_.str.size_, alignof(char));
+            value_mr->deallocate(value_.str.ptr_, value_.str.size_, alignof(char));
             break;
         case OBJ_TAG:
             switch (value_.obj.Type()) {
             case ObjectType::ZSet:
                 value_.obj.GetAs<ZSet>()->~ZSet();
                 value_.obj.~Object();
-                mr_->deallocate(value_.obj.ptr_, sizeof(ZSet), alignof(ZSet));
+                value_mr->deallocate(value_.obj.ptr_, sizeof(ZSet), alignof(ZSet));
                 break;
             default:
                 UNREACHABLE();
@@ -168,12 +168,11 @@ private:
     // 最高位存类型是否为字符串
     uint8_t len_tag_ : 5 {0};
     uint8_t has_ttl_ : 1 {false};
-    std::pmr::memory_resource* mr_{nullptr};
 
     inline thread_local static std::pmr::memory_resource* value_mr{nullptr};
 };
 
-// static_assert(sizeof(Value) == 17);
+static_assert(sizeof(Value) == 17);
 
 using PrimeValue = std::shared_ptr<Value>;
 
@@ -198,8 +197,8 @@ inline auto MakeObjectValue(Value& value, ObjectType type, Args&&... args) -> vo
 }
 
 template <Value::TagEnum Tag, class... Args>
-inline auto MakeValue(std::pmr::memory_resource* mr, Args&&... args) -> PrimeValue {
-    auto pv = std::make_shared<Value>(mr);
+inline auto MakeValue(Args&&... args) -> PrimeValue {
+    auto pv = std::make_shared<Value>();
 
     if constexpr (Tag == Value::STR_TAG) {
         pv->InitString(std::forward<Args>(args)...);

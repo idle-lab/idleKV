@@ -10,7 +10,6 @@
 #include <absl/container/inlined_vector.h>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <string_view>
 #include <string>
 #include <variant>
@@ -102,6 +101,8 @@ private:
     size_t active_shard_count_{0};
     std::vector<size_t> order_;
 
+    // uint64_t debug_canary_head_{0xC0DEC0DEC0DEC0DEULL};
+    // uint64_t debug_canary_tail_{0xFEE1DEADFEE1DEADULL};
 
     ExecContext* parent_ctx_;
 
