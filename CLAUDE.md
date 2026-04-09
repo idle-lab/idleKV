@@ -2,42 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Build Commands
+## Build Instructions
 
-```bash
-# Release build (default)
-make release
-
-# Debug build
-make debug
-
-# Clean
-make clean
-
-# Format check
-make format-check
-
-# Auto-format
-make format
-
-# Run all tests (after building)
-ninja unit_test -C build -j$(nproc) && ./build/unit_test
-
-# Run a single test
-./build/unit_test --gtest_filter=TestSuiteName.TestName
-
-# Run with AddressSanitizer
-cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -B build -S . -G Ninja && ninja idlekv -C build
-
-# Build with io_uring backend
-cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_ASIO_IO_URING=ON -B build -S . -G Ninja && ninja idlekv -C build
-```
-
-Build uses Ninja + CMake. The binary output is `build/idlekv`. Tests use Google Test.
+**For complete build instructions, see [docs/build-from-source.md](docs/build-from-source.md)**
 
 ## Architecture
 
-idleKV is a Redis-protocol-compatible (RESP2) key-value store written in C++20.
+**IdleKV** is a high-performance, Redis compatible in-memory data store written in C++20. It delivers significantly higher throughput than traditional single-threaded Redis implementations.
+
+### Key Characteristics
+
+- **Language**: C++20
+- **Architecture**: Shared-nothing multi-threaded design (via `Boost.fiber` library)
+- **Build System**: CMake(3.28.3) + Ninja
+- **Target Platform**: Linux (kernel 5.11+ recommended)
+- **Protocols**: Redis RESP2
+
 
 ### Concurrency Model: Boost.Fiber + Boost.Asio
 
@@ -98,3 +78,28 @@ When a pipeline has multiple commands, the `CmdSquasher` groups them by shard. C
 ### Third-Party Dependencies (vendored in `third_part/`)
 
 abseil, mimalloc, spdlog, gtest. Non-vendored: Boost (fiber, context, system, thread), xxhash, CLI11.
+
+## Development Rules
+
+### Validation Checklist
+
+Before claiming a task is complete, verify:
+
+#### Code Quality
+
+- [ ] Code compiles without errors: `cd build-dbg && ninja dragonfly`
+- [ ] Code follows Google C++ Style Guide (run `make format-check`)
+- [ ] No new ASAN/UBSAN violations
+
+### Documentation
+
+- [ ] Public APIs have comments explaining purpose
+- [ ] Complex algorithms have explanatory comments
+- [ ] README or docs (include `README.md`, `CLAUDE.md`, files in `docs/` folder etc) updated if behavior changes
+
+#### Performance
+
+- [ ] No obvious performance regressions (run benchmarks if needed)
+- [ ] No unnecessary allocations in hot paths
+- [ ] Lock-free data structures used where appropriate
+
