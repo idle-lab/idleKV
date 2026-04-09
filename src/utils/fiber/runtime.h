@@ -21,14 +21,17 @@
 #include <boost/fiber/mutex.hpp>
 #include <boost/fiber/operations.hpp>
 #include <boost/fiber/scheduler.hpp>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <sys/stat.h>
-#include <system_error>
+#include <mutex>
+#include <string>
 #include <utility>
 
 namespace idlekv {
+
 enum class FiberPriority : uint8_t {
     NORMAL     = 0, // default priority
     BACKGROUND = 1, // background priority, runs when no NORMAL fibers are ready.
@@ -563,76 +566,4 @@ public:
 
 } // namespace boost::asio
 
-namespace idlekv {
 
-auto CurrentIoContext() -> boost::asio::io_context&;
-auto FiberSleepFor(std::chrono::steady_clock::duration dur) -> std::error_code;
-
-template <typename Fn>
-auto LaunchFiberDetached(FiberPriority priority, Fn&& fn) -> void {
-    auto* props = static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, priority));
-    boost::fibers::fiber(props, std::allocator_arg, boost::fibers::default_stack(),
-                         std::forward<Fn>(fn))
-        .detach();
-}
-
-template <typename Fn>
-auto LaunchFiberDetached(Fn&& fn) -> void {
-    LaunchFiberDetached(FiberPriority::NORMAL, std::forward<Fn>(fn));
-}
-
-template <typename Fn>
-auto LaunchFiber(FiberPriority priority, Fn&& fn) -> boost::fibers::fiber {
-    auto* props = static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, priority));
-    return boost::fibers::fiber(props, std::allocator_arg, boost::fibers::default_stack(),
-                                std::forward<Fn>(fn));
-}
-
-template <typename Fn>
-auto LaunchFiber(FiberProps props, Fn&& fn) -> boost::fibers::fiber {
-    auto* props_ptr =
-        static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, props.Priority()));
-    return boost::fibers::fiber(props_ptr, std::allocator_arg, boost::fibers::default_stack(),
-                                std::forward<Fn>(fn));
-}
-
-template <typename Fn>
-auto LaunchFiber(Fn&& fn) -> boost::fibers::fiber {
-    return LaunchFiber(FiberPriority::NORMAL, std::forward<Fn>(fn));
-}
-
-inline auto MaybeYieldOnCpuBudget(uint64_t budget_cycles) noexcept -> bool {
-    auto* ctx = boost::fibers::context::active();
-    if (ctx == nullptr || !ctx->is_context(boost::fibers::type::worker_context)) {
-        return false;
-    }
-
-    auto* raw = ctx->get_properties();
-    if (raw == nullptr) {
-        return false;
-    }
-
-    auto& props = static_cast<FiberProps&>(*raw);
-    if (props.last_resume_cycle == 0) {
-        return false;
-    }
-
-    if (!boost::fibers::has_ready_fibers()) {
-        return false;
-    }
-
-    const uint64_t now = FiberCycleClock::Now();
-
-    if (now < props.last_resume_cycle) {
-        return false;
-    }
-
-    if (now - props.last_resume_cycle < budget_cycles) {
-        return false;
-    }
-
-    boost::this_fiber::yield();
-    return true;
-}
-
-} // namespace idlekv

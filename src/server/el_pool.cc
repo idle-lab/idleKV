@@ -2,7 +2,6 @@
 #include "server/el_pool.h"
 
 #include "common/logger.h"
-#include "server/fiber_runtime.h"
 #include "utils/cpu/basic.h"
 
 #include <boost/fiber/fiber.hpp>

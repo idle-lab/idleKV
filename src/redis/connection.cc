@@ -9,8 +9,8 @@
 #include "redis/parser.h"
 #include "redis/service.h"
 #include "server/el_pool.h"
-#include "server/fiber_runtime.h"
 #include "utils/coroutine/generator.h"
+#include "utils/fiber/runtime.h"
 
 #include <array>
 #include <boost/asio/read.hpp>

@@ -3,10 +3,9 @@
 #include "common/config.h"
 #include "common/logger.h"
 #include "server/el_pool.h"
-#include "server/fiber_runtime.h"
 #include "server/handler.h"
 #include "server/thread_state.h"
-#include "utils/time/time.h"
+#include "utils/fiber/runtime.h"
 
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
@@ -57,7 +56,8 @@ Server::Server(const Config& cfg) {
 }
 
 auto Server::DoAccept(Handler* h) -> void {
-    asio::ip::tcp::acceptor   acceptor(CurrentIoContext());
+    auto& ctx = ThreadState::Tlocal()->GetEventLoop()->IoContext();
+    asio::ip::tcp::acceptor   acceptor(ctx);
     boost::system::error_code ec;
 
     // open and prepare the listening socket for this handler.
@@ -90,7 +90,7 @@ auto Server::DoAccept(Handler* h) -> void {
 
     for (;;) {
         boost::system::error_code accept_ec;
-        asio::ip::tcp::socket     socket(CurrentIoContext());
+        asio::ip::tcp::socket     socket(ctx);
         acceptor.async_accept(socket, boost::fibers::asio::yield[accept_ec]);
 
         if (accept_ec) {
@@ -101,7 +101,7 @@ auto Server::DoAccept(Handler* h) -> void {
 
             if (accept_ec == ToStdErrorCode(asio::error::no_descriptors)) {
                 LOG(warn, "FD limit reached");
-                DISCARD_RESULT(utils::SetTimeout(std::chrono::seconds(1)));
+                boost::this_fiber::sleep_for(std::chrono::seconds(1));
                 continue;
             }
 

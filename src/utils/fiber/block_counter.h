@@ -1,10 +1,11 @@
 #pragma once
 
-#include "common/logger.h"
-
+#include <boost/assert.hpp>
 #include <boost/fiber/condition_variable.hpp>
 #include <boost/fiber/detail/spinlock.hpp>
+#include <cstddef>
 #include <memory>
+#include <mutex>
 
 namespace idlekv::utils {
 
@@ -15,10 +16,11 @@ public:
     SingleWaiterBlockCounter() : detail_(std::make_shared<detail>()) {}
 
     auto Start(size_t count) -> void {
-        CHECK(count > 0);
+        BOOST_ASSERT_MSG(count > 0, "SingleWaiterBlockCounter::Start requires count > 0");
         std::unique_lock<boost::fibers::detail::spinlock> lk(detail_->state_splk_);
 
-        CHECK_EQ(detail_->count_, size_t{0});
+        BOOST_ASSERT_MSG(detail_->count_ == size_t{0},
+                         "SingleWaiterBlockCounter::Start requires an idle counter");
         detail_->count_ = count;
         ++detail_->generation_;
     }
@@ -29,7 +31,8 @@ public:
         {
             std::unique_lock<boost::fibers::detail::spinlock> lk(detail_->state_splk_);
 
-            CHECK_GT(detail_->count_, size_t{0});
+            BOOST_ASSERT_MSG(detail_->count_ > size_t{0},
+                             "SingleWaiterBlockCounter::Done requires a positive counter");
             --detail_->count_;
             notify = detail_->count_ == 0;
         }
@@ -45,7 +48,8 @@ public:
             return;
         }
 
-        CHECK(!detail_->waiter_active_);
+        BOOST_ASSERT_MSG(!detail_->waiter_active_,
+                         "SingleWaiterBlockCounter only supports one active waiter");
         detail_->waiter_active_ = true;
 
         const size_t wait_generation = detail_->generation_;
@@ -53,7 +57,8 @@ public:
             return detail_->count_ == 0 || detail_->generation_ != wait_generation;
         });
 
-        CHECK_EQ(wait_generation, detail_->generation_);
+        BOOST_ASSERT_MSG(wait_generation == detail_->generation_,
+                         "SingleWaiterBlockCounter generation changed while waiting");
         detail_->waiter_active_ = false;
     }
 

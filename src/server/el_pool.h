@@ -1,8 +1,8 @@
 #pragma once
 
-#include "server/fiber_runtime.h"
 #include "server/thread_state.h"
 #include "utils/cpu/basic.h"
+#include "utils/fiber/runtime.h"
 
 #include <atomic>
 #include <boost/asio/executor_work_guard.hpp>
@@ -34,6 +34,74 @@ inline const uint64_t kMaxParseCpuCycles =
     200 /* us */ * FiberCycleClock::Frequency() / 1'000'000ULL;
 inline const uint64_t kMaxSquashCpuCycles =
     500 /* us */ * FiberCycleClock::Frequency() / 1'000'000ULL;
+
+
+template <typename Fn>
+auto LaunchFiberDetached(FiberPriority priority, Fn&& fn) -> void {
+    auto* props = static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, priority));
+    boost::fibers::fiber(props, std::allocator_arg, boost::fibers::default_stack(),
+                         std::forward<Fn>(fn))
+        .detach();
+}
+
+template <typename Fn>
+auto LaunchFiberDetached(Fn&& fn) -> void {
+    LaunchFiberDetached(FiberPriority::NORMAL, std::forward<Fn>(fn));
+}
+
+template <typename Fn>
+auto LaunchFiber(FiberPriority priority, Fn&& fn) -> boost::fibers::fiber {
+    auto* props = static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, priority));
+    return boost::fibers::fiber(props, std::allocator_arg, boost::fibers::default_stack(),
+                                std::forward<Fn>(fn));
+}
+
+template <typename Fn>
+auto LaunchFiber(FiberProps props, Fn&& fn) -> boost::fibers::fiber {
+    auto* props_ptr =
+        static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, props.Priority()));
+    return boost::fibers::fiber(props_ptr, std::allocator_arg, boost::fibers::default_stack(),
+                                std::forward<Fn>(fn));
+}
+
+template <typename Fn>
+auto LaunchFiber(Fn&& fn) -> boost::fibers::fiber {
+    return LaunchFiber(FiberPriority::NORMAL, std::forward<Fn>(fn));
+}
+
+inline auto MaybeYieldOnCpuBudget(uint64_t budget_cycles) noexcept -> bool {
+    auto* ctx = boost::fibers::context::active();
+    if (ctx == nullptr || !ctx->is_context(boost::fibers::type::worker_context)) {
+        return false;
+    }
+
+    auto* raw = ctx->get_properties();
+    if (raw == nullptr) {
+        return false;
+    }
+
+    auto& props = static_cast<FiberProps&>(*raw);
+    if (props.last_resume_cycle == 0) {
+        return false;
+    }
+
+    if (!boost::fibers::has_ready_fibers()) {
+        return false;
+    }
+
+    const uint64_t now = FiberCycleClock::Now();
+
+    if (now < props.last_resume_cycle) {
+        return false;
+    }
+
+    if (now - props.last_resume_cycle < budget_cycles) {
+        return false;
+    }
+
+    boost::this_fiber::yield();
+    return true;
+}
 
 // manages a single io_context thread and runs submitted tasks on its bound cpu.
 class EventLoop {
