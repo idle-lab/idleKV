@@ -165,13 +165,13 @@ public:
 
 private:
     absl::InlinedVector<uint32_t, 5> offsets_;
-    StorageType    storage_;
+    StorageType                      storage_;
 };
 
 using CmdArgsPtr = std::unique_ptr<CmdArgs>;
 struct PendingRequest {
-    CmdArgs* args;
-    TimePoint  started_at;
+    CmdArgs*  args;
+    TimePoint started_at;
 };
 
 class ExecContext;
@@ -180,16 +180,14 @@ class ExecContext;
 using Exector = auto (*)(ExecContext* ctx, CmdArgs& args) -> void;
 
 // key index in CmdArgs.
-// For single key command, we use stack allocation to avoid unnecessary heap allocation. 
+// For single key command, we use stack allocation to avoid unnecessary heap allocation.
 using KeySet = absl::InlinedVector<size_t, 1>;
 
 struct WRSet {
     KeySet read_keys;
     KeySet write_keys;
 
-    auto AllKeys() const {
-        return utils::MakeConcatView(read_keys, write_keys);
-    }
+    auto AllKeys() const { return utils::MakeConcatView(read_keys, write_keys); }
 };
 
 // PreFunc analyses command line when queued command to `multi`
@@ -201,8 +199,8 @@ enum class CmdFlags : uint32_t {
     None           = 0,
     CanExecInPlace = 1U << 0,
     NoKey          = 1U << 1,
-    Transactional = 1U << 2, // command should be executed in transaction, e.g. multi/exec block
-    StateChange  = 1U << 3, // command may be change connection state.
+    Transactional  = 1U << 2, // command should be executed in transaction, e.g. multi/exec block
+    StateChange    = 1U << 3, // command may be change connection state.
 };
 
 constexpr auto operator|(CmdFlags lhs, CmdFlags rhs) -> CmdFlags {
@@ -274,9 +272,9 @@ private:
 // Contains the context information required for a single instruction, including the instruction
 // itself, parameters, and read/write key values.
 struct CommandContext {
-    Cmd*       cmd;
-    CmdArgs*    args;
-    WRSet      keys;
+    Cmd*     cmd;
+    CmdArgs* args;
+    WRSet    keys;
 
     TimePoint start_at;
 };

@@ -35,7 +35,6 @@ inline const uint64_t kMaxParseCpuCycles =
 inline const uint64_t kMaxSquashCpuCycles =
     500 /* us */ * FiberCycleClock::Frequency() / 1'000'000ULL;
 
-
 template <typename Fn>
 auto LaunchFiberDetached(FiberPriority priority, Fn&& fn) -> void {
     auto* props = static_cast<boost::fibers::fiber_properties*>(new FiberProps(nullptr, priority));
@@ -106,8 +105,7 @@ inline auto MaybeYieldOnCpuBudget(uint64_t budget_cycles) noexcept -> bool {
 // manages a single io_context thread and runs submitted tasks on its bound cpu.
 class EventLoop {
 public:
-    EventLoop(unsigned cpu, size_t pool_index)
-        : io_(1), cpu_(cpu), pool_index_(pool_index) {}
+    EventLoop(unsigned cpu, size_t pool_index) : io_(1), cpu_(cpu), pool_index_(pool_index) {}
 
     auto Run() -> void;
 
@@ -267,11 +265,10 @@ public:
     // this function does not block, but instead simply signals the EventLoop to stop.
     auto Stop() -> void;
 
-
 private:
-    asio::io_context   io_;
-    unsigned           cpu_;
-    size_t             pool_index_;
+    asio::io_context io_;
+    unsigned         cpu_;
+    size_t           pool_index_;
 
     std::jthread th_;
 };

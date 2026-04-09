@@ -56,7 +56,7 @@ Server::Server(const Config& cfg) {
 }
 
 auto Server::DoAccept(Handler* h) -> void {
-    auto& ctx = ThreadState::Tlocal()->GetEventLoop()->IoContext();
+    auto&                     ctx = ThreadState::Tlocal()->GetEventLoop()->IoContext();
     asio::ip::tcp::acceptor   acceptor(ctx);
     boost::system::error_code ec;
 

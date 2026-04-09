@@ -31,9 +31,7 @@ public:
 
     auto Size() -> size_t { return cmds_.size(); }
 
-    auto Append(CommandContext cmdctx) -> void {
-        cmds_.emplace_back(std::move(cmdctx));
-    }
+    auto Append(CommandContext cmdctx) -> void { cmds_.emplace_back(std::move(cmdctx)); }
 
     auto Mode() -> MultiMode { return mode_; }
 
@@ -44,9 +42,7 @@ public:
         return ctx;
     }
 
-    auto IsFinished() -> bool {
-        return progress_ == cmds_.size();
-    }
+    auto IsFinished() -> bool { return progress_ == cmds_.size(); }
 
 private:
     std::vector<CommandContext> cmds_;
@@ -84,7 +80,7 @@ public:
     DISABLE_COPY_MOVE(Transaction);
 
     auto InitMulti(MultiMode mode = MultiMode::Default) -> void {
-        type_ = TxnType::Multi;
+        type_  = TxnType::Multi;
         multi_ = std::make_unique<MultiCmd>(mode);
     }
 
@@ -92,9 +88,9 @@ public:
         CHECK_EQ(type_, TxnType::Multi);
         auto sub = std::make_unique<Transaction>();
 
-        sub->type_ = TxnType::MultiSub;
-        sub->multi_ = std::make_unique<MultiCmd>(multi_->Mode());
-        sub->unique_shard_ = local_shard;
+        sub->type_              = TxnType::MultiSub;
+        sub->multi_             = std::make_unique<MultiCmd>(multi_->Mode());
+        sub->unique_shard_      = local_shard;
         sub->active_shard_count = 1;
 
         return sub;
@@ -123,7 +119,7 @@ public:
     auto IsFinished() -> bool { return multi_->IsFinished(); }
 
     auto InitSingle(Cmd* cmd, CmdArgs* args, WRSet keys) -> void {
-        type_ = TxnType::Normal;
+        type_   = TxnType::Normal;
         single_ = std::make_unique<CommandContext>(cmd, args, keys);
         InitByArgs(*single_->args, single_->keys);
     }
@@ -138,14 +134,15 @@ public:
         }
 
         // TODO(cyb): support multi-shard transaction.
-        CHECK(active_shard_count == 1); 
+        CHECK(active_shard_count == 1);
 
         if (active_shard_count == 1 && unique_shard_ == engine->LocalShard()) {
             task(this, unique_shard_);
             return;
         }
 
-        // we should schedule the task to the shard fiber and wait for it to finish before returning.
+        // we should schedule the task to the shard fiber and wait for it to finish before
+        // returning.
         block_counter_.Start(active_shard_count);
 
         for (auto* shard : ActiveShards()) {
@@ -163,7 +160,7 @@ public:
         single_.reset();
         shards_.clear();
         active_shard_count = 0;
-        unique_shard_ = nullptr;
+        unique_shard_      = nullptr;
     }
 
 private:
@@ -179,7 +176,7 @@ private:
         shards_.resize(engine->ShardNum());
         active_shard_count = 0;
 
-        for (size_t i = 0;i < shards_.size();i++) {
+        for (size_t i = 0; i < shards_.size(); i++) {
             shards_[i] = nullptr;
         }
 
@@ -194,7 +191,7 @@ private:
         }
     }
 
-    TxnId txn_id_;
+    TxnId   txn_id_;
     TxnType type_{TxnType::Uninitialized};
 
     utils::SingleWaiterBlockCounter block_counter_;
@@ -204,7 +201,7 @@ private:
     // only valid when active_shard_count == 1
     Shard* unique_shard_{nullptr};
 
-    std::unique_ptr<MultiCmd> multi_;
+    std::unique_ptr<MultiCmd>       multi_;
     std::unique_ptr<CommandContext> single_;
 };
 

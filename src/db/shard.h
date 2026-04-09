@@ -19,9 +19,9 @@
 #include <vector>
 namespace idlekv {
 
-using ShardId              = uint8_t;
+using ShardId                     = uint8_t;
 constexpr ShardId kInvalidShardId = -1;
-constexpr size_t kQueueLen = 64;
+constexpr size_t  kQueueLen       = 64;
 
 // class TaskQueue {
 // public:
@@ -239,7 +239,7 @@ private:
 };
 
 static constexpr uint64_t kSeed = 0x9E3779B97F4A7C15ULL;
-inline auto CalculateShardId(std::string_view s, size_t shard_num) -> ShardId {
+inline auto               CalculateShardId(std::string_view s, size_t shard_num) -> ShardId {
     return static_cast<ShardId>(XXH64(s.data(), s.size(), kSeed) % shard_num);
 }
 

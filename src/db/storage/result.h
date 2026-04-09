@@ -8,13 +8,7 @@
 
 namespace idlekv {
 
-enum struct OpStatus : uint8_t { 
-    OK, 
-    DupKey, 
-    NoSuchKey,
-    WrongType,
-    Unknown
-};
+enum struct OpStatus : uint8_t { OK, DupKey, NoSuchKey, WrongType, Unknown };
 
 inline auto OpStatusToString(OpStatus ops) -> std::string {
     switch (ops) {
@@ -45,18 +39,18 @@ struct Result {
     auto Get() -> PayLoad& { return payload; }
     auto Get() const -> const PayLoad& { return payload; }
 
-    OpStatus               status;
-    PayLoad payload;
+    OpStatus status;
+    PayLoad  payload;
 };
 
 template <>
 struct Result<void> {
     Result() = default;
     Result(OpStatus s) : status(s) {}
-    auto operator==(const OpStatus& s) const -> bool { return status == s; }
-    auto Ok() const -> bool { return *this == OpStatus::OK; }
-    auto Message() const -> std::string { return OpStatusToString(status); }
-    OpStatus               status;
+    auto     operator==(const OpStatus& s) const -> bool { return status == s; }
+    auto     Ok() const -> bool { return *this == OpStatus::OK; }
+    auto     Message() const -> std::string { return OpStatusToString(status); }
+    OpStatus status;
 };
 
 } // namespace idlekv

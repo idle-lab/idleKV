@@ -1,7 +1,7 @@
 #pragma once
 
-
 #include "db/storage/art/art.h"
+
 #include <memory_resource>
 #include <string>
 namespace idlekv {
@@ -14,4 +14,4 @@ private:
     Art<std::string> data_;
 };
 
-}
+} // namespace idlekv

@@ -42,7 +42,7 @@ auto IdleEngine::Init(EventLoopPool* elp) -> void {
         }
         auto* heap = ThreadState::Tlocal()->DataHeap();
 
-        void*  ptr   = mi_heap_malloc_aligned(heap, sizeof(Shard), alignof(Shard));
+        void* ptr    = mi_heap_malloc_aligned(heap, sizeof(Shard), alignof(Shard));
         local_shard_ = new (ptr) Shard(cfg_, el, heap);
 
         shards_[i] = local_shard_;
@@ -57,8 +57,8 @@ auto IdleEngine::InitCommand() -> void {
 }
 
 auto IdleEngine::DispatchCmd(ExecContext* ctx, CmdArgs& args) noexcept -> void {
-    auto* conn = ctx->conn;
-    auto&  sender = conn->GetSender();
+    auto* conn   = ctx->conn;
+    auto& sender = conn->GetSender();
 
     auto cmd = GetCmd(args[0]);
     if (cmd == nullptr) {
@@ -90,13 +90,13 @@ auto IdleEngine::DispatchCmd(ExecContext* ctx, CmdArgs& args) noexcept -> void {
     }
 }
 
-auto IdleEngine::DispatchManyCmd(ExecContext* ctx, utils::Generator<PendingRequest>& gen, size_t limit) noexcept
-    -> size_t {
+auto IdleEngine::DispatchManyCmd(ExecContext* ctx, utils::Generator<PendingRequest>& gen,
+                                 size_t limit) noexcept -> size_t {
     std::vector<CommandContext> pipeline_cmds;
     pipeline_cmds.reserve(limit);
-    auto* conn = ctx->conn;
+    auto*  conn  = ctx->conn;
     size_t count = 0;
-    
+
     if (ctx->txn == nullptr) {
         ctx->txn = std::make_unique<Transaction>();
     }
@@ -107,7 +107,8 @@ auto IdleEngine::DispatchManyCmd(ExecContext* ctx, utils::Generator<PendingReque
             return;
         }
 
-        [[maybe_unused]] size_t processed = CmdSquasher::Squash(pipeline_cmds, &ctx->conn->GetSender(), ctx);
+        [[maybe_unused]] size_t processed =
+            CmdSquasher::Squash(pipeline_cmds, &ctx->conn->GetSender(), ctx);
 
         CHECK_EQ(processed, pipeline_cmds.size());
         pipeline_cmds.clear();
@@ -121,14 +122,12 @@ auto IdleEngine::DispatchManyCmd(ExecContext* ctx, utils::Generator<PendingReque
         auto& args = *req.args;
         auto  cmd  = GetCmd(args[0]);
 
-
         bool verify_failure = cmd != nullptr && !cmd->Verification(args);
-        bool should_squash = cmd == nullptr || verify_failure || cmd->IsStateChange();
+        bool should_squash  = cmd == nullptr || verify_failure || cmd->IsStateChange();
 
         count++;
         if (!should_squash) {
-            pipeline_cmds.emplace_back(cmd, req.args, cmd->PrepareKeys(args),
-                                       req.started_at);
+            pipeline_cmds.emplace_back(cmd, req.args, cmd->PrepareKeys(args), req.started_at);
             continue;
         }
 

@@ -1,4 +1,5 @@
 #include "db/db.h"
+
 #include "db/storage/value.h"
 
 #include <optional>
@@ -16,9 +17,7 @@ auto DB::Set(std::string key, PrimeValue value) -> Result<void> {
     return prime_.Set(std::move(key), std::move(value));
 }
 
-auto DB::Get(std::string_view key) -> Result<PrimeValue> {
-    return prime_.Get(key);
-}
+auto DB::Get(std::string_view key) -> Result<PrimeValue> { return prime_.Get(key); }
 
 auto DB::Del(std::string_view key) -> Result<void> { return prime_.Del(key); }
 

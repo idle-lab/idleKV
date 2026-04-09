@@ -114,7 +114,7 @@ auto Connection::ReadImpl(asio::mutable_registered_buffer reg_buf) noexcept -> R
         return ResultT<size_t>(ToStdErrorCode(asio::error::not_connected));
     }
     boost::system::error_code ec;
-    auto n = socket_->async_read_some(reg_buf, boost::fibers::asio::yield[ec]);
+    auto                      n = socket_->async_read_some(reg_buf, boost::fibers::asio::yield[ec]);
     if (ec) {
         if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
             LOG(warn, "read register failed: {}", ec.message());
@@ -129,7 +129,7 @@ auto Connection::ReadvImpl(const std::array<Buf, 2>& bufs) noexcept -> ResultT<s
     }
 
     boost::system::error_code ec;
-    auto n = socket_->async_read_some(bufs, boost::fibers::asio::yield[ec]);
+    auto                      n = socket_->async_read_some(bufs, boost::fibers::asio::yield[ec]);
     if (ec) {
         if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
             LOG(warn, "read vector failed: {}", ec.message());
@@ -158,7 +158,7 @@ auto Connection::WritevImpl(const std::vector<BufView>& bufs) noexcept -> Result
     }
 
     boost::system::error_code ec;
-    auto n = asio::async_write(*socket_, bufs, boost::fibers::asio::yield[ec]);
+    auto                      n = asio::async_write(*socket_, bufs, boost::fibers::asio::yield[ec]);
     if (ec) {
         if (!IsConnectionClosedError(ec) && !IsTransientIoError(ec)) {
             LOG(warn, "write vector failed: {}", ec.message());
@@ -257,10 +257,11 @@ auto Connection::AsyncHandle() noexcept -> void {
         if (pipeline_queue_.size() >= kPipelineSquashThreshold) {
             // Keep the coroutine lambda alive while DispatchManyCmd iterates the generator.
             size_t squash_limit = pipeline_queue_.size();
-            auto make_gen = [this, squash_limit]() -> utils::Generator<PendingRequest> {
+            auto   make_gen     = [this, squash_limit]() -> utils::Generator<PendingRequest> {
                 for (size_t idx = 0; idx < squash_limit; idx++) {
                     auto& req = pipeline_queue_[idx];
-                    co_yield PendingRequest{.args = req.args_ptr.get(), .started_at = req.started_at};
+                    co_yield PendingRequest{.args       = req.args_ptr.get(),
+                                                  .started_at = req.started_at};
                 }
             };
             auto gen = make_gen();
@@ -285,7 +286,6 @@ auto Connection::AsyncHandle() noexcept -> void {
             RedisService::Tlocal()->RecycleCmdArgs(std::move(request.args_ptr));
         }
 
-
         if (pipeline_queue_.empty()) {
             yielded_for_batch = false;
             if (!p_.HashMore()) {
@@ -305,9 +305,9 @@ auto Connection::Flush() -> void {
 auto Connection::Init(asio::ip::tcp::socket&& socket) -> void {
     CHECK(socket_.has_value() == false) << "override a connection that is currently in use";
     socket_.emplace(std::move(socket));
-    closing_ = false;
+    closing_  = false;
     cur_args_ = RedisService::Tlocal()->GetCmdArgsOrCreate();
-    ctx_ = std::make_unique<ExecContext>(this);
+    ctx_      = std::make_unique<ExecContext>(this);
 }
 
 auto Connection::Reset() -> void {

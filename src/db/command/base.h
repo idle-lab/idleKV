@@ -18,4 +18,4 @@ inline auto SingleWriteKey(const CmdArgs& args) -> WRSet {
     return {{}, {1}};
 }
 
-} // namespace
+} // namespace idlekv

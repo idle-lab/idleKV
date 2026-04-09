@@ -2,6 +2,7 @@
 #include "common/config.h"
 #include "common/logger.h"
 #include "db/storage/zset.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -26,13 +27,13 @@ public:
     }
 
     auto Get() const -> std::string_view { return {ptr_, size_}; }
+
 private:
     friend class Value;
 
-    char* ptr_{nullptr};
+    char*    ptr_{nullptr};
     uint64_t size_{0};
 } __attribute__((packed));
-
 
 enum class ObjectType : uint8_t {
     Unknow,
@@ -44,22 +45,23 @@ enum class ObjectType : uint8_t {
 // Redis container object, such as Hash, Sorted Set, Set etc.
 class Object {
 public:
-    Object(ObjectType type, void* ptr) : ptr_(ptr), type_(type) { }
+    Object(ObjectType type, void* ptr) : ptr_(ptr), type_(type) {}
 
     DISABLE_MOVE(Object);
 
     auto Type() const -> ObjectType { return type_; }
 
-    template<class T>
-    auto GetAs() const -> T* { return static_cast<T*>(ptr_); }
+    template <class T>
+    auto GetAs() const -> T* {
+        return static_cast<T*>(ptr_);
+    }
 
 private:
     friend class Value;
 
-    void* ptr_;
+    void*      ptr_;
     ObjectType type_{ObjectType::Unknow};
 } __attribute__((packed));
-
 
 class Value {
 public:
@@ -73,7 +75,7 @@ public:
     static auto InitMr(std::pmr::memory_resource* mr) -> void { value_mr = mr; }
 
     explicit Value() {}
-  
+
     DISABLE_COPY_MOVE(Value);
 
     auto InitString(std::string_view sv) -> void {
@@ -82,7 +84,7 @@ public:
             len_tag_ = sv.size();
             std::memcpy(value_.inline_str, sv.data(), sv.size());
         } else {
-            len_tag_ = STR_TAG;
+            len_tag_  = STR_TAG;
             auto* ptr = value_mr->allocate(sv.size(), alignof(char));
             std::memcpy(ptr, sv.data(), sv.size());
             new (&value_.str) Str(static_cast<char*>(ptr), sv.size());
@@ -90,19 +92,15 @@ public:
     }
 
     auto InitZSet() -> void {
-        void *ptr = value_mr->allocate(sizeof(ZSet), alignof(ZSet));
+        void* ptr = value_mr->allocate(sizeof(ZSet), alignof(ZSet));
         new (ptr) ZSet(value_mr);
-        new (&value_.obj) Object(ObjectType::ZSet, ptr); 
+        new (&value_.obj) Object(ObjectType::ZSet, ptr);
 
         len_tag_ = OBJ_TAG;
     }
 
-    inline auto IsInlineStr() const -> bool {
-        return len_tag_ <= kInlineStrMaxLen;
-    }
-    inline auto IsStr() const -> bool {
-        return len_tag_ <= STR_TAG;
-    }
+    inline auto IsInlineStr() const -> bool { return len_tag_ <= kInlineStrMaxLen; }
+    inline auto IsStr() const -> bool { return len_tag_ <= STR_TAG; }
 
     auto GetString() const -> std::string_view {
         if (IsInlineStr()) {
@@ -116,9 +114,7 @@ public:
 
     auto GetObject() const -> const Object& { return value_.obj; }
 
-    ~Value() {
-        ReleaseValue();
-    }
+    ~Value() { ReleaseValue(); }
 
 private:
     auto ReleaseValue() -> void {
@@ -152,13 +148,12 @@ private:
         std::memset(value_.inline_str, 0, kInlineStrMaxLen);
     }
 
-
     static constexpr size_t kInlineStrMaxLen = 16;
 
     union ValueUnio {
-        char inline_str[kInlineStrMaxLen];
-        Str str;
-        Object obj;
+        char    inline_str[kInlineStrMaxLen];
+        Str     str;
+        Object  obj;
         int64_t ival __attribute__((packed));
 
         ValueUnio() : inline_str() {}
@@ -178,7 +173,7 @@ using PrimeValue = std::shared_ptr<Value>;
 
 struct MakeValueOption {
     Value::TagEnum tag;
-    ObjectType type{ObjectType::Unknow};
+    ObjectType     type{ObjectType::Unknow};
 };
 
 template <class... Args>

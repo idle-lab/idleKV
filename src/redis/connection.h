@@ -35,8 +35,7 @@ public:
     explicit Connection()
         : Reader(kDefaultReadBufferSize), Writer(kDefaultWriteBufferSize), p_(this), s_(this) {}
 
-    explicit Connection(asio::mutable_registered_buffer buf,
-                    std::function<void()>       buffer_releaser)
+    explicit Connection(asio::mutable_registered_buffer buf, std::function<void()> buffer_releaser)
         : Reader(buf), Writer(kDefaultWriteBufferSize), p_(this), s_(this),
           buffer_releaser_(buffer_releaser) {}
 
@@ -95,9 +94,9 @@ private:
     Parser p_;
     Sender s_;
 
-    std::optional<std::function<void()> > buffer_releaser_;
+    std::optional<std::function<void()>> buffer_releaser_;
 
-    EventLoop* el_;
+    EventLoop*                            el_;
     boost::fibers::fiber                  async_fiber_;
     boost::fibers::condition_variable_any async_cv_;
 

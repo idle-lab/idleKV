@@ -270,9 +270,9 @@ private:
                  !std::same_as<std::remove_cvref_t<T>, bool>)
     auto WritePiece(char*& out, T value) -> void;
 
-    IOBuf                                    buf_;
-    std::vector<BufView>                     vecs_;
-    size_t                                   queued_size_{0};
+    IOBuf                buf_;
+    std::vector<BufView> vecs_;
+    size_t               queued_size_{0};
 };
 
 template <typename... Ts>
@@ -381,19 +381,20 @@ private:
 
 class SenderBase {
 public:
-    virtual auto SendSimpleString(std::string_view s) -> void                          = 0;
-    virtual auto SendOk() -> void                                                      = 0;
-    virtual auto SendPong() -> void                                                    = 0;
+    virtual auto SendSimpleString(std::string_view s) -> void                  = 0;
+    virtual auto SendOk() -> void                                              = 0;
+    virtual auto SendPong() -> void                                            = 0;
     virtual auto SendBulkString(std::string_view s, PrimeValue holder) -> void = 0;
-    virtual auto SendNullBulkString() -> void                                          = 0;
-    virtual auto SendInteger(int64_t value) -> void                                    = 0;
-    virtual auto SendError(std::string_view s) -> void                                 = 0;
+    virtual auto SendNullBulkString() -> void                                  = 0;
+    virtual auto SendInteger(int64_t value) -> void                            = 0;
+    virtual auto SendError(std::string_view s) -> void                         = 0;
 
     virtual ~SenderBase() = default;
 };
 
 class Sender : public SenderBase {
     using LifecycleProtector = std::shared_ptr<const void>;
+
 public:
     Sender(Writer* wr) : wr_(wr) {}
 
@@ -432,9 +433,9 @@ public:
 private:
     std::error_code ec_;
 
-    bool    batched_{true};
+    bool                                        batched_{true};
     absl::InlinedVector<LifecycleProtector, 32> keepalive_;
-    Writer* wr_;
+    Writer*                                     wr_;
 };
 
 } // namespace idlekv

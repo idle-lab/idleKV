@@ -4,11 +4,8 @@
 #include "db/storage/result.h"
 #include "result.h"
 
-#include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <memory_resource>
-#include <optional>
 #include <string_view>
 #include <utility>
 #include <xxhash.h>
@@ -16,7 +13,7 @@
 namespace idlekv {
 
 template <class Value>
-class KvStore { 
+class KvStore {
 public:
     using KeyType   = std::string;
     using ValueType = Value;

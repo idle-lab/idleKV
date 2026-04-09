@@ -9,8 +9,8 @@
 
 namespace idlekv::utils {
 
-// A simple block counter that allows at most one waiter fiber to wait for the counter to reach zero.
-// Internal smart pointer for easier lifetime management. Pass by value.
+// A simple block counter that allows at most one waiter fiber to wait for the counter to reach
+// zero. Internal smart pointer for easier lifetime management. Pass by value.
 class SingleWaiterBlockCounter {
 public:
     SingleWaiterBlockCounter() : detail_(std::make_shared<detail>()) {}
@@ -53,9 +53,8 @@ public:
         detail_->waiter_active_ = true;
 
         const size_t wait_generation = detail_->generation_;
-        detail_->cv_.wait(lk, [&]() {
-            return detail_->count_ == 0 || detail_->generation_ != wait_generation;
-        });
+        detail_->cv_.wait(
+            lk, [&]() { return detail_->count_ == 0 || detail_->generation_ != wait_generation; });
 
         BOOST_ASSERT_MSG(wait_generation == detail_->generation_,
                          "SingleWaiterBlockCounter generation changed while waiting");
@@ -68,7 +67,7 @@ private:
         size_t generation_{0};
         bool   waiter_active_{false};
 
-        boost::fibers::detail::spinlock    state_splk_;
+        boost::fibers::detail::spinlock       state_splk_;
         boost::fibers::condition_variable_any cv_;
     };
 

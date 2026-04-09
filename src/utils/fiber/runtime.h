@@ -8,6 +8,7 @@
 
 #include "absl/base/internal/cycleclock.h"
 
+#include <atomic>
 #include <boost/asio/execution_context.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
@@ -21,7 +22,6 @@
 #include <boost/fiber/mutex.hpp>
 #include <boost/fiber/operations.hpp>
 #include <boost/fiber/scheduler.hpp>
-#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -99,7 +99,6 @@ public:
         return frequency_;
     }
 };
-
 
 class Priority : public boost::fibers::algo::algorithm_with_properties<idlekv::FiberProps> {
 private:
@@ -565,5 +564,3 @@ public:
 //]
 
 } // namespace boost::asio
-
-

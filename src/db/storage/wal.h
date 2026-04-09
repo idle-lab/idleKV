@@ -12,11 +12,7 @@ struct Record {
     std::string payload;
 };
 
-class WALFile {
-
-
-
-};
+class WALFile {};
 
 class WAL {
 public:
@@ -32,8 +28,6 @@ public:
             return;
         }
         std::filesystem::create_directory(dir);
-
-        
     }
 
     auto Write(Record r) -> void;

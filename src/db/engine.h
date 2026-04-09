@@ -27,7 +27,8 @@ public:
 
     auto Init(EventLoopPool* elp) -> void;
     auto DispatchCmd(ExecContext*, CmdArgs&) noexcept -> void;
-    auto DispatchManyCmd(ExecContext* ctx, utils::Generator<PendingRequest>& gen, size_t limit) noexcept -> size_t;
+    auto DispatchManyCmd(ExecContext* ctx, utils::Generator<PendingRequest>& gen,
+                         size_t limit) noexcept -> size_t;
 
     auto DbNum() const -> size_t { return cfg_.db_num_; }
     auto RegisterCmd(const std::string& name, int32_t arity, int32_t FirstKey, int32_t LastKey,

@@ -1,6 +1,6 @@
 #include "db/command.h"
-#include "db/engine.h"
 #include "db/context.h"
+#include "db/engine.h"
 #include "redis/error.h"
 
 #include <charconv>
@@ -28,11 +28,11 @@ auto Ping(ExecContext* ctx, CmdArgs& args) -> void {
 }
 
 auto Select(ExecContext* ctx, CmdArgs& args) -> void {
-    auto* sender = ctx->sender;
+    auto*       sender   = ctx->sender;
     size_t      db_index = 0;
-    const auto* begin   = args[1].data();
-    const auto* end     = begin + args[1].size();
-    auto [ptr, ec]      = std::from_chars(begin, end, db_index);
+    const auto* begin    = args[1].data();
+    const auto* end      = begin + args[1].size();
+    auto [ptr, ec]       = std::from_chars(begin, end, db_index);
     if (ec != std::errc{} || ptr != end) {
         return sender->SendError(fmt::format(kProtocolErrFmt, "invalid DB index"));
     }

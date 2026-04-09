@@ -1,8 +1,9 @@
 #include "db/squasher.h"
+
 #include "common/logger.h"
+#include "db/context.h"
 #include "db/engine.h"
 #include "db/shard.h"
-#include "db/context.h"
 #include "redis/parser.h"
 #include "utils/fiber/block_counter.h"
 
@@ -29,12 +30,10 @@ auto CmdSquasher::DebugCheckState(std::string_view where) const -> void {
             CHECK_GE(si.results.size(), si.send_idx)
                 << "CmdSquasher send_idx overflow at " << where << ", shard=" << shard_id;
         } else {
-            CHECK_EQ(si.send_idx, 0U)
-                << "CmdSquasher inactive shard has send progress at " << where
-                << ", shard=" << shard_id;
-            CHECK(si.results.empty())
-                << "CmdSquasher inactive shard has buffered replies at " << where
-                << ", shard=" << shard_id;
+            CHECK_EQ(si.send_idx, 0U) << "CmdSquasher inactive shard has send progress at " << where
+                                      << ", shard=" << shard_id;
+            CHECK(si.results.empty()) << "CmdSquasher inactive shard has buffered replies at "
+                                      << where << ", shard=" << shard_id;
         }
     }
 
@@ -42,12 +41,12 @@ auto CmdSquasher::DebugCheckState(std::string_view where) const -> void {
         CHECK_LT(shard_id, shards_info_.size())
             << "CmdSquasher order_ corrupted at " << where << ", shard=" << shard_id;
         CHECK(shards_info_[shard_id].sub_ctx.txn)
-            << "CmdSquasher order_ points to inactive shard at " << where
-            << ", shard=" << shard_id;
+            << "CmdSquasher order_ points to inactive shard at " << where << ", shard=" << shard_id;
     }
 }
 
-auto CmdSquasher::Squash(std::vector<CommandContext>& cmds, Sender* sender, ExecContext* client) -> size_t {
+auto CmdSquasher::Squash(std::vector<CommandContext>& cmds, Sender* sender, ExecContext* client)
+    -> size_t {
     CmdSquasher cs{client};
     cs.Squash(cmds, sender);
     return cs.processed_;
@@ -70,7 +69,7 @@ auto CmdSquasher::ExecuteSquash(Sender* sender) -> void {
     utils::SingleWaiterBlockCounter bc;
     bc.Start(active_shard_count_);
 
-    for (size_t i = 0;i < shards_info_.size();i++) {
+    for (size_t i = 0; i < shards_info_.size(); i++) {
         if (shards_info_[i].sub_ctx.txn) {
             auto* si = &shards_info_[i];
             engine->ShardAt(i)->Add([bc, si]() mutable -> void {
@@ -107,14 +106,13 @@ auto CmdSquasher::ExecuteSquash(Sender* sender) -> void {
     active_shard_count_ = 0;
 }
 
-
 auto CmdSquasher::ShardInfo(ShardId id) -> ShardExecInfo& {
     if (shards_info_.size() == 0) {
         shards_info_.resize(engine->ShardNum());
     }
 
     if (!shards_info_[id].sub_ctx.txn) {
-        shards_info_[id].sub_ctx.txn = parent_ctx_->txn->CreateMultiSub(engine->ShardAt(id));
+        shards_info_[id].sub_ctx.txn      = parent_ctx_->txn->CreateMultiSub(engine->ShardAt(id));
         shards_info_[id].sub_ctx.db_index = parent_ctx_->db_index;
         active_shard_count_++;
     }
@@ -147,6 +145,5 @@ auto CmdSquasher::TrySquash(CommandContext& cmd) -> DetermineResult {
     DebugCheckState("after-order-push");
     return DetermineResult::OK;
 }
-
 
 } // namespace idlekv

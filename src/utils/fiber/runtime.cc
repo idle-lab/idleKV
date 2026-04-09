@@ -4,13 +4,9 @@
 #include <stdexcept>
 #include <utility>
 
-namespace boost::fibers::asio {
-
-
-} // namespace boost::fibers::asio
+namespace boost::fibers::asio {} // namespace boost::fibers::asio
 
 namespace idlekv {
-
 
 boost::asio::io_context::id Priority::service::id;
 

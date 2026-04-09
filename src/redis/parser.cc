@@ -326,7 +326,7 @@ auto Sender::SendError(std::string_view s) -> void {
     ec_ = wr_->WritePieces(ERROR_PREFIX, s, CRLF);
 }
 
-auto Sender::Flush() -> void { 
+auto Sender::Flush() -> void {
     ec_ = wr_->Flush();
     keepalive_.clear();
 }

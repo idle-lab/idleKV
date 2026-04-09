@@ -20,9 +20,8 @@ public:
             bits = 0;
         }
 
-        constexpr uint64_t kSignMask = 1ULL << 63U;
-        const uint64_t     ordered_bits =
-            (bits & kSignMask) != 0 ? ~bits : (bits ^ kSignMask);
+        constexpr uint64_t kSignMask    = 1ULL << 63U;
+        const uint64_t     ordered_bits = (bits & kSignMask) != 0 ? ~bits : (bits ^ kSignMask);
         StoreBigEndian(ordered_bits);
     }
 

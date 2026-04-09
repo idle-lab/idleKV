@@ -1,12 +1,12 @@
 #include "db/command.h"
 #include "db/command/base.h"
-#include "db/engine.h"
 #include "db/context.h"
+#include "db/engine.h"
 #include "db/shard.h"
 #include "db/storage/result.h"
 #include "db/storage/value.h"
-#include "redis/error.h"
 #include "db/transaction.h"
+#include "redis/error.h"
 
 #include <absl/functional/function_ref.h>
 #include <boost/fiber/future/future.hpp>
@@ -17,7 +17,7 @@
 namespace idlekv {
 
 auto Set(ExecContext* ctx, CmdArgs& args) -> void {
-    auto* sender = ctx->sender;
+    auto*        sender = ctx->sender;
     Result<void> res;
 
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
@@ -33,12 +33,12 @@ auto Set(ExecContext* ctx, CmdArgs& args) -> void {
 }
 
 auto Get(ExecContext* ctx, CmdArgs& args) -> void {
-    auto* sender = ctx->sender;
+    auto*              sender = ctx->sender;
     Result<PrimeValue> res;
 
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
         auto* db = shard->DbAt(ctx->db_index);
-        res = db->Get(args[1]);
+        res      = db->Get(args[1]);
     });
 
     if (res == OpStatus::NoSuchKey) {
@@ -60,7 +60,7 @@ auto Del(ExecContext* ctx, CmdArgs& args) -> void {
 
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
         auto* db = shard->DbAt(ctx->db_index);
-        res = db->Del(args[1]);
+        res      = db->Del(args[1]);
     });
 
     sender->SendInteger(res == OpStatus::NoSuchKey ? 0 : 1);

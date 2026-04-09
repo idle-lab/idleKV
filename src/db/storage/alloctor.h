@@ -156,15 +156,16 @@ private:
     auto Recycle(void* ptr) -> void {
         for (auto it = memeory_blocks_.blocks_.begin(); it != memeory_blocks_.blocks_.end(); it++) {
             Block* block = *it;
-            auto* begin = reinterpret_cast<std::byte*>(block->slots);
-            auto* end   = begin + sizeof(block->slots);
-            auto* raw   = static_cast<std::byte*>(ptr);
+            auto*  begin = reinterpret_cast<std::byte*>(block->slots);
+            auto*  end   = begin + sizeof(block->slots);
+            auto*  raw   = static_cast<std::byte*>(ptr);
 
             if (raw >= begin && raw < end) {
                 block->allocd--;
                 ptrdiff_t offset = raw - begin;
                 CHECK_EQ(offset % static_cast<ptrdiff_t>(sizeof(Slot)), ptrdiff_t{0});
-                uint16_t slot_id = static_cast<uint16_t>(offset / static_cast<ptrdiff_t>(sizeof(Slot)));
+                uint16_t slot_id =
+                    static_cast<uint16_t>(offset / static_cast<ptrdiff_t>(sizeof(Slot)));
 
                 memeory_blocks_.free_list_.emplace_back(block, slot_id);
                 return;

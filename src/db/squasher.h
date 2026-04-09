@@ -1,17 +1,17 @@
 #pragma once
 
 #include "common/config.h"
+#include "db/context.h"
 #include "db/engine.h"
 #include "db/shard.h"
-#include "db/context.h"
 #include "db/storage/value.h"
 #include "redis/parser.h"
 
 #include <absl/container/inlined_vector.h>
 #include <cstddef>
 #include <cstdint>
-#include <string_view>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -25,7 +25,8 @@ using Integer = int64_t;
 struct Error : std::string {};
 using Null = std::nullptr_t;
 
-using Payload = std::variant<std::monostate, Ok, Pong, SimpleString, BulkString, Integer, Error, Null>;
+using Payload =
+    std::variant<std::monostate, Ok, Pong, SimpleString, BulkString, Integer, Error, Null>;
 
 class PayloadVisitor {
 public:
@@ -62,7 +63,7 @@ public:
 
     auto TakePayload() -> Payload {
         Payload payload = std::move(payload_);
-        payload_ = std::monostate{};
+        payload_        = std::monostate{};
         return payload;
     }
 
@@ -74,13 +75,14 @@ class CmdSquasher {
 public:
     struct ShardExecInfo {
         std::vector<Payload> results;
-        size_t send_idx{0};
-        ExecContext sub_ctx;
+        size_t               send_idx{0};
+        ExecContext          sub_ctx;
     };
 
     explicit CmdSquasher(ExecContext* client) : parent_ctx_(client) {}
 
-    static auto Squash(std::vector<CommandContext>& cmds, Sender* sender, ExecContext* client) -> size_t;
+    static auto Squash(std::vector<CommandContext>& cmds, Sender* sender, ExecContext* client)
+        -> size_t;
 
     auto Squash(std::vector<CommandContext>& cmds, Sender* sender) -> void;
 
@@ -98,8 +100,8 @@ private:
     auto DebugCheckState(std::string_view where) const -> void;
 
     std::vector<ShardExecInfo> shards_info_;
-    size_t active_shard_count_{0};
-    std::vector<size_t> order_;
+    size_t                     active_shard_count_{0};
+    std::vector<size_t>        order_;
 
     // uint64_t debug_canary_head_{0xC0DEC0DEC0DEC0DEULL};
     // uint64_t debug_canary_tail_{0xFEE1DEADFEE1DEADULL};

@@ -36,11 +36,11 @@ auto Node4::FindNext(byte key) -> Node** {
 
 auto Node4::SetNext(byte key, Node* next) -> void {
     int c_i;
-    for (c_i = 0; c_i < size_ && key >= keys_[c_i]; ++c_i) {}
+    for (c_i = 0; c_i < size_ && key >= keys_[c_i]; ++c_i) {
+    }
 
     std::memmove(keys_ + c_i + 1, keys_ + c_i, size_ - c_i);
-    std::memmove(next_ + c_i + 1, next_ + c_i,
-                (size_ - c_i) * sizeof(void *));
+    std::memmove(next_ + c_i + 1, next_ + c_i, (size_ - c_i) * sizeof(void*));
 
     keys_[c_i] = key;
     next_[c_i] = next;
@@ -82,21 +82,21 @@ auto Node16::FindNext(byte key) -> Node** {
 }
 
 auto Node16::SetNext(byte key, Node* next) -> void {
-  int child_i;
-  for (int i = size_ - 1;; --i) {
-    if (i >= 0 && key < keys_[i]) {
-      /* move existing sibling to the right */
-      keys_[i + 1] = keys_[i];
-      next_[i + 1] = next_[i];
-    } else {
-      child_i = i + 1;
-      break;
+    int child_i;
+    for (int i = size_ - 1;; --i) {
+        if (i >= 0 && key < keys_[i]) {
+            /* move existing sibling to the right */
+            keys_[i + 1] = keys_[i];
+            next_[i + 1] = next_[i];
+        } else {
+            child_i = i + 1;
+            break;
+        }
     }
-  }
 
-  keys_[child_i] = key;
-  next_[child_i] = next;
-  ++size_;
+    keys_[child_i] = key;
+    next_[child_i] = next;
+    ++size_;
 }
 
 auto Node16::DelNext(byte key) -> Node* {
