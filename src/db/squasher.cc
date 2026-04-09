@@ -67,13 +67,13 @@ auto CmdSquasher::Squash(std::vector<CommandContext>& cmds, Sender* sender) -> v
 }
 
 auto CmdSquasher::ExecuteSquash(Sender* sender) -> void {
-    auto counter = std::make_shared<utils::SingleWaiterBlockCounter>();
-    counter->Start(active_shard_count_);
+    utils::SingleWaiterBlockCounter bc;
+    bc.Start(active_shard_count_);
 
     for (size_t i = 0;i < shards_info_.size();i++) {
         if (shards_info_[i].sub_ctx.txn) {
             auto* si = &shards_info_[i];
-            engine->ShardAt(i)->Add([counter, si]() {
+            engine->ShardAt(i)->Add([bc, si]() mutable -> void {
                 auto& sub_ctx = si->sub_ctx;
                 si->results.reserve(sub_ctx.txn->MultiSize());
                 ReplyCapturer capturer;
@@ -86,12 +86,12 @@ auto CmdSquasher::ExecuteSquash(Sender* sender) -> void {
                     si->results.emplace_back(capturer.TakePayload());
                 }
 
-                counter->Done();
+                bc.Done();
             });
         }
     }
 
-    counter->Wait();
+    bc.Wait();
 
     PayloadVisitor pv(sender);
     for (auto i : order_) {
