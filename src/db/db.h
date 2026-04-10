@@ -22,7 +22,7 @@ public:
 
     auto Set(std::string key, PrimeValue value) -> Result<void>;
 
-    auto Get(std::string_view key) -> Result<PrimeValue>;
+    auto Get(std::string_view key, Value::TypeEnum type) -> Result<PrimeValue>;
 
     auto Del(std::string_view key) -> Result<void>;
 

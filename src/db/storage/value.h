@@ -35,41 +35,13 @@ private:
     uint64_t size_{0};
 } __attribute__((packed));
 
-enum class ObjectType : uint8_t {
-    Unknow,
-    ZSet,
-    Set,
-    Hash,
-};
-
-// Redis container object, such as Hash, Sorted Set, Set etc.
-class Object {
-public:
-    Object(ObjectType type, void* ptr) : ptr_(ptr), type_(type) {}
-
-    DISABLE_MOVE(Object);
-
-    auto Type() const -> ObjectType { return type_; }
-
-    template <class T>
-    auto GetAs() const -> T* {
-        return static_cast<T*>(ptr_);
-    }
-
-private:
-    friend class Value;
-
-    void*      ptr_;
-    ObjectType type_{ObjectType::Unknow};
-} __attribute__((packed));
-
 class Value {
 public:
     // 0-16 is reserved for inline lengths of string type.
-    enum TagEnum : uint8_t {
-        STR_TAG = 17,
-        OBJ_TAG = 18,
-        INT_TAG = 19,
+    enum TypeEnum : uint8_t {
+        STR = 17,
+        INT = 18,
+        ZSET = 19,
     };
 
     static auto InitMr(std::pmr::memory_resource* mr) -> void { value_mr = mr; }
@@ -84,7 +56,7 @@ public:
             len_tag_ = sv.size();
             std::memcpy(value_.inline_str, sv.data(), sv.size());
         } else {
-            len_tag_  = STR_TAG;
+            len_tag_  = STR;
             auto* ptr = value_mr->allocate(sv.size(), alignof(char));
             std::memcpy(ptr, sv.data(), sv.size());
             new (&value_.str) Str(static_cast<char*>(ptr), sv.size());
@@ -93,14 +65,13 @@ public:
 
     auto InitZSet() -> void {
         void* ptr = value_mr->allocate(sizeof(ZSet), alignof(ZSet));
-        new (ptr) ZSet(value_mr);
-        new (&value_.obj) Object(ObjectType::ZSet, ptr);
+        value_.zset = new (ptr) ZSet(value_mr);
 
-        len_tag_ = OBJ_TAG;
+        len_tag_ = ZSET;
     }
 
     inline auto IsInlineStr() const -> bool { return len_tag_ <= kInlineStrMaxLen; }
-    inline auto IsStr() const -> bool { return len_tag_ <= STR_TAG; }
+    inline auto IsStr() const -> bool { return len_tag_ <= STR; }
 
     auto GetString() const -> std::string_view {
         if (IsInlineStr()) {
@@ -108,11 +79,12 @@ public:
         }
         return value_.str.Get();
     }
+    auto GetZSet() -> ZSet* { return value_.zset; }
 
     auto SetTTL() -> void { has_ttl_ = true; }
     auto HasTTL() const -> bool { return has_ttl_; }
 
-    auto GetObject() const -> const Object& { return value_.obj; }
+    auto Type() const -> TypeEnum { return len_tag_ <= STR ? STR : static_cast<TypeEnum>(len_tag_);  }
 
     ~Value() { ReleaseValue(); }
 
@@ -123,19 +95,14 @@ private:
         }
 
         switch (len_tag_) {
-        case STR_TAG:
+        case STR:
             value_mr->deallocate(value_.str.ptr_, value_.str.size_, alignof(char));
             break;
-        case OBJ_TAG:
-            switch (value_.obj.Type()) {
-            case ObjectType::ZSet:
-                value_.obj.GetAs<ZSet>()->~ZSet();
-                value_.obj.~Object();
-                value_mr->deallocate(value_.obj.ptr_, sizeof(ZSet), alignof(ZSet));
-                break;
-            default:
-                UNREACHABLE();
-            }
+        case ZSET:
+            value_.zset->~ZSet();
+            value_mr->deallocate(value_.zset, sizeof(ZSet), alignof(ZSet));
+            break;
+        case INT:
             break;
         default:
             UNREACHABLE();
@@ -153,7 +120,7 @@ private:
     union ValueUnio {
         char    inline_str[kInlineStrMaxLen];
         Str     str;
-        Object  obj;
+        ZSet*   zset __attribute__((packed));
         int64_t ival __attribute__((packed));
 
         ValueUnio() : inline_str() {}
@@ -171,35 +138,15 @@ static_assert(sizeof(Value) == 17);
 
 using PrimeValue = std::shared_ptr<Value>;
 
-struct MakeValueOption {
-    Value::TagEnum tag;
-    ObjectType     type{ObjectType::Unknow};
-};
-
-template <class... Args>
-inline auto MakeObjectValue(Value& value, ObjectType type, Args&&... args) -> void {
-    switch (type) {
-    case ObjectType::ZSet:
-        value.InitZSet(std::forward<Args>(args)...);
-        return;
-    case ObjectType::Set:
-    case ObjectType::Hash:
-        CHECK(false) << "object type not implemented";
-        return;
-    default:
-        UNREACHABLE();
-    }
-}
-
-template <Value::TagEnum Tag, class... Args>
+template <Value::TypeEnum Tag, class... Args>
 inline auto MakeValue(Args&&... args) -> PrimeValue {
     auto pv = std::make_shared<Value>();
 
-    if constexpr (Tag == Value::STR_TAG) {
+    if constexpr (Tag == Value::STR) {
         pv->InitString(std::forward<Args>(args)...);
-    } else if constexpr (Tag == Value::OBJ_TAG) {
-        MakeObjectValue(*pv, std::forward<Args>(args)...);
-    } else if constexpr (Tag == Value::INT_TAG) {
+    } else if constexpr (Tag == Value::ZSET) {
+        pv->InitZSet(std::forward<Args>(args)...);
+    } else if constexpr (Tag == Value::INT) {
         CHECK(false) << "INT_TAG not implemented";
     } else {
         UNREACHABLE();

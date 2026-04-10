@@ -16,7 +16,7 @@ namespace {
 using idlekv::Art;
 using idlekv::ArtKey;
 using idlekv::InsertMode;
-using idlekv::InsertResutl;
+using InsertResutl = Art<std::string>::InsertResutl;
 
 auto InsertValue(Art<std::string>& art, std::string_view key, std::string value,
                  InsertMode mode = InsertMode::InsertOnly) -> InsertResutl {
@@ -28,7 +28,11 @@ auto InsertValue(Art<std::string>& art, std::string_view key, std::string value,
 auto LookupValue(Art<std::string>& art, std::string_view key) -> std::optional<std::string> {
     std::string owned_key(key);
     auto        art_key = ArtKey::BuildFromString(std::string_view(owned_key));
-    return art.Lookup(art_key);
+    auto*       value   = art.Lookup(art_key);
+    if (value == nullptr) {
+        return std::nullopt;
+    }
+    return *value;
 }
 
 auto EraseValue(Art<std::string>& art, std::string_view key) -> size_t {
@@ -85,6 +89,10 @@ auto MakeWideFanoutKeys(size_t count) -> std::vector<std::string> {
         keys.push_back(std::move(key));
     }
     return keys;
+}
+
+auto BytesToString(const std::vector<idlekv::byte>& key) -> std::string {
+    return {reinterpret_cast<const char*>(key.data()), key.size()};
 }
 
 TEST(ArtTest, SingleLeafInsertLookupAndErase) {
@@ -402,6 +410,49 @@ TEST(ArtTest, DeterministicMixedLargeWorkloadMatchesReferenceMap) {
             EXPECT_EQ(LookupValue(art, key), std::optional<std::string>(it->second));
         }
     }
+}
+
+TEST(ArtTest, SupportsKeysWithPrefixesLongerThanSingleNodeCapacity) {
+    std::pmr::monotonic_buffer_resource mr;
+    Art<std::string>                    art(&mr);
+
+    EXPECT_EQ(InsertValue(art, "tenant:region:shard:0001", "v1"), InsertResutl::OK);
+    EXPECT_EQ(InsertValue(art, "tenant:region:shard:0002", "v2"), InsertResutl::OK);
+    EXPECT_EQ(InsertValue(art, "tenant:region:shard:0003", "v3"), InsertResutl::OK);
+
+    EXPECT_EQ(LookupValue(art, "tenant:region:shard:0001"), std::optional<std::string>("v1"));
+    EXPECT_EQ(LookupValue(art, "tenant:region:shard:0002"), std::optional<std::string>("v2"));
+    EXPECT_EQ(LookupValue(art, "tenant:region:shard:0003"), std::optional<std::string>("v3"));
+
+    EXPECT_EQ(EraseValue(art, "tenant:region:shard:0002"), 1U);
+    EXPECT_EQ(LookupValue(art, "tenant:region:shard:0002"), std::nullopt);
+    EXPECT_EQ(LookupValue(art, "tenant:region:shard:0001"), std::optional<std::string>("v1"));
+    EXPECT_EQ(LookupValue(art, "tenant:region:shard:0003"), std::optional<std::string>("v3"));
+}
+
+TEST(ArtTest, RangeMinAndMaxFollowLexicographicOrder) {
+    std::pmr::monotonic_buffer_resource mr;
+    Art<std::string>                    art(&mr);
+
+    ASSERT_EQ(InsertValue(art, "key:01", "value-01"), InsertResutl::OK);
+    ASSERT_EQ(InsertValue(art, "key:03", "value-03"), InsertResutl::OK);
+    ASSERT_EQ(InsertValue(art, "key:02", "value-02"), InsertResutl::OK);
+    ASSERT_EQ(InsertValue(art, "key:05", "value-05"), InsertResutl::OK);
+    ASSERT_EQ(InsertValue(art, "key:04", "value-04"), InsertResutl::OK);
+
+    ASSERT_NE(art.Min(), nullptr);
+    ASSERT_NE(art.Max(), nullptr);
+    EXPECT_EQ(*art.Min(), "value-01");
+    EXPECT_EQ(*art.Max(), "value-05");
+
+    const auto range = art.Range(ArtKey::BuildFromString("key:02"), ArtKey::BuildFromString("key:04"));
+    ASSERT_EQ(range.size(), 3U);
+    EXPECT_EQ(BytesToString(range[0].key), "key:02");
+    EXPECT_EQ(*range[0].value, "value-02");
+    EXPECT_EQ(BytesToString(range[1].key), "key:03");
+    EXPECT_EQ(*range[1].value, "value-03");
+    EXPECT_EQ(BytesToString(range[2].key), "key:04");
+    EXPECT_EQ(*range[2].value, "value-04");
 }
 
 } // namespace

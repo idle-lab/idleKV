@@ -23,7 +23,7 @@ auto Set(ExecContext* ctx, CmdArgs& args) -> void {
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
         auto* db = shard->DbAt(ctx->db_index);
 
-        res = db->Set(std::string(args[1]), MakeValue<Value::STR_TAG>(args[2]));
+        res = db->Set(std::string(args[1]), MakeValue<Value::STR>(args[2]));
     });
 
     if (!res.Ok()) {
@@ -38,7 +38,7 @@ auto Get(ExecContext* ctx, CmdArgs& args) -> void {
 
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
         auto* db = shard->DbAt(ctx->db_index);
-        res      = db->Get(args[1]);
+        res      = db->Get(args[1], Value::STR);
     });
 
     if (res == OpStatus::NoSuchKey) {

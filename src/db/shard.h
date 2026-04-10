@@ -2,7 +2,6 @@
 
 #include "common/config.h"
 #include "db/db.h"
-#include "db/storage/alloctor.h"
 #include "db/storage/value.h"
 #include "server/el_pool.h"
 #include "utils/fiber/runtime.h"
@@ -230,8 +229,6 @@ public:
 private:
     std::vector<std::shared_ptr<DB>> db_slice_;
     ShardMemoryResource              mr_;
-
-    EBRManager ebr_mgr_; // TODO(cyb): plan to abolish
 
     TaskQueue queue_;
 

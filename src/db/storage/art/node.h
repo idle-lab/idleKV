@@ -4,6 +4,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 #if defined(__i386__) || defined(__amd64__)
 #include <emmintrin.h>
@@ -50,7 +51,7 @@ public:
     auto CheckPerfix(const byte* data) -> size_t;
 
     struct Prefix {
-        uint8_t len_{0};
+        uint16_t len_{0};
         byte    data_[kMaxPrefixBytes]{};
     };
 
@@ -71,6 +72,7 @@ public:
     Node4() : InnerNode(NodeType::Node4) {}
 
     auto FindNext(byte key) -> Node**;
+    auto FindChildGte(byte key) -> std::pair<Node**, int>;
     auto SetNext(byte key, Node*) -> void;
     auto DelNext(byte key) -> Node*;
     auto IsFull() const -> bool { return size_ == 4; }
@@ -88,6 +90,7 @@ public:
     Node16() : InnerNode(NodeType::Node16) {}
 
     auto FindNext(byte key) -> Node**;
+    auto FindChildGte(byte key) -> std::pair<Node**, int>;
     auto SetNext(byte key, Node*) -> void;
     auto DelNext(byte key) -> Node*;
     auto IsFull() const -> bool { return size_ == 16; }
@@ -105,6 +108,7 @@ public:
     Node48() : InnerNode(NodeType::Node48) {}
 
     auto FindNext(byte key) -> Node**;
+    auto FindChildGte(byte key) -> std::pair<Node**, int>;
     auto SetNext(byte key, Node*) -> void;
     auto DelNext(byte key) -> Node*;
     auto IsFull() const -> bool { return size_ == 48; }
@@ -120,6 +124,7 @@ public:
     Node256() : InnerNode(NodeType::Node256) {}
 
     auto FindNext(byte key) -> Node**;
+    auto FindChildGte(byte key) -> std::pair<Node**, int>;
     auto SetNext(byte key, Node*) -> void;
     auto DelNext(byte key) -> Node*;
     auto IsFull() const -> bool { return false; }
@@ -135,24 +140,6 @@ public:
     NodeLeaf() : Node(NodeType::Leaf) {}
 
     T value_;
-};
-
-template <class T>
-    requires std::default_initializable<T>
-class NodeLeaf4 : public Node {
-public:
-    NodeLeaf4() : Node(NodeType::Leaf) {}
-
-    T values_[4];
-};
-
-template <class T>
-    requires std::default_initializable<T>
-class NodeLeaf16 : public Node {
-public:
-    NodeLeaf16() : Node(NodeType::Leaf) {}
-
-    T values_[16];
 };
 
 auto NodeGrow(Node* node) -> Node*;

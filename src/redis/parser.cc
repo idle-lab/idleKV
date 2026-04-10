@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -307,6 +308,35 @@ auto Sender::SendBulkString(std::string_view s, PrimeValue holder) -> void {
     }
     if (!ec_) {
         ec_ = wr_->WritePieces(CRLF);
+    }
+}
+
+auto Sender::SendBulkStringArray(std::vector<std::string> values) -> void {
+    BatchGuard bg(this);
+
+    auto holder = std::make_shared<std::vector<std::string>>(std::move(values));
+    keepalive_.emplace_back(holder);
+
+    ec_ = wr_->WritePieces(ARRAY_PREFIX, holder->size(), CRLF);
+    if (ec_) {
+        return;
+    }
+
+    for (const auto& value : *holder) {
+        ec_ = wr_->WritePieces(BULK_STRING_PREFIX, value.size(), CRLF);
+        if (ec_) {
+            return;
+        }
+
+        ec_ = wr_->WriteRef(value);
+        if (ec_) {
+            return;
+        }
+
+        ec_ = wr_->WritePieces(CRLF);
+        if (ec_) {
+            return;
+        }
     }
 }
 

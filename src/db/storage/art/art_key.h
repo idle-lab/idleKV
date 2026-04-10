@@ -6,11 +6,16 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 namespace idlekv {
 
 struct ArtKey {
 public:
     ArtKey(const byte* data, size_t len) : external_data_(data), len_(len) {}
+
+    static auto BuildFromString(std::string_view value) -> ArtKey {
+        return {reinterpret_cast<const byte*>(value.data()), value.size()};
+    }
 
     explicit ArtKey(uint64_t value) : len_(sizeof(uint64_t)) { StoreBigEndian(value); }
 

@@ -34,6 +34,15 @@ auto Node4::FindNext(byte key) -> Node** {
     return nullptr;
 }
 
+auto Node4::FindChildGte(byte key) -> std::pair<Node**, int> {
+    for (int i = 0; i < size_; ++i) {
+        if (keys_[i] >= key) {
+            return {&next_[i], i};
+        }
+    }
+    return {nullptr, -1};
+}
+
 auto Node4::SetNext(byte key, Node* next) -> void {
     int c_i;
     for (c_i = 0; c_i < size_ && key >= keys_[c_i]; ++c_i) {
@@ -81,6 +90,15 @@ auto Node16::FindNext(byte key) -> Node** {
 #endif
 }
 
+auto Node16::FindChildGte(byte key) -> std::pair<Node**, int> {
+    for (int i = 0; i < size_; ++i) {
+        if (keys_[i] >= key) {
+            return {&next_[i], i};
+        }
+    }
+    return {nullptr, -1};
+}
+
 auto Node16::SetNext(byte key, Node* next) -> void {
     int child_i;
     for (int i = size_ - 1;; --i) {
@@ -122,6 +140,16 @@ auto Node48::FindNext(byte key) -> Node** {
     return slot == Nothing ? nullptr : &next_[slot - 1];
 }
 
+auto Node48::FindChildGte(byte key) -> std::pair<Node**, int> {
+    for (int i = key; i <= 0xFF; ++i) {
+        const auto slot = keys_[i];
+        if (slot != Nothing) {
+            return {&next_[slot - 1], i};
+        }
+    }
+    return {nullptr, -1};
+}
+
 auto Node48::SetNext(byte key, Node* next) -> void {
     int idx = std::countr_zero(bitmap_);
     CHECK_EQ(next_[idx], nullptr);
@@ -146,6 +174,15 @@ auto Node48::DelNext(byte key) -> Node* {
 }
 
 auto Node256::FindNext(byte key) -> Node** { return next_[key] == nullptr ? nullptr : &next_[key]; }
+
+auto Node256::FindChildGte(byte key) -> std::pair<Node**, int> {
+    for (int i = key; i <= 0xFF; ++i) {
+        if (next_[i] != nullptr) {
+            return {&next_[i], i};
+        }
+    }
+    return {nullptr, -1};
+}
 
 auto Node256::SetNext(byte key, Node* next) -> void {
     next_[key] = next;
