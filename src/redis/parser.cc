@@ -311,6 +311,21 @@ auto Sender::SendBulkString(std::string_view s, PrimeValue holder) -> void {
     }
 }
 
+auto Sender::SendBulkString(std::string s) -> void {
+    BatchGuard bg(this);
+
+    auto holder = std::make_shared<std::string>(std::move(s));
+    keepalive_.emplace_back(holder);
+
+    ec_ = wr_->WritePieces(BULK_STRING_PREFIX, holder->size(), CRLF);
+    if (!ec_) {
+        ec_ = wr_->WriteRef(*holder);
+    }
+    if (!ec_) {
+        ec_ = wr_->WritePieces(CRLF);
+    }
+}
+
 auto Sender::SendBulkStringArray(std::vector<std::string> values) -> void {
     BatchGuard bg(this);
 

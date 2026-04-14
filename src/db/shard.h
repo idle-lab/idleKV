@@ -9,6 +9,7 @@
 #include <boost/fiber/buffered_channel.hpp>
 #include <boost/fiber/channel_op_status.hpp>
 #include <boost/fiber/fiber.hpp>
+#include <atomic>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -168,7 +169,8 @@ class ShardMemoryResource : public std::pmr::memory_resource {
 public:
     explicit ShardMemoryResource(mi_heap_t* heap) : heap_(heap) {}
 
-    auto MemoryUsage() -> size_t { return usage_; }
+    auto MemoryUsage() const -> size_t { return usage_.load(std::memory_order_relaxed); }
+    auto PeakMemoryUsage() const -> size_t { return peak_usage_.load(std::memory_order_relaxed); }
 
 private:
     auto do_allocate(std::size_t size, std::size_t align) -> void* final {
@@ -177,13 +179,19 @@ private:
             throw std::bad_alloc{};
         }
 
-        usage_ += mi_usable_size(res);
+        const size_t actual_size = mi_usable_size(res);
+        const size_t new_usage =
+            usage_.fetch_add(actual_size, std::memory_order_relaxed) + actual_size;
+        size_t peak = peak_usage_.load(std::memory_order_relaxed);
+        while (peak < new_usage &&
+               !peak_usage_.compare_exchange_weak(peak, new_usage, std::memory_order_relaxed)) {
+        }
 
         return res;
     }
 
     auto do_deallocate(void* ptr, std::size_t size, std::size_t align) -> void final {
-        usage_ -= mi_usable_size(ptr);
+        usage_.fetch_sub(mi_usable_size(ptr), std::memory_order_relaxed);
 
         mi_free_size_aligned(ptr, size, align);
     }
@@ -192,8 +200,9 @@ private:
         return this == &o;
     }
 
-    size_t     usage_{0};
-    mi_heap_t* heap_;
+    std::atomic_size_t usage_{0};
+    std::atomic_size_t peak_usage_{0};
+    mi_heap_t*         heap_;
 };
 
 // A Data Shared.
@@ -216,7 +225,8 @@ public:
         queue_.Add(std::forward<Fn>(fn));
     }
 
-    auto MemoryUsage() -> size_t { return mr_.MemoryUsage(); }
+    auto MemoryUsage() const -> size_t { return mr_.MemoryUsage(); }
+    auto PeakMemoryUsage() const -> size_t { return mr_.PeakMemoryUsage(); }
     auto MemoryResource() -> std::pmr::memory_resource* { return &mr_; }
 
     auto DbAt(size_t index) -> DB* {

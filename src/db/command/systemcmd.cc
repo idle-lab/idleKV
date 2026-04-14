@@ -1,6 +1,7 @@
 #include "db/command.h"
 #include "db/context.h"
 #include "db/engine.h"
+#include "db/info.h"
 #include "redis/error.h"
 
 #include <charconv>
@@ -13,6 +14,10 @@ namespace {
 auto NoKeys(const CmdArgs& args) -> WRSet {
     (void)args;
     return {};
+}
+
+auto SendArgNumErr(SenderBase* sender, std::string_view cmd_name) -> void {
+    sender->SendError(fmt::format(kArgNumErrFmt, cmd_name));
 }
 
 auto Ping(ExecContext* ctx, CmdArgs& args) -> void {
@@ -45,9 +50,23 @@ auto Select(ExecContext* ctx, CmdArgs& args) -> void {
     sender->SendOk();
 }
 
+auto Info(ExecContext* ctx, CmdArgs& args) -> void {
+    auto* sender = ctx->sender;
+    if (args.size() > 2) {
+        return SendArgNumErr(sender, "info");
+    }
+
+    if (args.size() == 2 && ResolveInfoSection(args[1]) == InfoSection::Unsupported) {
+        return sender->SendError("ERR unsupported INFO section");
+    }
+
+    sender->SendBulkString(FormatInfoMemorySection(CollectInfoMemoryStats(engine.get())));
+}
+
 } // namespace
 
 auto InitSystemCmd(IdleEngine* eng) -> void {
+    eng->RegisterCmd("info", -1, -1, -1, Info, NoKeys, CmdFlags::CanExecInPlace | CmdFlags::NoKey);
     eng->RegisterCmd("ping", -1, -1, -1, Ping, NoKeys, CmdFlags::CanExecInPlace | CmdFlags::NoKey);
     eng->RegisterCmd("select", 2, -1, -1, Select, NoKeys,
                      CmdFlags::CanExecInPlace | CmdFlags::NoKey | CmdFlags::StateChange);

@@ -20,14 +20,16 @@ namespace idlekv {
 struct Ok {};
 struct Pong {};
 struct SimpleString : std::string {};
-struct BulkString : PrimeValue {};
+struct BulkString {
+    PrimeValue pv;
+    std::string s;
+};
 using BulkStringArray = std::vector<std::string>;
 using Integer         = int64_t;
 struct Error : std::string {};
 using Null = std::nullptr_t;
 
-using Payload = std::variant<std::monostate, Ok, Pong, SimpleString, BulkString, BulkStringArray,
-                             Integer, Error, Null>;
+using Payload = std::variant<std::monostate, Ok, Pong, SimpleString, BulkString, BulkStringArray, Integer, Error, Null>;
 
 class PayloadVisitor {
 public:
@@ -38,7 +40,11 @@ public:
     auto operator()(const Pong&) -> void { sender_->SendPong(); }
     auto operator()(const SimpleString& s) -> void { sender_->SendSimpleString(s); }
     auto operator()(const BulkString& s) -> void {
-        sender_->SendBulkString(s->GetString(), std::move(s));
+        if (s.pv) {
+            sender_->SendBulkString(s.pv->GetString(), std::move(s.pv));
+        } else {
+            sender_->SendBulkString(std::move(s.s));
+        }
     }
     auto operator()(const BulkStringArray& values) -> void { sender_->SendBulkStringArray(values); }
     auto operator()(const Integer& i) -> void { sender_->SendInteger(i); }
@@ -57,7 +63,10 @@ public:
     auto SendOk() -> void override { payload_ = Ok{}; }
     auto SendPong() -> void override { payload_ = Pong{}; }
     auto SendBulkString(std::string_view, PrimeValue holder) -> void override {
-        payload_ = BulkString(std::move(holder));
+        payload_ = BulkString{.pv=std::move(holder)};
+    }
+    auto SendBulkString(std::string s) -> void override {
+        payload_ = BulkString{.s=std::move(s)};
     }
     auto SendBulkStringArray(std::vector<std::string> values) -> void override {
         payload_ = BulkStringArray(std::move(values));
