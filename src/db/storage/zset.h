@@ -10,21 +10,34 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace idlekv {
 
 class ZSet {
+    struct Placeholder {
+        auto operator=(const Placeholder&) -> Placeholder& = default;
+    };
+
+    using ScoreTree = Art<Placeholder>;
+
+    using Hash      = absl::container_internal::FlatHashMapPolicy<std::string, double>::DefaultHash;
+    using Eq        = absl::container_internal::FlatHashMapPolicy<std::string, double>::DefaultEq;
+    using Allocator = std::pmr::polymorphic_allocator<std::pair<const std::string, double>>;
+    using ScoreMap  = absl::flat_hash_map<std::string, double, Hash, Eq, Allocator>;
+
+    static constexpr size_t kScoreBytes = ArtKeyCodec::kFixedBytes;
 public:
     struct MemberScore {
         std::string member;
         double      score{0};
     };
 
-    explicit ZSet(std::pmr::memory_resource* mr) : data_(mr) {}
+    explicit ZSet(std::pmr::memory_resource* mr) : score_tree_(mr), score_map_(mr) {}
 
     auto Add(std::string_view member, double score) -> bool {
-        auto [member_it, inserted] = member_to_score_.emplace(member, score);
+        auto [member_it, inserted] = score_map_.emplace(member, score);
         if (inserted) {
             InsertToIndex(score, member_it->first);
             return true;
@@ -41,19 +54,19 @@ public:
     }
 
     auto Rem(std::string_view member) -> bool {
-        auto member_it = member_to_score_.find(std::string(member));
-        if (member_it == member_to_score_.end()) {
+        auto member_it = score_map_.find(std::string(member));
+        if (member_it == score_map_.end()) {
             return false;
         }
 
         RemoveFromIndex(member_it->second, member_it->first);
-        member_to_score_.erase(member_it);
+        score_map_.erase(member_it);
         return true;
     }
 
     auto Range(int64_t start, int64_t stop) -> std::vector<MemberScore> {
         std::vector<MemberScore> out;
-        const int64_t            size = static_cast<int64_t>(member_to_score_.size());
+        const int64_t            size = static_cast<int64_t>(score_map_.size());
         if (size == 0) {
             return out;
         }
@@ -75,28 +88,18 @@ public:
         }
 
         out.reserve(static_cast<size_t>(stop - start + 1));
-        data_.IterateByRank(static_cast<uint32_t>(start), static_cast<uint32_t>(stop),
-                            [&](auto& it) -> bool {
-                                const auto        key    = it.Key();
-                                const double      score  = DecodeScore(key);
-                                const std::string member = DecodeMember(key);
-                                out.push_back(MemberScore{member, score});
-                                return true;
-                            });
+        score_tree_.IterateByRank(static_cast<uint32_t>(start), static_cast<uint32_t>(stop),
+                                  [&](auto& it) -> bool {
+                                      const auto        key    = it.Key();
+                                      out.emplace_back(DecodeMember(key), DecodeScore(key));
+                                      return true;
+                                  });
         return out;
     }
 
-    auto Size() const -> size_t { return member_to_score_.size(); }
+    auto Size() const -> size_t { return score_map_.size(); }
 
 private:
-    struct Placeholder {
-        auto operator=(const Placeholder&) -> Placeholder& = default;
-    };
-
-    using ScoreIndex = Art<Placeholder>;
-
-    static constexpr size_t kScoreBytes = ArtKeyCodec::kFixedBytes;
-
     static auto NormalizeIndex(int64_t index, int64_t size) -> int64_t {
         return index < 0 ? index + size : index;
     }
@@ -118,17 +121,18 @@ private:
     }
 
     auto InsertToIndex(double score, std::string_view member) -> void {
-        [[maybe_unused]] auto insert_res = data_.Insert(EncodeKey(score, member), Placeholder{});
+        [[maybe_unused]] auto insert_res =
+            score_tree_.Insert(EncodeKey(score, member), Placeholder{});
         CHECK_EQ(insert_res.status, ScoreIndex::InsertResutl::OK);
     }
 
     auto RemoveFromIndex(double score, std::string_view member) -> void {
-        [[maybe_unused]] auto erased = data_.Erase(EncodeKey(score, member));
+        [[maybe_unused]] auto erased = score_tree_.Erase(EncodeKey(score, member));
         CHECK_EQ(erased, size_t{1});
     }
 
-    ScoreIndex                               data_;
-    absl::flat_hash_map<std::string, double> member_to_score_;
+    ScoreTree score_tree_;
+    ScoreMap  score_map_;
 };
 
 } // namespace idlekv

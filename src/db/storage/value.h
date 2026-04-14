@@ -123,13 +123,13 @@ private:
         char    inline_str[kInlineStrMaxLen];
         Str     str;
         ZSet*   zset __attribute__((packed));
-        int64_t ival __attribute__((packed));
+        int64_t ival __attribute__((packed)); // TODO(cyb): for cmd 'INCR'
 
         ValueUnio() : inline_str() {}
     } value_;
 
-    // 低四位存内联字符串的长度
-    // 最高位存类型是否为字符串
+    // The lower four bits store the length of the inline string 
+    // The highest bit indicates whether the type is a string
     uint8_t len_tag_ : 5 {0};
     uint8_t has_ttl_ : 1 {false};
 

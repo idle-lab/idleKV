@@ -72,6 +72,7 @@ auto ZAdd(ExecContext* ctx, CmdArgs& args) -> void {
     if ((args.size() & 1) != 0) {
         return SendArgNumErr(sender, "zadd");
     }
+
     std::vector<ZAddEntry> entries;
     entries.reserve((args.size() - 2) / 2);
     for (size_t i = 2; i < args.size(); i += 2) {
