@@ -1,7 +1,7 @@
 #include "db/storage/zset.h"
 
-#include <gtest/gtest.h>
 #include <cstring>
+#include <gtest/gtest.h>
 #include <memory_resource>
 #include <string>
 #include <vector>
@@ -11,10 +11,8 @@ namespace {
 using idlekv::ZSet;
 
 auto EncodeScoreMember(double score, std::string_view member) -> std::string {
-    idlekv::ArtKey encoded_score(score);
-    std::string    key(sizeof(uint64_t) + member.size(), '\0');
-    std::memcpy(key.data(), encoded_score.Data(), sizeof(uint64_t));
-    std::memcpy(key.data() + sizeof(uint64_t), member.data(), member.size());
+    std::string key;
+    idlekv::ArtKeyCodec::EncodePieces(key, score, member);
     return key;
 }
 
@@ -29,12 +27,13 @@ TEST(ZSetTest, UnderlyingArtEraseRemovesBinaryScoreMemberKey) {
     const std::string alice = EncodeScoreMember(1.5, "alice");
     const std::string bob   = EncodeScoreMember(3.0, "bob");
 
-    EXPECT_EQ(art.Insert({reinterpret_cast<const idlekv::byte*>(alice.data()), alice.size()},
-                         nullptr)
-                  .s,
-              idlekv::Art<std::nullptr_t>::InsertResutl::OK);
-    EXPECT_EQ(art.Insert({reinterpret_cast<const idlekv::byte*>(bob.data()), bob.size()}, nullptr).s,
-              idlekv::Art<std::nullptr_t>::InsertResutl::OK);
+    EXPECT_EQ(
+        art.Insert({reinterpret_cast<const idlekv::byte*>(alice.data()), alice.size()}, nullptr)
+            .status,
+        idlekv::Art<std::nullptr_t>::InsertResutl::OK);
+    EXPECT_EQ(
+        art.Insert({reinterpret_cast<const idlekv::byte*>(bob.data()), bob.size()}, nullptr).status,
+        idlekv::Art<std::nullptr_t>::InsertResutl::OK);
     EXPECT_EQ(art.Erase({reinterpret_cast<const idlekv::byte*>(alice.data()), alice.size()}), 1U);
 
     std::vector<std::string> keys;
@@ -49,7 +48,7 @@ TEST(ZSetTest, UnderlyingArtEraseRemovesBinaryScoreMemberKey) {
 
 TEST(ZSetTest, AddUpdatesExistingMembersWithoutChangingCardinality) {
     std::pmr::monotonic_buffer_resource mr;
-    ZSet                               zset(&mr);
+    ZSet                                zset(&mr);
 
     EXPECT_TRUE(zset.Add("alice", 1.5));
     EXPECT_TRUE(zset.Add("bob", 3.0));
@@ -66,7 +65,7 @@ TEST(ZSetTest, AddUpdatesExistingMembersWithoutChangingCardinality) {
 
 TEST(ZSetTest, RangeSupportsNegativeIndexesAndScoreOrdering) {
     std::pmr::monotonic_buffer_resource mr;
-    ZSet                               zset(&mr);
+    ZSet                                zset(&mr);
 
     ASSERT_TRUE(zset.Add("bob", 2.0));
     ASSERT_TRUE(zset.Add("alice", 1.0));
@@ -85,7 +84,7 @@ TEST(ZSetTest, RangeSupportsNegativeIndexesAndScoreOrdering) {
 
 TEST(ZSetTest, RemDeletesMembersAndKeepsOrderingStable) {
     std::pmr::monotonic_buffer_resource mr;
-    ZSet                               zset(&mr);
+    ZSet                                zset(&mr);
 
     ASSERT_TRUE(zset.Add("alice", 1.0));
     ASSERT_TRUE(zset.Add("bob", 2.0));
@@ -99,6 +98,53 @@ TEST(ZSetTest, RemDeletesMembersAndKeepsOrderingStable) {
     EXPECT_EQ(range[0].member, "alice");
     EXPECT_EQ(range[1].member, "charlie");
     EXPECT_EQ(zset.Size(), 2U);
+}
+
+TEST(ZSetTest, RangeHandlesMembersWithEmbeddedZeroAndEscapeBytes) {
+    std::pmr::monotonic_buffer_resource mr;
+    ZSet                                zset(&mr);
+
+    const std::string alpha = std::string("alpha\0beta", 10);
+    const std::string bravo = std::string("alpha\1beta", 10);
+
+    ASSERT_TRUE(zset.Add(alpha, 1.0));
+    ASSERT_TRUE(zset.Add(bravo, 1.0));
+
+    const auto range = zset.Range(0, -1);
+    ASSERT_EQ(range.size(), 2U);
+    EXPECT_EQ(range[0].member, alpha);
+    EXPECT_EQ(range[1].member, bravo);
+}
+
+TEST(ZSetTest, RangeHonorsMemberTieBreakOrderingForEqualScores) {
+    std::pmr::monotonic_buffer_resource mr;
+    ZSet                                zset(&mr);
+
+    ASSERT_TRUE(zset.Add("charlie", 1.0));
+    ASSERT_TRUE(zset.Add("alice", 1.0));
+    ASSERT_TRUE(zset.Add("bob", 1.0));
+
+    const auto range = zset.Range(0, -1);
+    ASSERT_EQ(range.size(), 3U);
+    EXPECT_EQ(range[0].member, "alice");
+    EXPECT_EQ(range[1].member, "bob");
+    EXPECT_EQ(range[2].member, "charlie");
+}
+
+TEST(ZSetTest, RangeReturnsLargeOffsetSliceWithoutScanningPrefixInCaller) {
+    std::pmr::monotonic_buffer_resource mr;
+    ZSet                                zset(&mr);
+
+    for (int i = 0; i < 256; ++i) {
+        ASSERT_TRUE(zset.Add(std::string("member-") + std::to_string(i), static_cast<double>(i)));
+    }
+
+    const auto range = zset.Range(120, 125);
+    ASSERT_EQ(range.size(), 6U);
+    for (size_t i = 0; i < range.size(); ++i) {
+        EXPECT_EQ(range[i].member, std::string("member-") + std::to_string(120 + i));
+        EXPECT_DOUBLE_EQ(range[i].score, static_cast<double>(120 + i));
+    }
 }
 
 } // namespace

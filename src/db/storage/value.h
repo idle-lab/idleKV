@@ -39,8 +39,8 @@ class Value {
 public:
     // 0-16 is reserved for inline lengths of string type.
     enum TypeEnum : uint8_t {
-        STR = 17,
-        INT = 18,
+        STR  = 17,
+        INT  = 18,
         ZSET = 19,
     };
 
@@ -64,7 +64,7 @@ public:
     }
 
     auto InitZSet() -> void {
-        void* ptr = value_mr->allocate(sizeof(ZSet), alignof(ZSet));
+        void* ptr   = value_mr->allocate(sizeof(ZSet), alignof(ZSet));
         value_.zset = new (ptr) ZSet(value_mr);
 
         len_tag_ = ZSET;
@@ -84,7 +84,9 @@ public:
     auto SetTTL() -> void { has_ttl_ = true; }
     auto HasTTL() const -> bool { return has_ttl_; }
 
-    auto Type() const -> TypeEnum { return len_tag_ <= STR ? STR : static_cast<TypeEnum>(len_tag_);  }
+    auto Type() const -> TypeEnum {
+        return len_tag_ <= STR ? STR : static_cast<TypeEnum>(len_tag_);
+    }
 
     ~Value() { ReleaseValue(); }
 

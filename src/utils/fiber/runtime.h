@@ -163,7 +163,7 @@ public:
     auto has_ready_fibers() const noexcept -> bool override { return counter_ > 0; }
 
     void suspend_until(std::chrono::steady_clock::time_point const& abs_time) noexcept override {
-        if (abs_time != (std::chrono::steady_clock::time_point::max)()) {
+        if (abs_time != std::chrono::steady_clock::time_point::max()) {
             suspend_timer_.expires_at(abs_time);
             suspend_timer_.async_wait([](boost::system::error_code const& ec) {
                 if (!ec) {
@@ -171,7 +171,6 @@ public:
                 }
             });
         }
-        cnd_.notify_one();
     }
 
     void notify() noexcept override {
@@ -257,13 +256,12 @@ private:
         running_since_cycle_ = now;
     }
 
-    ready_queue_type                  high_queue_{};
-    ready_queue_type                  normal_queue_{};
-    ready_queue_type                  background_queue_{};
-    boost::asio::steady_timer         suspend_timer_;
-    boost::fibers::mutex              mtx_{};
-    boost::fibers::condition_variable cnd_{};
-    std::size_t                       counter_{0};
+    ready_queue_type          high_queue_{};
+    ready_queue_type          normal_queue_{};
+    ready_queue_type          background_queue_{};
+    boost::asio::steady_timer suspend_timer_;
+    boost::fibers::mutex      mtx_{};
+    std::size_t               counter_{0};
 
     boost::fibers::context* running_ctx_{nullptr};
     uint64_t                running_since_cycle_{0};

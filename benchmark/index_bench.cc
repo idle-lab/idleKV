@@ -1,4 +1,3 @@
-#include "db/storage/alloctor.h"
 #include "db/storage/art/art.h"
 #include "db/storage/art/art_key.h"
 #include "db/storage/art/node.h"

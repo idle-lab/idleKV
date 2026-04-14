@@ -22,13 +22,12 @@ struct Pong {};
 struct SimpleString : std::string {};
 struct BulkString : PrimeValue {};
 using BulkStringArray = std::vector<std::string>;
-using Integer = int64_t;
+using Integer         = int64_t;
 struct Error : std::string {};
 using Null = std::nullptr_t;
 
-using Payload =
-    std::variant<std::monostate, Ok, Pong, SimpleString, BulkString, BulkStringArray, Integer,
-                 Error, Null>;
+using Payload = std::variant<std::monostate, Ok, Pong, SimpleString, BulkString, BulkStringArray,
+                             Integer, Error, Null>;
 
 class PayloadVisitor {
 public:

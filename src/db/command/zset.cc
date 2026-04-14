@@ -10,8 +10,8 @@
 #include "redis/error.h"
 
 #include <boost/type_traits/integral_constant.hpp>
-#include <cerrno>
 #include <cctype>
+#include <cerrno>
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
@@ -82,19 +82,20 @@ auto ZAdd(ExecContext* ctx, CmdArgs& args) -> void {
         entries.push_back(ZAddEntry{score, args[i + 1]});
     }
 
-    bool       wrong_type = false;
-    int64_t    added      = 0;
+    bool    wrong_type = false;
+    int64_t added      = 0;
 
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
-        auto* db  = shard->DbAt(ctx->db_index);
-        auto  res = db->Get(args[1], Value::ZSET);
+        auto*      db  = shard->DbAt(ctx->db_index);
+        auto       res = db->Get(args[1], Value::ZSET);
         PrimeValue key_value;
 
         switch (res.status) {
         case OpStatus::OK:
             key_value = res.payload;
+            break;
         case OpStatus::NoSuchKey: {
-            key_value = MakeValue<Value::ZSET>();
+            key_value                     = MakeValue<Value::ZSET>();
             [[maybe_unused]] auto set_res = db->Set(std::string(args[1]), key_value);
             CHECK(set_res.Ok());
             break;
@@ -121,9 +122,9 @@ auto ZAdd(ExecContext* ctx, CmdArgs& args) -> void {
 }
 
 auto ZRem(ExecContext* ctx, CmdArgs& args) -> void {
-    auto*    sender     = ctx->sender;
-    int64_t  removed    = 0;
-    OpStatus status = OpStatus::OK;
+    auto*    sender  = ctx->sender;
+    int64_t  removed = 0;
+    OpStatus status  = OpStatus::OK;
 
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
         auto* db  = shard->DbAt(ctx->db_index);
@@ -172,7 +173,7 @@ auto ZRange(ExecContext* ctx, CmdArgs& args) -> void {
     }
 
     std::vector<ZSet::MemberScore> members;
-    OpStatus status = OpStatus::OK;
+    OpStatus                       status = OpStatus::OK;
 
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
         auto* db  = shard->DbAt(ctx->db_index);
