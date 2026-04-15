@@ -54,6 +54,7 @@ auto IdleEngine::InitCommand() -> void {
     InitStrings(this);
     InitHash(this);
     InitList(this);
+    InitZSet(this);
 }
 
 auto IdleEngine::DispatchCmd(ExecContext* ctx, CmdArgs& args) noexcept -> void {

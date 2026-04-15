@@ -20,13 +20,16 @@ namespace idlekv {
 struct Ok {};
 struct Pong {};
 struct SimpleString : std::string {};
-struct BulkString : PrimeValue {};
-using Integer = int64_t;
+struct BulkString {
+    PrimeValue pv;
+    std::string s;
+};
+using BulkStringArray = std::vector<std::string>;
+using Integer         = int64_t;
 struct Error : std::string {};
 using Null = std::nullptr_t;
 
-using Payload =
-    std::variant<std::monostate, Ok, Pong, SimpleString, BulkString, Integer, Error, Null>;
+using Payload = std::variant<std::monostate, Ok, Pong, SimpleString, BulkString, BulkStringArray, Integer, Error, Null>;
 
 class PayloadVisitor {
 public:
@@ -37,8 +40,13 @@ public:
     auto operator()(const Pong&) -> void { sender_->SendPong(); }
     auto operator()(const SimpleString& s) -> void { sender_->SendSimpleString(s); }
     auto operator()(const BulkString& s) -> void {
-        sender_->SendBulkString(s->GetString(), std::move(s));
+        if (s.pv) {
+            sender_->SendBulkString(s.pv->GetString(), std::move(s.pv));
+        } else {
+            sender_->SendBulkString(std::move(s.s));
+        }
     }
+    auto operator()(const BulkStringArray& values) -> void { sender_->SendBulkStringArray(values); }
     auto operator()(const Integer& i) -> void { sender_->SendInteger(i); }
     auto operator()(const Error& e) -> void { sender_->SendError(e); }
     auto operator()(const Null&) -> void { sender_->SendNullBulkString(); }
@@ -55,7 +63,13 @@ public:
     auto SendOk() -> void override { payload_ = Ok{}; }
     auto SendPong() -> void override { payload_ = Pong{}; }
     auto SendBulkString(std::string_view, PrimeValue holder) -> void override {
-        payload_ = BulkString(std::move(holder));
+        payload_ = BulkString{.pv=std::move(holder)};
+    }
+    auto SendBulkString(std::string s) -> void override {
+        payload_ = BulkString{.s=std::move(s)};
+    }
+    auto SendBulkStringArray(std::vector<std::string> values) -> void override {
+        payload_ = BulkStringArray(std::move(values));
     }
     auto SendNullBulkString() -> void override { payload_ = Null{}; }
     auto SendInteger(int64_t value) -> void override { payload_ = Integer(value); }
@@ -102,9 +116,6 @@ private:
     std::vector<ShardExecInfo> shards_info_;
     size_t                     active_shard_count_{0};
     std::vector<size_t>        order_;
-
-    // uint64_t debug_canary_head_{0xC0DEC0DEC0DEC0DEULL};
-    // uint64_t debug_canary_tail_{0xFEE1DEADFEE1DEADULL};
 
     ExecContext* parent_ctx_;
 

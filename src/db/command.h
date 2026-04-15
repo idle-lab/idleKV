@@ -94,7 +94,7 @@ public:
     // The capacity is chosen so that we allocate a fully utilized (128 bytes) block.
     using StorageType = absl::InlinedVector<char, kStorageCap>;
 
-    std::string_view Front() const { return std::string_view{storage_.data(), elem_len(0)}; }
+    std::string_view Front() const { return at(0); }
 
     size_t size() const { return offsets_.size(); }
 
@@ -157,8 +157,9 @@ public:
 
     void ClearForReuse() {
         offsets_.clear();
+        storage_.clear();
         if (HeapMemory() > 1024) {
-            storage_.clear();
+            storage_.shrink_to_fit();
             offsets_.shrink_to_fit();
         }
     }

@@ -9,15 +9,17 @@
 
 namespace idlekv::utils {
 
+using namespace boost;
+
 // A simple block counter that allows at most one waiter fiber to wait for the counter to reach
 // zero. Internal smart pointer for easier lifetime management. Pass by value.
 class SingleWaiterBlockCounter {
 public:
     SingleWaiterBlockCounter() : detail_(std::make_shared<detail>()) {}
 
-    auto Start(size_t count) -> void {
+    void Start(size_t count) {
         BOOST_ASSERT_MSG(count > 0, "SingleWaiterBlockCounter::Start requires count > 0");
-        std::unique_lock<boost::fibers::detail::spinlock> lk(detail_->state_splk_);
+        std::unique_lock<fibers::detail::spinlock> lk(detail_->state_splk_);
 
         BOOST_ASSERT_MSG(detail_->count_ == size_t{0},
                          "SingleWaiterBlockCounter::Start requires an idle counter");
@@ -25,11 +27,11 @@ public:
         ++detail_->generation_;
     }
 
-    auto Done() -> void {
+    void Done() {
         bool notify = false;
 
         {
-            std::unique_lock<boost::fibers::detail::spinlock> lk(detail_->state_splk_);
+            std::unique_lock<fibers::detail::spinlock> lk(detail_->state_splk_);
 
             BOOST_ASSERT_MSG(detail_->count_ > size_t{0},
                              "SingleWaiterBlockCounter::Done requires a positive counter");
@@ -42,8 +44,8 @@ public:
         }
     }
 
-    auto Wait() -> void {
-        std::unique_lock<boost::fibers::detail::spinlock> lk(detail_->state_splk_);
+    void Wait() {
+        std::unique_lock<fibers::detail::spinlock> lk(detail_->state_splk_);
         if (detail_->count_ == 0) {
             return;
         }
@@ -67,8 +69,8 @@ private:
         size_t generation_{0};
         bool   waiter_active_{false};
 
-        boost::fibers::detail::spinlock       state_splk_;
-        boost::fibers::condition_variable_any cv_;
+        fibers::detail::spinlock       state_splk_;
+        fibers::condition_variable_any cv_;
     };
 
     std::shared_ptr<detail> detail_;

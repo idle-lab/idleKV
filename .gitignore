@@ -11,5 +11,6 @@ snapshots/
 .vs
 .cache
 *results/
+.claude/
 
 __pycache__/

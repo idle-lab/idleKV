@@ -385,6 +385,8 @@ public:
     virtual auto SendOk() -> void                                              = 0;
     virtual auto SendPong() -> void                                            = 0;
     virtual auto SendBulkString(std::string_view s, PrimeValue holder) -> void = 0;
+    virtual auto SendBulkString(std::string s) -> void                    = 0;
+    virtual auto SendBulkStringArray(std::vector<std::string> values) -> void  = 0;
     virtual auto SendNullBulkString() -> void                                  = 0;
     virtual auto SendInteger(int64_t value) -> void                            = 0;
     virtual auto SendError(std::string_view s) -> void                         = 0;
@@ -415,6 +417,8 @@ public:
     auto SendOk() -> void override;
     auto SendPong() -> void override;
     auto SendBulkString(std::string_view s, PrimeValue holder) -> void override;
+    auto SendBulkString(std::string s) -> void override;
+    auto SendBulkStringArray(std::vector<std::string> values) -> void override;
     auto SendNullBulkString() -> void override;
     auto SendInteger(int64_t value) -> void override;
     auto SendError(std::string_view s) -> void override;
