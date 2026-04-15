@@ -6,10 +6,10 @@
 #include "server/el_pool.h"
 #include "utils/fiber/runtime.h"
 
+#include <atomic>
 #include <boost/fiber/buffered_channel.hpp>
 #include <boost/fiber/channel_op_status.hpp>
 #include <boost/fiber/fiber.hpp>
-#include <atomic>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -17,6 +17,7 @@
 #include <mimalloc.h>
 #include <new>
 #include <vector>
+#include <xxhash.h>
 namespace idlekv {
 
 using ShardId                     = uint8_t;

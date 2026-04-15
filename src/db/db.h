@@ -3,6 +3,7 @@
 #include "db/storage/kvstore.h"
 #include "db/storage/result.h"
 #include "db/storage/value.h"
+#include "utils/time/time.h"
 
 #include <memory_resource>
 #include <mimalloc.h>
@@ -12,6 +13,7 @@
 namespace idlekv {
 
 using PrimeTable = KvStore<PrimeValue>;
+using ExpiredTable = KvStore<TimePoint>;
 
 // DB stores data and execute user's commands
 class DB {
@@ -20,7 +22,7 @@ public:
 
     auto Locks(const std::vector<std::string>& ws, const std::vector<std::string>& rs) -> bool;
 
-    auto Set(std::string key, PrimeValue value) -> Result<void>;
+    auto Set(std::string_view key, PrimeValue value) -> Result<void>;
 
     auto Get(std::string_view key, Value::TypeEnum type) -> Result<PrimeValue>;
 

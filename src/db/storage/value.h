@@ -32,7 +32,7 @@ private:
     friend class Value;
 
     char*    ptr_{nullptr};
-    uint64_t size_{0};
+    uint32_t size_{0};
 } __attribute__((packed));
 
 class Value {
@@ -117,7 +117,7 @@ private:
         std::memset(value_.inline_str, 0, kInlineStrMaxLen);
     }
 
-    static constexpr size_t kInlineStrMaxLen = 16;
+    static constexpr size_t kInlineStrMaxLen = 12;
 
     union ValueUnio {
         char    inline_str[kInlineStrMaxLen];
@@ -136,7 +136,7 @@ private:
     inline thread_local static std::pmr::memory_resource* value_mr{nullptr};
 };
 
-static_assert(sizeof(Value) == 17);
+static_assert(sizeof(Value) == 13);
 
 using PrimeValue = std::shared_ptr<Value>;
 
