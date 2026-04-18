@@ -28,6 +28,7 @@ class ZSet {
     using ScoreMap  = absl::flat_hash_map<std::string, double, Hash, Eq, Allocator>;
 
     static constexpr size_t kScoreBytes = ArtKeyCodec::kFixedBytes;
+
 public:
     struct MemberScore {
         std::string member;
@@ -90,7 +91,7 @@ public:
         out.reserve(static_cast<size_t>(stop - start + 1));
         score_tree_.IterateByRank(static_cast<uint32_t>(start), static_cast<uint32_t>(stop),
                                   [&](auto& it) -> bool {
-                                      const auto        key    = it.Key();
+                                      const auto key = it.Key();
                                       out.emplace_back(DecodeMember(key), DecodeScore(key));
                                       return true;
                                   });

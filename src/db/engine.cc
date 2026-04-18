@@ -81,7 +81,7 @@ auto IdleEngine::DispatchCmd(ExecContext* ctx, CmdArgs& args) noexcept -> void {
             ctx->txn = std::make_unique<Transaction>();
         }
 
-        ctx->txn->InitSingle(cmd, &args, cmd->PrepareKeys(args));
+        ctx->txn->InitSingle(cmd, &args, cmd->PrepareKeys(args), ctx->db_index);
     }
 
     cmd->Exec(ctx, args);
@@ -101,7 +101,7 @@ auto IdleEngine::DispatchManyCmd(ExecContext* ctx, utils::Generator<PendingReque
     if (ctx->txn == nullptr) {
         ctx->txn = std::make_unique<Transaction>();
     }
-    ctx->txn->InitMulti(MultiMode::Squash);
+    ctx->txn->InitMulti(ctx->db_index, MultiMode::Squash);
 
     auto squash = [&]() {
         if (pipeline_cmds.empty()) {

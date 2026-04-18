@@ -32,6 +32,15 @@ auto Ping(ExecContext* ctx, CmdArgs& args) -> void {
     }
 }
 
+auto Echo(ExecContext* ctx, CmdArgs& args) -> void {
+    auto* sender = ctx->sender;
+    if (args.size() != 2) {
+        return SendArgNumErr(sender, "echo");
+    }
+
+    sender->SendBulkString(std::string(args[1]));
+}
+
 auto Select(ExecContext* ctx, CmdArgs& args) -> void {
     auto*       sender   = ctx->sender;
     size_t      db_index = 0;
@@ -66,6 +75,7 @@ auto Info(ExecContext* ctx, CmdArgs& args) -> void {
 } // namespace
 
 auto InitSystemCmd(IdleEngine* eng) -> void {
+    eng->RegisterCmd("echo", 2, -1, -1, Echo, NoKeys, CmdFlags::CanExecInPlace | CmdFlags::NoKey);
     eng->RegisterCmd("info", -1, -1, -1, Info, NoKeys, CmdFlags::CanExecInPlace | CmdFlags::NoKey);
     eng->RegisterCmd("ping", -1, -1, -1, Ping, NoKeys, CmdFlags::CanExecInPlace | CmdFlags::NoKey);
     eng->RegisterCmd("select", 2, -1, -1, Select, NoKeys,

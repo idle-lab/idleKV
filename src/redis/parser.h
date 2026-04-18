@@ -19,6 +19,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -381,15 +382,16 @@ private:
 
 class SenderBase {
 public:
-    virtual auto SendSimpleString(std::string_view s) -> void                  = 0;
-    virtual auto SendOk() -> void                                              = 0;
-    virtual auto SendPong() -> void                                            = 0;
-    virtual auto SendBulkString(std::string_view s, PrimeValue holder) -> void = 0;
-    virtual auto SendBulkString(std::string s) -> void                    = 0;
-    virtual auto SendBulkStringArray(std::vector<std::string> values) -> void  = 0;
-    virtual auto SendNullBulkString() -> void                                  = 0;
-    virtual auto SendInteger(int64_t value) -> void                            = 0;
-    virtual auto SendError(std::string_view s) -> void                         = 0;
+    virtual auto SendSimpleString(std::string_view s) -> void                                = 0;
+    virtual auto SendOk() -> void                                                            = 0;
+    virtual auto SendPong() -> void                                                          = 0;
+    virtual auto SendBulkString(std::string_view s, PrimeValue holder) -> void               = 0;
+    virtual auto SendBulkString(std::string s) -> void                                       = 0;
+    virtual auto SendBulkStringArray(std::vector<std::string> values) -> void                = 0;
+    virtual auto SendBulkStringArray(std::vector<std::optional<std::string>> values) -> void = 0;
+    virtual auto SendNullBulkString() -> void                                                = 0;
+    virtual auto SendInteger(int64_t value) -> void                                          = 0;
+    virtual auto SendError(std::string_view s) -> void                                       = 0;
 
     virtual ~SenderBase() = default;
 };
@@ -419,6 +421,7 @@ public:
     auto SendBulkString(std::string_view s, PrimeValue holder) -> void override;
     auto SendBulkString(std::string s) -> void override;
     auto SendBulkStringArray(std::vector<std::string> values) -> void override;
+    auto SendBulkStringArray(std::vector<std::optional<std::string>> values) -> void override;
     auto SendNullBulkString() -> void override;
     auto SendInteger(int64_t value) -> void override;
     auto SendError(std::string_view s) -> void override;

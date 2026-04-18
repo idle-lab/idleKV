@@ -1,8 +1,9 @@
 #pragma once
 
 #include "common/config.h"
+#include "common/logger.h"
 #include "db/db.h"
-#include "db/storage/value.h"
+#include "db/txn_queue.h"
 #include "server/el_pool.h"
 #include "utils/fiber/runtime.h"
 
@@ -16,6 +17,7 @@
 #include <memory_resource>
 #include <mimalloc.h>
 #include <new>
+#include <utility>
 #include <vector>
 #include <xxhash.h>
 namespace idlekv {
@@ -114,46 +116,50 @@ private:
 // A Data Shared.
 class Shard {
 public:
-    Shard(const Config& cfg, EventLoop* el, mi_heap_t* heap)
-        : mr_(heap), queue_(kQueueLen), id_(el->PoolIndex()) {
-        queue_.Start();
-
-        db_slice_.resize(cfg.db_num_);
-        for (auto& db : db_slice_) {
-            db = std::make_shared<DB>(&mr_);
-        }
-
-        Value::InitMr(&mr_);
-    }
+    Shard(const Config& cfg, EventLoop* el, mi_heap_t* heap);
 
     template <class Fn>
-    auto Add(Fn&& fn) -> void {
+    void Add(Fn&& fn) {
         queue_.Add(std::forward<Fn>(fn));
     }
 
-    auto MemoryUsage() const -> size_t { return mr_.MemoryUsage(); }
-    auto PeakMemoryUsage() const -> size_t { return mr_.PeakMemoryUsage(); }
-    auto MemoryResource() -> std::pmr::memory_resource* { return &mr_; }
+    size_t                     MemoryUsage() const { return mr_.MemoryUsage(); }
+    size_t                     PeakMemoryUsage() const { return mr_.PeakMemoryUsage(); }
+    std::pmr::memory_resource* MemoryResource() { return &mr_; }
+    TxnQueue*                  TxQueue() { return &tx_queue_; }
+    TxnId                      CommitedId() const { return commit_txn_id_; }
+    void                       CommitTxn(TxnId id) {
+        CHECK_GT(id, commit_txn_id_);
+        commit_txn_id_ = id;
+    }
 
-    auto DbAt(size_t index) -> DB* {
+    void PollTransaction(Transaction* caller);
+
+    DB* DbAt(size_t index) {
         CHECK_LT(index, db_slice_.size());
         return db_slice_[index].get();
     }
 
-    auto GetShardId() const -> ShardId { return id_; }
+    ShardId Id() const { return id_; }
 
 private:
     std::vector<std::shared_ptr<DB>> db_slice_;
     ShardMemoryResource              mr_;
 
     TaskQueue queue_;
+    TxnQueue  tx_queue_;
+    TxnId     commit_txn_id_{0};
 
     ShardId id_;
 };
 
 static constexpr uint64_t kSeed = 0x9E3779B97F4A7C15ULL;
-inline auto               CalculateShardId(std::string_view s, size_t shard_num) -> ShardId {
+inline ShardId            GetShardId(std::string_view s, size_t shard_num) {
     return static_cast<ShardId>(XXH64(s.data(), s.size(), kSeed) % shard_num);
+}
+inline std::pair<ShardId, KeyFingerprint> ShardIdAndFp(std::string_view s, size_t shard_num) {
+    auto hash = XXH64(s.data(), s.size(), kSeed);
+    return {static_cast<ShardId>(hash % shard_num), hash};
 }
 
 } // namespace idlekv

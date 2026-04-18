@@ -45,20 +45,26 @@ auto CmdSquasher::DebugCheckState(std::string_view where) const -> void {
     }
 }
 
-auto CmdSquasher::Squash(std::vector<CommandContext>& cmds, Sender* sender, ExecContext* client)
+auto CmdSquasher::Squash(std::vector<CommandContext>& cmds, Sender* sender, ExecContext* ctx)
     -> size_t {
-    CmdSquasher cs{client};
+    CmdSquasher cs{ctx};
     cs.Squash(cmds, sender);
     return cs.processed_;
 }
 
 auto CmdSquasher::Squash(std::vector<CommandContext>& cmds, Sender* sender) -> void {
+    parent_ctx_->sender = sender;
     for (auto& cmd : cmds) {
         auto res = TrySquash(cmd);
 
         if (res == DetermineResult::CanNotSquash) {
-            // TODO(cyb): multi-shard cmd should execute stand alone.
-            CHECK(false) << "idlekv doesn't support multi-shard now";
+            ExecuteSquash(sender);
+
+            parent_ctx_->txn->InitSingle(cmd.cmd, cmd.args, cmd.keys, parent_ctx_->db_index);
+            cmd.cmd->Exec(parent_ctx_, *cmd.args);
+            parent_ctx_->txn->Done();
+            parent_ctx_->txn->InitMulti(parent_ctx_->db_index, MultiMode::Squash);
+            processed_++;
         }
     }
 
@@ -66,6 +72,10 @@ auto CmdSquasher::Squash(std::vector<CommandContext>& cmds, Sender* sender) -> v
 }
 
 auto CmdSquasher::ExecuteSquash(Sender* sender) -> void {
+    if (active_shard_count_ == 0 || order_.empty()) {
+        return;
+    }
+
     utils::SingleWaiterBlockCounter bc;
     bc.Start(active_shard_count_);
 
@@ -126,7 +136,7 @@ auto CmdSquasher::TrySquash(CommandContext& cmd) -> DetermineResult {
     for (auto i : cmd.keys.AllKeys()) {
         auto key = cmd.args->at(i);
 
-        ShardId id = CalculateShardId(key, engine->ShardNum());
+        auto id = GetShardId(key, engine->ShardNum());
         if (last_shard_id == kInvalidShardId || id == last_shard_id) {
             last_shard_id = id;
         } else {
@@ -140,9 +150,8 @@ auto CmdSquasher::TrySquash(CommandContext& cmd) -> DetermineResult {
 
     auto& sf = ShardInfo(last_shard_id);
 
-    sf.sub_ctx.txn->CollectCmd(CommandContext{cmd.cmd, cmd.args, {}, cmd.start_at});
+    sf.sub_ctx.txn->CollectCmd(CommandContext{cmd.cmd, cmd.args, cmd.keys, cmd.start_at});
     order_.push_back(last_shard_id);
-    DebugCheckState("after-order-push");
     return DetermineResult::OK;
 }
 

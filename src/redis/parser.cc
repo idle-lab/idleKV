@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -344,6 +345,43 @@ auto Sender::SendBulkStringArray(std::vector<std::string> values) -> void {
         }
 
         ec_ = wr_->WriteRef(value);
+        if (ec_) {
+            return;
+        }
+
+        ec_ = wr_->WritePieces(CRLF);
+        if (ec_) {
+            return;
+        }
+    }
+}
+
+auto Sender::SendBulkStringArray(std::vector<std::optional<std::string>> values) -> void {
+    BatchGuard bg(this);
+
+    auto holder = std::make_shared<std::vector<std::optional<std::string>>>(std::move(values));
+    keepalive_.emplace_back(holder);
+
+    ec_ = wr_->WritePieces(ARRAY_PREFIX, holder->size(), CRLF);
+    if (ec_) {
+        return;
+    }
+
+    for (const auto& value : *holder) {
+        if (!value.has_value()) {
+            ec_ = wr_->WritePieces("$-1\r\n");
+            if (ec_) {
+                return;
+            }
+            continue;
+        }
+
+        ec_ = wr_->WritePieces(BULK_STRING_PREFIX, value->size(), CRLF);
+        if (ec_) {
+            return;
+        }
+
+        ec_ = wr_->WriteRef(*value);
         if (ec_) {
             return;
         }

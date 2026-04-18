@@ -105,6 +105,7 @@ private:
 
     std::unique_ptr<ExecContext> ctx_;
     bool                         closing_{false};
+    bool                         input_eof_{false};
 };
 
 } // namespace idlekv
