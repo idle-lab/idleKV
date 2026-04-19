@@ -171,6 +171,9 @@ build/
 
 # Disable metrics endpoint
 ./build/src/idlekv --metrics-port 0
+
+# Write logs to a file and force info-level logging
+./build/src/idlekv --log-file /tmp/idlekv.log --log-level info
 ```
 
 ### Command-Line Options
@@ -181,6 +184,8 @@ build/
 | `--port` | `4396` | Redis protocol port |
 | `--metrics-ip` | `0.0.0.0` | Prometheus metrics IP |
 | `--metrics-port` | `9108` | Prometheus metrics port (0 to disable) |
+| `--log-file` | - | Append logs to the specified file while keeping console output |
+| `--log-level` | `debug` in debug builds, `info` in release builds | Log level override: `trace`, `debug`, `info`, `warn`, `error`, `critical`, `off` |
 | `--DbNum` | `16` | Number of databases (SELECT command) |
 | `-c, --config` | - | Config file path (not yet implemented) |
 
