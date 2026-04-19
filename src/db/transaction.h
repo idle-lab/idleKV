@@ -7,24 +7,100 @@
 #include "db/engine.h"
 #include "db/shard.h"
 #include "db/txn_queue.h"
-#include "utils/coroutine/generator.h"
 #include "utils/fiber/block_counter.h"
+#include "utils/pool/pool.h"
 
 #include <absl/container/inlined_vector.h>
 #include <absl/functional/function_ref.h>
-#include <algorithm>
 #include <atomic>
 #include <boost/fiber/barrier.hpp>
 #include <boost/fiber/operations.hpp>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <span>
+#include <spdlog/fmt/bundled/format.h>
 #include <spdlog/spdlog.h>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
 namespace idlekv {
+
+namespace detail {
+
+inline auto EscapeArgForLog(std::string_view arg) -> std::string {
+    std::string escaped;
+    escaped.reserve(arg.size() * 4 + 2);
+    escaped.push_back('"');
+
+    for (unsigned char ch : arg) {
+        switch (ch) {
+        case '\\':
+            escaped += "\\\\";
+            break;
+        case '"':
+            escaped += "\\\"";
+            break;
+        case '\n':
+            escaped += "\\n";
+            break;
+        case '\r':
+            escaped += "\\r";
+            break;
+        case '\t':
+            escaped += "\\t";
+            break;
+        default:
+            if (std::isprint(ch)) {
+                escaped.push_back(static_cast<char>(ch));
+            } else {
+                fmt::format_to(std::back_inserter(escaped), "\\x{:02X}", ch);
+            }
+            break;
+        }
+    }
+
+    escaped.push_back('"');
+    return escaped;
+}
+
+inline auto FormatCommandForLog(const CommandContext& cmdctx) -> std::string {
+    const size_t arg_count = cmdctx.args->size();
+    std::vector<bool> is_key(arg_count, false);
+
+    for (size_t arg_index : cmdctx.keys.read_keys) {
+        if (arg_index < arg_count) {
+            is_key[arg_index] = true;
+        }
+    }
+    for (size_t arg_index : cmdctx.keys.write_keys) {
+        if (arg_index < arg_count) {
+            is_key[arg_index] = true;
+        }
+    }
+
+    std::string formatted;
+    formatted.push_back('[');
+    for (size_t i = 0; i < arg_count; ++i) {
+        if (i > 0) {
+            formatted.push_back(' ');
+        }
+
+        std::string_view arg = (*cmdctx.args)[i];
+        if (i == 0 || is_key[i]) {
+            formatted.append(arg.data(), arg.size());
+        } else {
+            formatted += EscapeArgForLog(arg);
+        }
+    }
+    formatted.push_back(']');
+    return formatted;
+}
+
+} // namespace detail
 
 enum class MultiMode : uint8_t {
     Default,
@@ -79,7 +155,7 @@ enum class TxnType : uint8_t {
     MultiSub, // for use inside shard
 };
 
-class Transaction {
+class Transaction : public std::enable_shared_from_this<Transaction> {
     friend class Shard;
 
     using CallBackType = absl::FunctionRef<void(Transaction*, Shard*)>;
@@ -99,16 +175,21 @@ public:
         // This is used for cleaning up.
         LockAcquired = 1ULL << 2,
 
-        // If transaction can be executed, Actived flag will be set.
-        Actived = 1ULL << 3,
+        OptimizeExecution = 1ULL << 4,
     };
 
     struct ShardPlan {
+        ShardPlan() {
+        }
+        ShardPlan([[maybe_unused]] ShardPlan&& other) noexcept {
+        }
         std::vector<uint32_t>              arg_indices;
         std::unordered_set<KeyFingerprint> read_fps;
         std::unordered_set<KeyFingerprint> write_fps;
 
         SPFlag flag;
+
+        std::atomic_bool execution_permit = false;
 
         TxnQueue::Iterator qp_pos = TxnQueue::InvalidIt;
     };
@@ -116,6 +197,10 @@ public:
     Transaction() = default;
 
     DISABLE_COPY_MOVE(Transaction);
+
+    static auto AcquirePooled() -> std::shared_ptr<Transaction>;
+
+    auto ResetForReuse() noexcept -> void;
 
     auto InitMulti(size_t db_index, MultiMode mode = MultiMode::Default) -> void {
         type_     = TxnType::Multi;
@@ -125,9 +210,9 @@ public:
         multi_ = std::make_unique<MultiCmd>(mode);
     }
 
-    auto CreateMultiSub(Shard* local_shard) -> std::unique_ptr<Transaction> {
+    auto CreateMultiSub(Shard* local_shard) -> std::shared_ptr<Transaction> {
         CHECK_EQ(type_, TxnType::Multi);
-        auto sub = std::make_unique<Transaction>();
+        auto sub = AcquirePooled();
 
         sub->type_              = TxnType::MultiSub;
         sub->multi_             = std::make_unique<MultiCmd>(multi_->Mode());
@@ -165,12 +250,12 @@ public:
         InitByArgs(*single_->args, single_->keys);
     }
 
-    auto GetShardArgs(ShardId id) const -> std::span<const uint32_t> {
+    std::span<const uint32_t> GetShardArgs(ShardId id) const {
         CHECK_LT(id, shard_plans_.size());
         return shard_plans_[id].arg_indices;
     }
 
-    auto Execute(CallBackType task) -> void {
+    void Execute(CallBackType task) {
         CHECK_NE(type_, TxnType::Uninitialized);
         if (multi_ && multi_->Mode() == MultiMode::Squash) {
             task(this, engine->LocalShard());
@@ -181,21 +266,46 @@ public:
 
         RegisterOnActiveShards();
 
-        DispatchOnActiveShards([this]() { engine->LocalShard()->PollTransaction(this); });
+        int run_count = 0;
+        // If our arrival here means that we have completed the registration operations on all
+        // active shards, mark each shard plan as activated
+        IteratorActiveShardPlan([&](ShardPlan& sp) {
+            if ((sp.flag & OptimizeExecution) == 0) {
+                run_count++;
+            }
+        });
 
+        if (run_count == 0) {
+            return;
+        }
+        block_counter_.Start(run_count);
+
+        std::atomic_thread_fence(std::memory_order_release);
+        IteratorActiveShardPlan([&](ShardPlan& sp) {
+            if ((sp.flag & OptimizeExecution) == 0) {
+                sp.execution_permit.store(true, std::memory_order_relaxed);
+            }
+        });
+
+        if (CanInPlace()) {
+            engine->LocalShard()->PollTransaction(shared_from_this());
+        }
+
+        for (Shard* shard : shards_) {
+            if (!shard) {
+                continue;
+            }
+
+            if ((shard_plans_[shard->Id()].flag & OptimizeExecution) == 0) {
+                shard->Add([self = shared_from_this()]() {
+                    engine->LocalShard()->PollTransaction(self);
+                });
+            }
+        }
+        block_counter_.Wait();
+
+        // LOG(debug, "txn id: {} finished on {} shards", txn_id_, active_shard_count);
         cb_ptr_ = nullptr;
-    }
-
-    auto Done() -> void {
-        type_   = TxnType::Uninitialized;
-        txn_id_ = 0;
-        multi_.reset();
-        single_.reset();
-        shard_plans_.clear();
-        shards_.clear();
-        active_shard_count = 0;
-        unique_shard_      = nullptr;
-        db_index_          = 0;
     }
 
     TxnId TxId() const { return txn_id_; }
@@ -208,7 +318,7 @@ private:
             if (!shard) {
                 continue;
             }
-            shard->Add([&] {
+            shard->Add([this, fn = std::forward<Fn>(fn)]() mutable {
                 fn();
                 block_counter_.Done();
             });
@@ -267,15 +377,16 @@ private:
     void RegisterOnActiveShards() {
         // Loop until this txn register on active shards successfully.
         while (true) {
-            if (active_shard_count == 1 && unique_shard_ == engine->LocalShard()) {
+            if (CanInPlace()) {
                 // Single-shard transaction should always register successfully.
+                // LOG(debug, "single-shard transaction try register, {}", detail::FormatCommandForLog(*single_));
                 CHECK(this->RegisterInShard(engine->LocalShard()));
                 break;
             }
 
-            if (active_shard_count > 1 && txn_id_ == 0) {
-                // Multi-shard transactions need a stable global order across retries.
+            if (active_shard_count > 1 && txn_id_ == InvalidTxnId) {
                 txn_id_ = engine->NextTxnId();
+                // LOG(debug, "multi-shard transactions get txn id: {}, {}", txn_id_, detail::FormatCommandForLog(*single_));
             }
 
             std::atomic_bool should_retry{false};
@@ -289,12 +400,9 @@ private:
             if (!should_retry.load(std::memory_order_relaxed)) {
                 break;
             }
+            LOG(info, "multi-shard txn id: {} register failure, need retry", txn_id_);
 
             txn_id_ = InvalidTxnId;
-            IteratorActiveShardPlan([](ShardPlan& sp){
-                sp.qp_pos = TxnQueue::InvalidIt;
-                sp.flag = 0;
-            });
             std::atomic_bool should_poll_txn{false};
             DispatchOnActiveShards([this, &should_poll_txn]() {
                 auto* shard = engine->LocalShard();
@@ -310,7 +418,10 @@ private:
                         should_poll_txn.store(true, std::memory_order_relaxed);
                     }
                     shard->TxQueue()->Erase(plan.qp_pos);
+                    plan.qp_pos = TxnQueue::InvalidIt;
                 }
+
+                plan.flag = 0;
             });
 
             if (should_poll_txn.load(std::memory_order_relaxed)) {
@@ -320,16 +431,14 @@ private:
             }
         }
 
-        // If our arrival here means that we have completed the registration operations on all
-        // active shards, mark each shard plan as activated
-        IteratorActiveShardPlan([&](ShardPlan& sp) { sp.flag |= Actived; });
+        // LOG(debug, "txn id {} register on all active shard successfully", txn_id_);
     }
 
 
     // this function will be executed in target shard.
     bool RegisterInShard(Shard* shard) {
         CHECK(shard != nullptr);
-
+        // LOG(debug, "[{}] try register txn id: {} ", shard->Id(), txn_id_);
         if (txn_id_ != InvalidTxnId && shard->CommitedId() > txn_id_) {
             return false;
         }
@@ -338,8 +447,23 @@ private:
         auto&     plan = shard_plans_[shard->Id()];
         auto*     db   = shard->DbAt(db_index_);
 
+        auto release_lock = [&]() {
+            db->ReleaseTxnLocks(plan.read_fps, plan.write_fps);
+            plan.flag &= ~LockAcquired;
+        };
+
         bool key_locked = db->AcquireTxnLocks(plan.read_fps, plan.write_fps);
         plan.flag |= (LockAcquired | (key_locked ? Free : Blocked));
+
+        if (key_locked && active_shard_count == 1) {
+            (*cb_ptr_)(this, shard);
+
+            plan.flag |= OptimizeExecution;
+
+            release_lock();
+            // LOG(debug, "[{}] txn id: {} optimize execution", shard->Id(), txn_id_);
+            return true;
+        }
 
         if (txn_id_ == InvalidTxnId) {
             // Deferring TxnId assignment for single-shard transactions to RegisterInShard
@@ -347,36 +471,45 @@ private:
             // ensuring success.
             CHECK_EQ(active_shard_count, 1);
             txn_id_ = engine->NextTxnId();
+            // LOG(debug, "[{}] single-shard transactions get id: {}, {}", shard->Id(), txn_id_, detail::FormatCommandForLog(*single_));
         }
 
         // If we cannot reorder the current TxnQueue, we can only abort this registration attempt.
         if (!txq->Empty() && txq->Back()->TxId() > txn_id_ && !key_locked) {
-            db->ReleaseTxnLocks(plan.read_fps, plan.write_fps);
-            plan.flag &= ~LockAcquired;
+            release_lock();
+            // LOG(debug, "[{}] txn id: {} cannot reorder current TxnQueue. Abort!", shard->Id(), txn_id_);
             return false;
         }
 
         plan.qp_pos = txq->Insert(this);
-
+        // LOG(debug, "[{}] txn id: {} register successfully", shard->Id(), txn_id_);
         return true;
     }
 
-    void ExecCbInShard(Shard* shard) { 
+    void ExecCbInShard(Shard* shard) {
         (*cb_ptr_)(this, shard);
 
         auto& plan = shard_plans_[shard->Id()];
         
         CHECK_NE(plan.qp_pos, TxnQueue::InvalidIt);
         shard->TxQueue()->Erase(plan.qp_pos);
+        plan.qp_pos = TxnQueue::InvalidIt;
 
         CHECK(plan.flag & LockAcquired);
         auto* db = shard->DbAt(db_index_);
         db->ReleaseTxnLocks(plan.read_fps, plan.write_fps);
+        plan.flag = 0;
+        block_counter_.Done();
+        // LOG(debug, "[{}] txn id {} exec callback successfully", shard->Id(), txn_id_);
     }
 
-    bool IsActivedIn(ShardId sid) { return shards_[sid] && (shard_plans_[sid].flag & Actived); }
+    bool GetExecutionPermit(ShardId sid) {
+        return shard_plans_[sid].execution_permit.exchange(false, std::memory_order_release); 
+    }
 
-    bool IsFreeIn(ShardId sid) { return shards_[sid] && (shard_plans_[sid].flag & Free); }
+    bool IsFreeIn(ShardId sid) { return shard_plans_[sid].flag & Free; }
+
+    bool CanInPlace() const { return active_shard_count == 1 && unique_shard_ == engine->LocalShard(); }
 
     // Only assigned to transactions that span multiple shards and need a global order.
     TxnId   txn_id_{InvalidTxnId};
@@ -395,5 +528,51 @@ private:
     std::unique_ptr<MultiCmd>       multi_;
     std::unique_ptr<CommandContext> single_;
 };
+
+namespace detail {
+
+inline auto ThreadLocalTxnPool() -> utils::Pool<std::unique_ptr<Transaction>>& {
+    constexpr size_t kTxnPoolSize = 256;
+    thread_local utils::Pool<std::unique_ptr<Transaction>> pool{
+        kTxnPoolSize, []() { return std::make_unique<Transaction>(); }};
+    return pool;
+}
+
+} // namespace detail
+
+inline auto Transaction::AcquirePooled() -> std::shared_ptr<Transaction> {
+    auto holder = detail::ThreadLocalTxnPool().Get();
+    auto* txn   = holder.release();
+    txn->ResetForReuse();
+
+    return std::shared_ptr<Transaction>(txn, [](Transaction* raw) {
+        raw->ResetForReuse();
+        detail::ThreadLocalTxnPool().Put(std::unique_ptr<Transaction>(raw));
+    });
+}
+
+inline auto Transaction::ResetForReuse() noexcept -> void {
+    txn_id_             = InvalidTxnId;
+    type_               = TxnType::Uninitialized;
+    cb_ptr_             = nullptr;
+    active_shard_count  = 0;
+    unique_shard_       = nullptr;
+    db_index_           = 0;
+
+    multi_.reset();
+    single_.reset();
+
+    for (auto& plan : shard_plans_) {
+        plan.arg_indices.clear();
+        plan.read_fps.clear();
+        plan.write_fps.clear();
+        plan.flag = 0;
+        plan.execution_permit.store(false, std::memory_order_relaxed);
+        plan.qp_pos = TxnQueue::InvalidIt;
+    }
+
+    shard_plans_.clear();
+    shards_.clear();
+}
 
 } // namespace idlekv

@@ -2,7 +2,6 @@
 
 #include "common/config.h"
 #include "db/command.h"
-#include "db/common.h"
 #include "db/shard.h"
 #include "server/el_pool.h"
 #include "utils/coroutine/generator.h"

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "db/command.h"
+#include <iostream>
 
 namespace idlekv {
 

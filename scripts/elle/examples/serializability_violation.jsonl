@@ -1,0 +1,2 @@
+{"process":0,"txn":"t1","start_ns":100,"end_ns":200,"status":"ok","ops":[{"type":"w","key":"x","value":"1"},{"type":"r","key":"y","value":"1"}]}
+{"process":1,"txn":"t2","start_ns":110,"end_ns":210,"status":"ok","ops":[{"type":"w","key":"y","value":"1"},{"type":"r","key":"x","value":"1"}]}

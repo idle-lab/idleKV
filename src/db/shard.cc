@@ -4,6 +4,7 @@
 #include "common/logger.h"
 #include "db/transaction.h"
 #include "db/txn_queue.h"
+#include <memory>
 
 namespace idlekv {
 
@@ -25,18 +26,24 @@ Shard::Shard(const Config& cfg, EventLoop* el, mi_heap_t* heap)
     Value::InitMr(&mr_);
 }
 
-void Shard::PollTransaction(Transaction* caller) {
-    Transaction* cur;
+void Shard::PollTransaction(std::shared_ptr<Transaction> caller) {
+    bool can_exec_by_myself = caller && caller->IsFreeIn(id_) && caller->GetExecutionPermit(id_);
+    bool removed_from_txq = caller && caller->shard_plans_[id_].qp_pos == TxnQueue::InvalidIt;
+    if (!can_exec_by_myself && removed_from_txq) {
+        return;
+    }
 
+    Transaction* cur;
     while (!tx_queue_.Empty()) {
         cur = tx_queue_.Front();
 
-        if (!cur->IsActivedIn(id_)) {
+        bool should_run = (cur == caller.get() && can_exec_by_myself) || cur->GetExecutionPermit(id_);
+        if (!should_run) {
             break;
         }
 
-        if (cur == caller) {
-            caller = nullptr;
+        if (cur == caller.get()) {
+            can_exec_by_myself = false;
         }
 
         CHECK_GT(cur->TxId(), commit_txn_id_);
@@ -44,9 +51,8 @@ void Shard::PollTransaction(Transaction* caller) {
         cur->ExecCbInShard(this);
     }
 
-    if (caller && caller->IsFreeIn(id_)) {
-        CHECK_GT(caller->TxId(), commit_txn_id_);
-        commit_txn_id_ = caller->TxId();
+    if (can_exec_by_myself) {
+        // This is a out of order execute.
         caller->ExecCbInShard(this);
     }
 }

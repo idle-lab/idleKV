@@ -11,7 +11,9 @@
 
 namespace idlekv {
 
-std::shared_ptr<spdlog::logger> MakeDefaultLogger();
+class Config;
+
+std::shared_ptr<spdlog::logger> MakeDefaultLogger(const Config& cfg);
 
 #define LOG(level, ...) spdlog::level(__VA_ARGS__)
 
@@ -108,8 +110,8 @@ inline auto MakeCheckCmp(L&& lhs, R&& rhs, const char* file, int line, std::stri
 #define CHECK_GE(lhs, rhs) IDLEKV_CHECK_OP(>=, lhs, rhs)
 #define CHECK_LE(lhs, rhs) IDLEKV_CHECK_OP(<=, lhs, rhs)
 #else
-#define CHECK(condition) ((void)sizeof(static_cast<bool>(condition)), ::idlekv::detail::NullCheck())
-#define IDLEKV_CHECK_OP(op, lhs, rhs) ::idlekv::detail::NullCheck()
+#define CHECK(condition) ((void)(condition), ::idlekv::detail::NullCheck())
+#define IDLEKV_CHECK_OP(op, lhs, rhs) ((void)(lhs), (void)(rhs), ::idlekv::detail::NullCheck())
 
 #define CHECK_GT(lhs, rhs) IDLEKV_CHECK_OP(>, lhs, rhs)
 #define CHECK_LT(lhs, rhs) IDLEKV_CHECK_OP(<, lhs, rhs)

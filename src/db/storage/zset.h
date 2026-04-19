@@ -124,7 +124,7 @@ private:
     auto InsertToIndex(double score, std::string_view member) -> void {
         [[maybe_unused]] auto insert_res =
             score_tree_.Insert(EncodeKey(score, member), Placeholder{});
-        CHECK_EQ(insert_res.status, ScoreIndex::InsertResutl::OK);
+        CHECK_EQ(insert_res.status, ScoreTree::InsertResutl::OK);
     }
 
     auto RemoveFromIndex(double score, std::string_view member) -> void {

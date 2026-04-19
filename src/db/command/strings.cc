@@ -10,6 +10,7 @@
 
 #include <numeric>
 #include <optional>
+#include <spdlog/fmt/bundled/format.h>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -66,8 +67,8 @@ auto Get(ExecContext* ctx, CmdArgs& args) -> void {
         return sender->SendNullBulkString();
     }
 
-    if (res == OpStatus::WrongType) {
-        return sender->SendError(kWrongTypeErr);
+    if (!res.Ok()) {
+        return sender->SendError(res.Message());
     }
 
     sender->SendBulkString(res.payload->GetString(), res.payload);
@@ -111,19 +112,17 @@ auto MGet(ExecContext* ctx, CmdArgs& args) -> void {
                 continue;
             }
 
-            if (res == OpStatus::WrongType) {
-                shard_status[shard_id] = OpStatus::WrongType;
+            if (!res.Ok()) {
+                shard_status[shard_id] = res.status;
                 return;
             }
-
-            CHECK(res.Ok());
             values[arg_index - 1] = std::string(res.payload->GetString());
         }
     });
 
     for (auto status : shard_status) {
-        if (status == OpStatus::WrongType) {
-            return sender->SendError(kWrongTypeErr);
+        if (status != OpStatus::OK) {
+            return sender->SendError(OpStatusToString(status));
         }
     }
 

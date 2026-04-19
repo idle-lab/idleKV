@@ -133,7 +133,7 @@ public:
         commit_txn_id_ = id;
     }
 
-    void PollTransaction(Transaction* caller);
+    void PollTransaction(std::shared_ptr<Transaction> caller);
 
     DB* DbAt(size_t index) {
         CHECK_LT(index, db_slice_.size());

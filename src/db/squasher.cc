@@ -62,7 +62,6 @@ auto CmdSquasher::Squash(std::vector<CommandContext>& cmds, Sender* sender) -> v
 
             parent_ctx_->txn->InitSingle(cmd.cmd, cmd.args, cmd.keys, parent_ctx_->db_index);
             cmd.cmd->Exec(parent_ctx_, *cmd.args);
-            parent_ctx_->txn->Done();
             parent_ctx_->txn->InitMulti(parent_ctx_->db_index, MultiMode::Squash);
             processed_++;
         }

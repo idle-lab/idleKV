@@ -39,8 +39,8 @@ struct Result {
     auto Get() -> PayLoad& { return payload; }
     auto Get() const -> const PayLoad& { return payload; }
 
-    OpStatus status;
-    PayLoad  payload;
+    OpStatus status{OpStatus::Unknown};
+    PayLoad  payload{};
 };
 
 template <>
@@ -50,7 +50,7 @@ struct Result<void> {
     auto     operator==(const OpStatus& s) const -> bool { return status == s; }
     auto     Ok() const -> bool { return *this == OpStatus::OK; }
     auto     Message() const -> std::string { return OpStatusToString(status); }
-    OpStatus status;
+    OpStatus status{OpStatus::Unknown};
 };
 
 } // namespace idlekv

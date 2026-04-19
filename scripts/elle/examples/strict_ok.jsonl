@@ -1,0 +1,3 @@
+{"process":0,"txn":"t1","start_ns":100,"end_ns":110,"status":"ok","ops":[{"type":"w","key":"x","value":"1"}]}
+{"process":1,"txn":"t2","start_ns":120,"end_ns":130,"status":"ok","ops":[{"type":"r","key":"x","value":"1"},{"type":"w","key":"y","value":"1"}]}
+{"process":2,"txn":"t3","start_ns":140,"end_ns":150,"status":"ok","ops":[{"type":"r","key":"y","value":"1"}]}
