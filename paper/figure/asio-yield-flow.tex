@@ -1,0 +1,75 @@
+\definecolor{asioblue}{RGB}{63,94,143}
+\definecolor{bridgegreen}{RGB}{69,126,102}
+\definecolor{kernelyellow}{RGB}{173,136,55}
+\colorlet{fiberfill}{idlekvred!7}
+\colorlet{asiofill}{asioblue!7}
+\colorlet{bridgefill}{bridgegreen!8}
+\colorlet{kernelfill}{kernelyellow!10}
+
+\begin{tikzpicture}[
+  node distance=0.38cm,
+  stage/.style={
+    draw=#1,
+    fill=#1!8,
+    rounded corners=2pt,
+    line width=0.8pt,
+    minimum width=11.4cm,
+    minimum height=0.95cm,
+    align=left,
+    inner xsep=8pt,
+    inner ysep=6pt,
+    font=\small
+  },
+  syslabel/.style={
+    font=\small\bfseries,
+    text width=2.2cm,
+    align=right
+  },
+  flow/.style={
+    -{Latex[length=2.6mm,width=1.8mm]},
+    line width=0.9pt,
+    draw=black!75
+  }
+]
+
+\node[syslabel] (l1) at (0,0) {Fiber};
+\node[stage=idlekvred, anchor=west] (n1) at (2.2,0)
+  {连接 Fiber 执行命令逻辑，并调用 \texttt{async\_read(..., yield\_t)}}; 
+
+\node[syslabel, below=of l1] (l2) {桥接层};
+\node[stage=bridgegreen, anchor=west, below=of n1] (n2)
+  {completion token 桥接层扩展 \texttt{yield\_t} 与 \texttt{async\_result}，保存当前 Fiber 的恢复点}; 
+
+\node[syslabel, below=of l2] (l3) {Asio};
+\node[stage=asioblue, anchor=west, below=of n2] (n3)
+  {\texttt{io\_context} 为 socket 注册异步读写操作，并将完成处理器关联到事件循环}; 
+
+\node[syslabel, below=of l3] (l4) {EventLoop};
+\node[stage=asioblue, anchor=west, below=of n3] (n4)
+  {当前 Fiber 挂起，工作线程返回事件循环，继续调度其他 ready Fiber}; 
+
+\node[syslabel, below=of l4] (l5) {Kernel};
+\node[stage=kernelyellow, anchor=west, below=of n4] (n5)
+  {socket 变为可读/可写，内核将 I/O 完成事件返回给事件循环}; 
+
+\node[syslabel, below=of l5] (l6) {Asio};
+\node[stage=asioblue, anchor=west, below=of n5] (n6)
+  {Asio 在同一工作线程中执行完成回调，并把结果交回 completion token}; 
+
+\node[syslabel, below=of l6] (l7) {桥接层};
+\node[stage=bridgegreen, anchor=west, below=of n6] (n7)
+  {桥接层唤醒原 Fiber，回填返回值或错误码，恢复挂起的执行上下文}; 
+
+\node[syslabel, below=of l7] (l8) {Fiber};
+\node[stage=idlekvred, anchor=west, below=of n7] (n8)
+  {原 Fiber 从挂起点继续执行，随后进入请求解析、命令执行或响应发送路径}; 
+
+\draw[flow] (n1.south) -- (n2.north);
+\draw[flow] (n2.south) -- (n3.north);
+\draw[flow] (n3.south) -- (n4.north);
+\draw[flow] (n4.south) -- (n5.north);
+\draw[flow] (n5.south) -- (n6.north);
+\draw[flow] (n6.south) -- (n7.north);
+\draw[flow] (n7.south) -- (n8.north);
+
+\end{tikzpicture}

@@ -1,0 +1,124 @@
+\begin{thebibliography}{17}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{#1}
+\expandafter\ifx\csname urlstyle\endcsname\relax\else
+  \urlstyle{same}\fi
+\expandafter\ifx\csname href\endcsname\relax
+  \DeclareUrlCommand\doi{\urlstyle{rm}}
+  \def\eprint#1#2{#2}
+\else
+  \def\doi#1{\href{https://doi.org/#1}{\nolinkurl{#1}}}
+  \let\eprint\href
+\fi
+
+\bibitem[Tessier(2025)]{In-memory-databases-The-foundation-of-real-time-AI-and-analytics}
+TESSIER J.
+\newblock In-memory databases: The foundation of real-time ai and analytics\allowbreak[EB/OL].
+\newblock \allowbreak(2025-10-23)\allowbreak[2026-04-20].
+\newblock \url{https://redis.io/blog/in-memory-databases-the-foundation-of-real-time-ai-and-analytics/}.
+
+\bibitem[Ousterhout et~al.(2009)Ousterhout, Agrawal, Erickson, Kozyrakis, Leverich, Mazi{\`e}res, Mitra, Narayanan, Ongaro, Parulkar, Rosenblum, Rumble, Stratmann, and Stutsman]{The-Case-for-RAMClouds-Scalable-High-Performance-Storage-Entirely-in-DRAM}
+OUSTERHOUT J, AGRAWAL P, ERICKSON D, et~al.
+\newblock The case for ramclouds: Scalable high-performance storage entirely in dram\allowbreak[J/OL].
+\newblock SIGOPS Operating Systems Review, 2009, 43\allowbreak (4): 92-105.
+\newblock \url{https://doi.org/10.1145/1713254.1713276}.
+
+\bibitem[Fan et~al.(2013)Fan, Andersen, and Kaminsky]{MemC3-Compact-and-Concurrent-MemCache-with-Dumber-Caching-and-Smarter-Hashing}
+FAN B, ANDERSEN D~G, KAMINSKY M.
+\newblock Memc3: Compact and concurrent memcache with dumber caching and smarter hashing\allowbreak[C/OL]//\allowbreak
+10th USENIX Symposium on Networked Systems Design and Implementation (NSDI 13).
+\newblock Lombard, IL: USENIX Association, 2013: 371-384.
+\newblock \url{https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/fan}.
+
+\bibitem[Lim et~al.(2014)Lim, Han, Andersen, and Kaminsky]{MICA-A-Holistic-Approach-to-Fast-In-Memory-Key-Value-Storage}
+LIM H, HAN D, ANDERSEN D~G, et~al.
+\newblock Mica: A holistic approach to fast in-memory key-value storage\allowbreak[C/OL]//\allowbreak
+11th USENIX Symposium on Networked Systems Design and Implementation (NSDI 14).
+\newblock Seattle, WA: USENIX Association, 2014: 429-444.
+\newblock \url{https://www.usenix.org/conference/nsdi14/technical-sessions/presentation/lim}.
+
+\bibitem[Chandramouli et~al.(2018)Chandramouli, Prasaad, Kossmann, Levandoski, Hunter, and Barnett]{FASTER-A-Concurrent-Key-Value-Store-with-In-Place-Updates}
+CHANDRAMOULI B, PRASAAD G, KOSSMANN D, et~al.
+\newblock Faster: A concurrent key-value store with in-place updates\allowbreak[C/OL]//\allowbreak
+Proceedings of the 2018 International Conference on Management of Data.
+\newblock Houston, TX, USA: Association for Computing Machinery, 2018: 275-290.
+\newblock \url{https://www.microsoft.com/en-us/research/publication/faster-concurrent-key-value-store-place-updates/}.
+\newblock DOI: \doi{10.1145/3183713.3196898}.
+
+\bibitem[Bernstein et~al.(1981)Bernstein and Goodman]{Concurrency-Control-in-Distributed-Database-Systems}
+BERNSTEIN P~A, GOODMAN N.
+\newblock Concurrency control in distributed database systems\allowbreak[J/OL].
+\newblock ACM Comput. Surv., 1981, 13\allowbreak (2): 185–221.
+\newblock \url{https://doi.org/10.1145/356842.356846}.
+
+\bibitem[Gray et~al.(1975)Gray, Lorie, and Putzolu]{Granularity-of-locks-in-a-shared-data-base}
+GRAY J~N, LORIE R~A, PUTZOLU G~R.
+\newblock Granularity of locks in a shared data base\allowbreak[C/OL]//\allowbreak
+VLDB '75: Proceedings of the 1st International Conference on Very Large Data Bases.
+\newblock New York, NY, USA: Association for Computing Machinery, 1975: 428–451.
+\newblock \url{https://doi.org/10.1145/1282480.1282513}.
+
+\bibitem[Reed(1978)]{NAMING-AND-SYNCHRONIZATION-IN-A-DECENTRALIZED-COMPUTER-SYSTEM}
+REED D~P.
+\newblock Naming and synchronization in a decentralized computer system\allowbreak[R].
+\newblock USA: Massachusetts Institute of Technology, 1978.
+
+\bibitem[Kung et~al.(1981)Kung and Robinson]{On-optimistic-methods-for-concurrency-control}
+KUNG H~T, ROBINSON J~T.
+\newblock On optimistic methods for concurrency control\allowbreak[J/OL].
+\newblock ACM Trans. Database Syst., 1981, 6\allowbreak (2): 213–226.
+\newblock \url{https://doi.org/10.1145/319566.319567}.
+
+\bibitem[Ren et~al.(2015)Ren, Thomson, and Abadi]{VLL}
+REN K, THOMSON A, ABADI D~J.
+\newblock Vll: a lock manager redesign for main memory database systems\allowbreak[J/OL].
+\newblock The VLDB Journal, 2015, 24\allowbreak (5): 681–705.
+\newblock \url{https://doi.org/10.1007/s00778-014-0377-7}.
+
+\bibitem[Mao et~al.(2012)Mao, Kohler, and Morris]{Cache-Craftiness-for-Fast-Multicore-Key-Value-Storage}
+MAO Y, KOHLER E, MORRIS R.
+\newblock Cache craftiness for fast multicore key-value storage\allowbreak[C/OL]//\allowbreak
+Proceedings of the 7th ACM European Conference on Computer Systems.
+\newblock Bern, Switzerland: Association for Computing Machinery, 2012: 183-196.
+\newblock \url{https://read.seas.harvard.edu/~kohler/pubs/mao12cache.pdf}.
+\newblock DOI: \doi{10.1145/2168836.2168855}.
+
+\bibitem[Leis et~al.(2013)Leis, Kemper, and Neumann]{The-adaptive-radix-tree-ARTful-indexing-for-main-memory-databases}
+LEIS V, KEMPER A, NEUMANN T.
+\newblock The adaptive radix tree: Artful indexing for main-memory databases\allowbreak[C/OL]//\allowbreak
+ICDE '13: Proceedings of the 2013 IEEE International Conference on Data Engineering (ICDE 2013).
+\newblock USA: IEEE Computer Society, 2013: 38–49.
+\newblock \url{https://doi.org/10.1109/ICDE.2013.6544812}.
+
+\bibitem[Herlihy et~al.(1990)Herlihy and Wing]{Linearizability:a-correctness-condition-for-concurrent-objects}
+HERLIHY M~P, WING J~M.
+\newblock Linearizability: a correctness condition for concurrent objects\allowbreak[J/OL].
+\newblock ACM Trans. Program. Lang. Syst., 1990, 12\allowbreak (3): 463–492.
+\newblock \url{https://doi.org/10.1145/78969.78972}.
+
+\bibitem[{Jepsen-io}(2020)]{Elle}
+{Jepsen-io}.
+\newblock Elle\allowbreak[EB/OL].
+\newblock \allowbreak(2020-02-23)\allowbreak[2026-04-20].
+\newblock \url{https://github.com/jepsen-io/elle}.
+
+\bibitem[Stonebraker(1985)]{The-Case-for-Shared-Nothing}
+STONEBRAKER M.
+\newblock The case for shared nothing\allowbreak[C/OL]//\allowbreak
+High Performance Transaction Systems Workshop.
+\newblock 1985.
+\newblock \url{https://api.semanticscholar.org/CorpusID:260427782}.
+
+\bibitem[{Boostorg}(2026)]{Boost-Asio}
+{Boostorg}.
+\newblock Boost.asio\allowbreak[EB/OL].
+\newblock 2026\allowbreak[2026-04-21].
+\newblock \url{https://github.com/boostorg/asio}.
+
+\bibitem[{Boostorg}(2026)]{Boost-Fiber}
+{Boostorg}.
+\newblock Boost.fiber\allowbreak[EB/OL].
+\newblock 2026\allowbreak[2026-04-21].
+\newblock \url{https://github.com/boostorg/fiber}.
+
+\end{thebibliography}

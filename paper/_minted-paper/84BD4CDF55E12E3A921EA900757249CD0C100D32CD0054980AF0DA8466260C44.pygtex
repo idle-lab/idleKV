@@ -1,0 +1,7 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k}{while}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nb}{true}\PYG{p}{)}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n}{nread}\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }\PYG{n}{async\PYGZus{}read}\PYG{p}{(}\PYG{n}{socket}\PYG{p}{,}\PYG{+w}{ }\PYG{n}{buf}\PYG{p}{,}\PYG{+w}{ }\PYG{n}{yield}\PYG{p}{);}
+\PYG{+w}{    }\PYG{n}{res}\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }\PYG{n}{process\PYGZus{}input}\PYG{p}{(}\PYG{n}{buf}\PYG{p}{,}\PYG{+w}{ }\PYG{n}{nread}\PYG{p}{);}
+\PYG{+w}{    }\PYG{n}{nwrite}\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }\PYG{n}{async\PYGZus{}write}\PYG{p}{(}\PYG{n}{socket}\PYG{p}{,}\PYG{+w}{ }\PYG{n}{res}\PYG{p}{,}\PYG{+w}{ }\PYG{n}{yield}\PYG{p}{);}
+\PYG{p}{\PYGZcb{}}
+\end{Verbatim}

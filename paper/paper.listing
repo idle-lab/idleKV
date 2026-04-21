@@ -1,0 +1,6 @@
+size_t nread = async_read(
+    socket,
+    asio::buffer(buf, size),
+    boost::fibers::asio::yield);
+
+ProcessInput(buf, nread);
