@@ -1,0 +1,3 @@
+workload,op,case_label,idlekv_vs_redis_ops_speedup,idlekv_vs_redis_latency_gain
+single,zadd_insert,Single key,2.0169325028469705,2.0514390654744443
+multi,zadd_insert,Multi key,3.786162897740381,4.412537254594444

@@ -1,4 +1,4 @@
-\begin{thebibliography}{17}
+\begin{thebibliography}{22}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{#1}
 \expandafter\ifx\csname urlstyle\endcsname\relax\else
@@ -19,9 +19,8 @@ TESSIER J.
 
 \bibitem[Ousterhout et~al.(2009)Ousterhout, Agrawal, Erickson, Kozyrakis, Leverich, Mazi{\`e}res, Mitra, Narayanan, Ongaro, Parulkar, Rosenblum, Rumble, Stratmann, and Stutsman]{The-Case-for-RAMClouds-Scalable-High-Performance-Storage-Entirely-in-DRAM}
 OUSTERHOUT J, AGRAWAL P, ERICKSON D, et~al.
-\newblock The case for ramclouds: Scalable high-performance storage entirely in dram\allowbreak[J/OL].
+\newblock The case for ramclouds: Scalable high-performance storage entirely in dram\allowbreak[J].
 \newblock SIGOPS Operating Systems Review, 2009, 43\allowbreak (4): 92-105.
-\newblock \url{https://doi.org/10.1145/1713254.1713276}.
 
 \bibitem[Fan et~al.(2013)Fan, Andersen, and Kaminsky]{MemC3-Compact-and-Concurrent-MemCache-with-Dumber-Caching-and-Smarter-Hashing}
 FAN B, ANDERSEN D~G, KAMINSKY M.
@@ -43,20 +42,17 @@ CHANDRAMOULI B, PRASAAD G, KOSSMANN D, et~al.
 Proceedings of the 2018 International Conference on Management of Data.
 \newblock Houston, TX, USA: Association for Computing Machinery, 2018: 275-290.
 \newblock \url{https://www.microsoft.com/en-us/research/publication/faster-concurrent-key-value-store-place-updates/}.
-\newblock DOI: \doi{10.1145/3183713.3196898}.
 
 \bibitem[Bernstein et~al.(1981)Bernstein and Goodman]{Concurrency-Control-in-Distributed-Database-Systems}
 BERNSTEIN P~A, GOODMAN N.
-\newblock Concurrency control in distributed database systems\allowbreak[J/OL].
+\newblock Concurrency control in distributed database systems\allowbreak[J].
 \newblock ACM Comput. Surv., 1981, 13\allowbreak (2): 185–221.
-\newblock \url{https://doi.org/10.1145/356842.356846}.
 
 \bibitem[Gray et~al.(1975)Gray, Lorie, and Putzolu]{Granularity-of-locks-in-a-shared-data-base}
 GRAY J~N, LORIE R~A, PUTZOLU G~R.
-\newblock Granularity of locks in a shared data base\allowbreak[C/OL]//\allowbreak
+\newblock Granularity of locks in a shared data base\allowbreak[C]//\allowbreak
 VLDB '75: Proceedings of the 1st International Conference on Very Large Data Bases.
 \newblock New York, NY, USA: Association for Computing Machinery, 1975: 428–451.
-\newblock \url{https://doi.org/10.1145/1282480.1282513}.
 
 \bibitem[Reed(1978)]{NAMING-AND-SYNCHRONIZATION-IN-A-DECENTRALIZED-COMPUTER-SYSTEM}
 REED D~P.
@@ -65,15 +61,24 @@ REED D~P.
 
 \bibitem[Kung et~al.(1981)Kung and Robinson]{On-optimistic-methods-for-concurrency-control}
 KUNG H~T, ROBINSON J~T.
-\newblock On optimistic methods for concurrency control\allowbreak[J/OL].
+\newblock On optimistic methods for concurrency control\allowbreak[J].
 \newblock ACM Trans. Database Syst., 1981, 6\allowbreak (2): 213–226.
-\newblock \url{https://doi.org/10.1145/319566.319567}.
 
 \bibitem[Ren et~al.(2015)Ren, Thomson, and Abadi]{VLL}
 REN K, THOMSON A, ABADI D~J.
-\newblock Vll: a lock manager redesign for main memory database systems\allowbreak[J/OL].
+\newblock Vll: a lock manager redesign for main memory database systems\allowbreak[J].
 \newblock The VLDB Journal, 2015, 24\allowbreak (5): 681–705.
-\newblock \url{https://doi.org/10.1007/s00778-014-0377-7}.
+
+\bibitem[Rao et~al.(2000)Rao and Ross]{Making-B-Trees-Cache-Conscious-in-Main-Memory}
+RAO J, ROSS K~A.
+\newblock Making b+-trees cache conscious in main memory\allowbreak[C]//\allowbreak
+Proceedings of the 2000 ACM SIGMOD International Conference on Management of Data.
+\newblock New York, NY, USA: Association for Computing Machinery, 2000: 475-486.
+
+\bibitem[Pugh(1990)]{Skip-lists-a-probabilistic-alternative-to-balanced-trees}
+PUGH W.
+\newblock Skip lists: a probabilistic alternative to balanced trees\allowbreak[J].
+\newblock Communications of the ACM, 1990, 33\allowbreak (6): 668-676.
 
 \bibitem[Mao et~al.(2012)Mao, Kohler, and Morris]{Cache-Craftiness-for-Fast-Multicore-Key-Value-Storage}
 MAO Y, KOHLER E, MORRIS R.
@@ -81,20 +86,17 @@ MAO Y, KOHLER E, MORRIS R.
 Proceedings of the 7th ACM European Conference on Computer Systems.
 \newblock Bern, Switzerland: Association for Computing Machinery, 2012: 183-196.
 \newblock \url{https://read.seas.harvard.edu/~kohler/pubs/mao12cache.pdf}.
-\newblock DOI: \doi{10.1145/2168836.2168855}.
 
 \bibitem[Leis et~al.(2013)Leis, Kemper, and Neumann]{The-adaptive-radix-tree-ARTful-indexing-for-main-memory-databases}
 LEIS V, KEMPER A, NEUMANN T.
-\newblock The adaptive radix tree: Artful indexing for main-memory databases\allowbreak[C/OL]//\allowbreak
+\newblock The adaptive radix tree: Artful indexing for main-memory databases\allowbreak[C]//\allowbreak
 ICDE '13: Proceedings of the 2013 IEEE International Conference on Data Engineering (ICDE 2013).
 \newblock USA: IEEE Computer Society, 2013: 38–49.
-\newblock \url{https://doi.org/10.1109/ICDE.2013.6544812}.
 
 \bibitem[Herlihy et~al.(1990)Herlihy and Wing]{Linearizability:a-correctness-condition-for-concurrent-objects}
 HERLIHY M~P, WING J~M.
-\newblock Linearizability: a correctness condition for concurrent objects\allowbreak[J/OL].
+\newblock Linearizability: a correctness condition for concurrent objects\allowbreak[J].
 \newblock ACM Trans. Program. Lang. Syst., 1990, 12\allowbreak (3): 463–492.
-\newblock \url{https://doi.org/10.1145/78969.78972}.
 
 \bibitem[{Jepsen-io}(2020)]{Elle}
 {Jepsen-io}.
@@ -120,5 +122,24 @@ High Performance Transaction Systems Workshop.
 \newblock Boost.fiber\allowbreak[EB/OL].
 \newblock 2026\allowbreak[2026-04-21].
 \newblock \url{https://github.com/boostorg/fiber}.
+
+\bibitem[Collet(2012)]{xxhash}
+COLLET Y.
+\newblock xxhash - extremely fast non-cryptographic hash algorithm\allowbreak[EB/OL].
+\newblock 2012.
+\newblock \url{https://xxhash.com/}.
+
+\bibitem[Leijen et~al.(2019)Leijen, Zorn, and de~Moura]{Leijen2019MimallocFL}
+LEIJEN D, ZORN B~G, DE~MOURA L~M.
+\newblock Mimalloc: Free list sharding in action\allowbreak[C/OL]//\allowbreak
+Asian Symposium on Programming Languages and Systems.
+\newblock 2019.
+\newblock \url{https://api.semanticscholar.org/CorpusID:198363081}.
+
+\bibitem[{DragonflyDB}(2026)]{Dragonfly-RDB-Save}
+{DragonflyDB}.
+\newblock Rdb save design\allowbreak[EB/OL].
+\newblock 2026\allowbreak[2026-04-24].
+\newblock \url{https://github.com/dragonflydb/dragonfly/blob/main/docs/rdbsave.md}.
 
 \end{thebibliography}

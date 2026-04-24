@@ -1,0 +1,144 @@
+\relax 
+\nicematrix@redefine@check@rerun 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand*\HyPL@Entry[1]{}
+\HyPL@Entry{0<</S/D>>}
+\HyPL@Entry{3<</P(\376\377\0000)>>}
+\HyPL@Entry{4<</S/R>>}
+\@writefile{toc}{\contentsline {section}{摘要}{I}{section*.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{Abstract}{II}{section*.2}\protected@file@percent }
+\citation{In-memory-databases-The-foundation-of-real-time-AI-and-analytics}
+\citation{The-Case-for-RAMClouds-Scalable-High-Performance-Storage-Entirely-in-DRAM}
+\HyPL@Entry{6<</S/D>>}
+\@writefile{toc}{\contentsline {section}{\numberline {1}绪论}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}选题背景与意义}{1}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}相关研究}{1}{subsection.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.1}主内存键值数据库}{1}{subsubsection.1.2.1}\protected@file@percent }
+\citation{MemC3-Compact-and-Concurrent-MemCache-with-Dumber-Caching-and-Smarter-Hashing}
+\citation{MICA-A-Holistic-Approach-to-Fast-In-Memory-Key-Value-Storage}
+\citation{FASTER-A-Concurrent-Key-Value-Store-with-In-Place-Updates}
+\citation{Concurrency-Control-in-Distributed-Database-Systems}
+\citation{Granularity-of-locks-in-a-shared-data-base}
+\@writefile{lof}{\contentsline {figure}{\numberline {1.1}{\ignorespaces IdleKV 相对 Redis 的基础读写性能提升概览}}{2}{figure.caption.3}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:relative-gain-intro}{{1.1}{2}{IdleKV 相对 Redis 的基础读写性能提升概览}{figure.caption.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.2}主内存事务与并发控制}{2}{subsubsection.1.2.2}\protected@file@percent }
+\citation{NAMING-AND-SYNCHRONIZATION-IN-A-DECENTRALIZED-COMPUTER-SYSTEM}
+\citation{On-optimistic-methods-for-concurrency-control}
+\citation{VLL}
+\citation{Making-B-Trees-Cache-Conscious-in-Main-Memory}
+\citation{Skip-lists-a-probabilistic-alternative-to-balanced-trees}
+\citation{Cache-Craftiness-for-Fast-Multicore-Key-Value-Storage}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.2.3}可扩展基数树与有序索引}{3}{subsubsection.1.2.3}\protected@file@percent }
+\citation{The-adaptive-radix-tree-ARTful-indexing-for-main-memory-databases}
+\citation{Linearizability:a-correctness-condition-for-concurrent-objects}
+\citation{Elle}
+\@writefile{toc}{\contentsline {section}{\numberline {2}系统概述}{4}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}系统设计原则}{4}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.1}一致性保证}{4}{subsubsection.2.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.2}Redis 协议兼容性}{4}{subsubsection.2.1.2}\protected@file@percent }
+\citation{The-Case-for-Shared-Nothing}
+\citation{VLL}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.3}多核并行利用}{5}{subsubsection.2.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}系统总体架构}{5}{subsection.2.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.1}{\ignorespaces IdleKV 整体架构图}}{6}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:overall-architecture}{{2.1}{6}{IdleKV 整体架构图}{figure.caption.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Redis Serialization Protocol 实现}{6}{subsection.2.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2.1}{\ignorespaces IdleKV 当前支持的 RESP2 数据类型}}{6}{table.caption.5}\protected@file@percent }
+\newlabel{tab:resp2-types}{{2.1}{6}{IdleKV 当前支持的 RESP2 数据类型}{table.caption.5}{}}
+\citation{Boost-Asio,Boost-Fiber}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}核心模块划分}{7}{subsection.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}IO 与线程模型}{7}{section.3}\protected@file@percent }
+\newlabel{sec:io-thread-model}{{3}{7}{IO 与线程模型}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}基于 Fiber 的异步 IO}{8}{subsection.3.1}\protected@file@percent }
+\@writefile{lol}{\contentsline {listing}{\numberline {1}{\ignorespaces 使用 \texttt  {yield\_t} 的同步风格 I/O 示例}}{8}{listing.1}\protected@file@percent }
+\newlabel{lst:yield-sync-io}{{1}{8}{使用 \texttt {yield\_t} 的同步风格 I/O 示例}{listing.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.1}{\ignorespaces 基于 Fiber 的异步工作流程}}{8}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:asio-yield-flow}{{3.1}{8}{基于 Fiber 的异步工作流程}{figure.caption.6}{}}
+\citation{xxhash}
+\citation{Leijen2019MimallocFL}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Fiber 调度机制}{9}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Shared-Nothing 线程模型}{9}{subsection.3.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.2}{\ignorespaces 跨 Shard 调度图}}{10}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:cross-shard}{{3.2}{10}{跨 Shard 调度图}{figure.caption.7}{}}
+\citation{VLL}
+\@writefile{toc}{\contentsline {section}{\numberline {4}基于 VLL 的事务框架}{11}{section.4}\protected@file@percent }
+\newlabel{sec:vll-txn}{{4}{11}{基于 VLL 的事务框架}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}VLL：超轻量锁机制}{11}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:vll-overview}{{4.1}{11}{VLL：超轻量锁机制}{subsection.4.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}IdleKV 事务实现}{11}{subsection.4.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4.1}{\ignorespaces 事务调度执行流程}}{12}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:transaction-registration}{{4.1}{12}{事务调度执行流程}{figure.caption.8}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.1}事务注册}{12}{subsubsection.4.2.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4.2}{\ignorespaces 多分片事务顺序不一致情况流程图}}{13}{figure.caption.9}\protected@file@percent }
+\newlabel{fig:txn-reg}{{4.2}{13}{多分片事务顺序不一致情况流程图}{figure.caption.9}{}}
+\@writefile{lol}{\contentsline {listing}{\numberline {2}{\ignorespaces \texttt  {RegisterInShard()} 的本地注册逻辑}}{14}{listing.2}\protected@file@percent }
+\newlabel{lst:register-in-shard}{{2}{14}{\texttt {RegisterInShard()} 的本地注册逻辑}{listing.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.2}事务执行}{15}{subsubsection.4.2.2}\protected@file@percent }
+\@writefile{lol}{\contentsline {listing}{\numberline {3}{\ignorespaces \texttt  {PollTransaction()} 的本地推进逻辑}}{15}{listing.3}\protected@file@percent }
+\newlabel{lst:poll-transaction}{{3}{15}{\texttt {PollTransaction()} 的本地推进逻辑}{listing.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}事务执行优化}{16}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.1}Pipeline 优化}{16}{subsubsection.4.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.2}单分片命令优化}{17}{subsubsection.4.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.3}乱序执行优化}{17}{subsubsection.4.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}DB 存储结构}{18}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}设计目标与总体组织}{18}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}通用键值层}{18}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.2.1}对象表示与生命周期管理}{18}{subsubsection.5.2.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5.1}{\ignorespaces Value 结构示意图}}{19}{figure.caption.10}\protected@file@percent }
+\newlabel{fig:value}{{5.1}{19}{Value 结构示意图}{figure.caption.10}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.2.2}KvStore 的实现}{19}{subsubsection.5.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}ART 有序索引}{20}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.1}自适应节点布局与路径压缩}{20}{subsubsection.5.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.2}有序编码与游标扫描}{20}{subsubsection.5.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.3}基于子树计数的 Rank 定位}{21}{subsubsection.5.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}ZSet 对象设计}{21}{subsection.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.4.1}双索引总体方案}{21}{subsubsection.5.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.4.2}更新、删除与范围查询}{22}{subsubsection.5.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}复杂度分析与工程权衡}{22}{subsection.5.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}系统测试}{23}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}硬件与软件环境}{23}{subsection.6.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6.1}{\ignorespaces 实验硬件与软件环境}}{23}{table.caption.11}\protected@file@percent }
+\newlabel{tab:exp-env}{{6.1}{23}{实验硬件与软件环境}{table.caption.11}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Redis VS IdleKV}{23}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {6.2.1}Get/Set}{24}{subsubsection.6.2.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6.1}{\ignorespaces Get/Set 工作负载总体对比}}{24}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:get-set-overview}{{6.1}{24}{Get/Set 工作负载总体对比}{figure.caption.12}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {6.2.2}ZSet}{25}{subsubsection.6.2.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6.2}{\ignorespaces ZSet 工作负载总体对比}}{25}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:zset-overview}{{6.2}{25}{ZSet 工作负载总体对比}{figure.caption.13}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6.2}{\ignorespaces 单个 ZSet 键在不同数据规模下的内存占用}}{25}{table.caption.14}\protected@file@percent }
+\newlabel{tab:zset-memory}{{6.2}{25}{单个 ZSet 键在不同数据规模下的内存占用}{table.caption.14}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {6.2.3}结果讨论}{26}{subsubsection.6.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}总结与展望}{26}{section.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}工作总结}{26}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}不足分析与后续工作}{26}{subsection.7.2}\protected@file@percent }
+\citation{Dragonfly-RDB-Save}
+\@writefile{toc}{\contentsline {section}{\numberline {8}致谢}{28}{section.8}\protected@file@percent }
+\bibstyle{gbt7714-numerical}
+\bibdata{references}
+\bibcite{In-memory-databases-The-foundation-of-real-time-AI-and-analytics}{{1}{2025}{{Tessier}}{{}}}
+\bibcite{The-Case-for-RAMClouds-Scalable-High-Performance-Storage-Entirely-in-DRAM}{{2}{2009}{{Ousterhout et~al.}}{{Ousterhout, Agrawal, Erickson, Kozyrakis, Leverich, Mazi{\`e}res, Mitra, Narayanan, Ongaro, Parulkar, Rosenblum, Rumble, Stratmann, and Stutsman}}}
+\bibcite{MemC3-Compact-and-Concurrent-MemCache-with-Dumber-Caching-and-Smarter-Hashing}{{3}{2013}{{Fan et~al.}}{{Fan, Andersen, and Kaminsky}}}
+\bibcite{MICA-A-Holistic-Approach-to-Fast-In-Memory-Key-Value-Storage}{{4}{2014}{{Lim et~al.}}{{Lim, Han, Andersen, and Kaminsky}}}
+\bibcite{FASTER-A-Concurrent-Key-Value-Store-with-In-Place-Updates}{{5}{2018}{{Chandramouli et~al.}}{{Chandramouli, Prasaad, Kossmann, Levandoski, Hunter, and Barnett}}}
+\bibcite{Concurrency-Control-in-Distributed-Database-Systems}{{6}{1981}{{Bernstein et~al.}}{{Bernstein and Goodman}}}
+\bibcite{Granularity-of-locks-in-a-shared-data-base}{{7}{1975}{{Gray et~al.}}{{Gray, Lorie, and Putzolu}}}
+\bibcite{NAMING-AND-SYNCHRONIZATION-IN-A-DECENTRALIZED-COMPUTER-SYSTEM}{{8}{1978}{{Reed}}{{}}}
+\bibcite{On-optimistic-methods-for-concurrency-control}{{9}{1981}{{Kung et~al.}}{{Kung and Robinson}}}
+\bibcite{VLL}{{10}{2015}{{Ren et~al.}}{{Ren, Thomson, and Abadi}}}
+\bibcite{Making-B-Trees-Cache-Conscious-in-Main-Memory}{{11}{2000}{{Rao et~al.}}{{Rao and Ross}}}
+\@writefile{toc}{\contentsline {section}{参考文献}{29}{section*.15}\protected@file@percent }
+\bibcite{Skip-lists-a-probabilistic-alternative-to-balanced-trees}{{12}{1990}{{Pugh}}{{}}}
+\bibcite{Cache-Craftiness-for-Fast-Multicore-Key-Value-Storage}{{13}{2012}{{Mao et~al.}}{{Mao, Kohler, and Morris}}}
+\bibcite{The-adaptive-radix-tree-ARTful-indexing-for-main-memory-databases}{{14}{2013}{{Leis et~al.}}{{Leis, Kemper, and Neumann}}}
+\bibcite{Linearizability:a-correctness-condition-for-concurrent-objects}{{15}{1990}{{Herlihy et~al.}}{{Herlihy and Wing}}}
+\bibcite{Elle}{{16}{2020}{{Jepsen-io}}{{}}}
+\bibcite{The-Case-for-Shared-Nothing}{{17}{1985}{{Stonebraker}}{{}}}
+\bibcite{Boost-Asio}{{18}{2026}{{Boostorg}}{{}}}
+\bibcite{Boost-Fiber}{{19}{2026}{{Boostorg}}{{}}}
+\bibcite{xxhash}{{20}{2012}{{Collet}}{{}}}
+\bibcite{Leijen2019MimallocFL}{{21}{2019}{{Leijen et~al.}}{{Leijen, Zorn, and de~Moura}}}
+\bibcite{Dragonfly-RDB-Save}{{22}{2026}{{DragonflyDB}}{{}}}
+\ttl@finishall
+\gdef \@abspage@last{36}

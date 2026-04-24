@@ -261,7 +261,9 @@
 		\zihao{-2}{\heiti{摘\quad 要}}
 	\end{center}
 
-	{\kaishu }
+		{\kaishu
+		随着多核 CPU 普及和主内存容量持续增长，传统 Redis 单线程执行模型在单机垂直扩展能力以及有序复合对象支持方面逐渐暴露出瓶颈。为此，本文设计并实现了一个面向 Redis 兼容语义的主内存键值数据库原型 IdleKV。系统在运行时层面采用 Shared-Nothing 分片架构，以及基于 Boost.Asio 与 Boost.Fiber 的多线程事件驱动模型，使请求能够尽可能在本地执行上下文中完成；在执行层面引入基于 Very Lightweight Locking（VLL）的事务注册与调度机制，以在多分片访问场景下维持 Strict Serializability；在数据结构层面实现了基于可扩展基数树（Adaptive Radix Tree, ART）的 ZSet 双索引结构，并通过有序编码、游标扫描与 rank 定位支持 \texttt{ZADD}、\texttt{ZREM} 和 \texttt{ZRANGE} 等操作。实验结果表明，在 \texttt{GET}/\texttt{SET} 工作负载下，IdleKV 的总体吞吐达到 Redis 的 1.81$\sim$2.57 倍，平均延迟显著降低；在 ZSet 工作负载下，其吞吐最高可达到 Redis 的 3.79 倍，P99 延迟也整体优于 Redis。与此同时，基于 ART 的 ZSet 实现带来了更高的内存占用，说明有序索引性能与空间效率之间仍存在明显权衡。本文工作验证了在 Redis 兼容语义下，将 Shared-Nothing 执行模型、轻量级事务调度机制与 ART 有序索引结合起来构建单机多核高性能键值数据库的可行性，并为后续完善事务能力与容器实现奠定了基础。
+		}
 
 	{\heiti 关键字}\quad {\kaishu 内存数据库；键值存储；可扩展基数树；NoSQL }
 
@@ -278,11 +280,14 @@
 		\zihao{-2}{\textbf{Abstract}}
 	\end{center}
 
-		\begin{spacing}{1.5}
-		
-		\vspace{0.5em}
+			\begin{spacing}{1.5}
+			This thesis presents IdleKV, an in-memory key-value database prototype. It aims to preserve compatibility with Redis semantics while improving single-node multicore scalability and ordered-access performance. As modern servers provide abundant CPU cores and memory capacity, the traditional single-threaded execution model of Redis increasingly limits vertical scalability, especially for workloads that combine high concurrency with ordered data access. To address this issue, IdleKV adopts a Shared-Nothing sharding architecture together with a multithreaded event-driven runtime built on Boost.Asio and Boost.Fiber, so that requests can be processed as locally as possible. On the execution side, the system introduces a transaction registration and scheduling mechanism based on Very Lightweight Locking (VLL) to maintain strict serializability for multi-shard operations. On the storage side, it implements a dual-index ZSet structure based on the Adaptive Radix Tree (ART), and supports ordered operations such as \texttt{ZADD}, \texttt{ZREM}, and \texttt{ZRANGE} through composite-key encoding, cursor-based traversal, and rank-aware positioning.
 
-		\textbf{KEYWORDS}\quad In-Memory Database, Key-Value Stores, Adaptive Radix Tree, NoSQL
+			Experimental results show that, under \texttt{GET}/\texttt{SET} workloads, IdleKV achieves 1.81$\sim$2.57$\times$ the throughput of Redis while also reducing average latency. Under ZSet workloads, the throughput improvement reaches up to 3.79$\times$, and the P99 latency is consistently better than that of Redis. At the same time, the ART-based ZSet design incurs noticeably higher memory overhead, indicating a clear trade-off between ordered-index performance and space efficiency. Overall, this work demonstrates the feasibility of combining a Shared-Nothing execution model, lightweight transaction scheduling, and an ART-based ordered index to build a high-performance Redis-compatible key-value store on a multicore single machine.
+
+			\vspace{0.5em}
+
+			\textbf{KEYWORDS}\quad In-Memory Database, Key-Value Stores, Adaptive Radix Tree, NoSQL
 
 	\end{spacing}
 
@@ -299,7 +304,14 @@
 
 	另一方面，键值数据库的应用场景并不局限于简单的点查和更新。在排行榜、区间检索、前缀匹配、流式状态管理和推荐系统等场景中，系统还需要同时支持按 key 精确定位和按顺序范围访问。传统的跳表或通用树结构虽然能够提供有序能力，但在主内存场景下往往存在指针跳转较多、缓存局部性较差的问题。可扩展基数树（Adaptive Radix Tree, ART）通过路径压缩和自适应节点布局，在保持有序遍历能力的同时提高了内存访问效率，因此成为主内存数据库中一种具有潜力的有序索引结构。
 	
-	在上述背景下，设计一种兼顾 Redis 协议兼容性、多核扩展能力与高效有序索引结构的主内存键值数据库具有重要的研究价值与工程意义。
+	在上述背景下，设计一种兼顾 Redis 协议兼容性、多核扩展能力与高效有序索引结构的主内存键值数据库具有重要的研究价值与工程意义。本文实现的 IdleKV 在我们的基准测试中，使用多核 CPU 在不同工作负载下，吞吐以及平均延迟指标实现相对 Redis 大约 2 倍的性能提升，具体提升参考图 ~\ref{fig:relative-gain-intro} 所示。
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{get_set_benchmark/figures_pub/relative_gain_intro.pdf}
+    \caption{IdleKV 相对 Redis 的基础读写性能提升概览}
+    \label{fig:relative-gain-intro}
+\end{figure}
 
 	\subsection{相关研究}
 	主内存数据库、轻量级并发控制和高效有序索引是本文的三个核心技术背景，本小节将详细介绍这些主题当前的研究现状。
@@ -320,16 +332,21 @@
 	传统并发控制协议起源于磁盘数据库时代，其设计目标主要围绕降低磁盘 I/O 开销与提升事务吞吐能力，因此系统瓶颈通常集中于存储访问延迟，并发控制开销相对次要。在主内存数据库中，数据完全驻留于内存，磁盘 I/O 不再构成主要瓶颈，并发控制机制的开销逐渐成为性能关键限制。针对上述问题，Kun Ren 等人提出一种轻量级的锁控制机制（Very Lightweight Locking，VLL）\cite{VLL}，通过去除中心化的共享/独占计数器与有序事务队列来推进可执行事务，以降低并发控制本身的元数据成本，使其在单核以及多核环境下都有非常优秀的性能表现。
 
 	\subsubsection{可扩展基数树与有序索引}
-	在有序索引方向，主内存场景的核心问题是如何在支持范围查询的同时减少树高、字符串比较与随机内存访问。Mao 等人提出的 Masstree 是这一方向的代表性工作，它将 trie 与 B\textsuperscript{+}-tree 拼接起来处理变长键与长公共前缀，并结合缓存友好的节点布局与细粒度并发控制，在多核主内存环境下兼顾了范围访问能力和较高吞吐\cite{Cache-Craftiness-for-Fast-Multicore-Key-Value-Storage}。这说明主内存环境下的有序索引设计，不能简单沿用面向磁盘的树结构，而需要显式考虑缓存层次和 CPU 访存成本。
+	在有序索引方向，经典的 B\textsuperscript{+}-tree 仍然是最重要的基线结构之一。它依靠较高扇出和叶子层顺序链接，能够同时支持点查与区间扫描，因此长期被广泛用于数据库系统中。然而，传统 B\textsuperscript{+}-tree 的节点组织方式主要围绕页式存储设计，在主内存环境下，其性能瓶颈会逐渐从磁盘 I/O 转向指针跳转、缓存失效与字符串比较。针对这一问题，Rao 和 Ross 提出的 cache-sensitive B\textsuperscript{+}-tree（CSB\textsuperscript{+}-tree）\cite{Making-B-Trees-Cache-Conscious-in-Main-Memory} 通过压缩子指针布局和增强节点连续性，显式地将缓存局部性纳入设计目标，说明即便仍保留 B\textsuperscript{+}-tree 的整体框架，主内存场景下也需要重新审视节点布局与访存模式。
 
-	在此基础上，Leis 等人提出可扩展基数树（Adaptive Radix Tree, ART），通过路径压缩和 Node4、Node16、Node48、Node256 的自适应节点布局，在空间利用率和缓存局部性之间取得了更好的平衡\cite{The-adaptive-radix-tree-ARTful-indexing-for-main-memory-databases}。ART 的点查性能接近哈希索引，同时仍然保留了按字典序遍历、前缀匹配和范围扫描等有序能力，因此成为主内存数据库中非常有代表性的有序索引结构。
+	另一类常见的有序结构是 SkipList。Pugh 提出的 SkipList\cite{Skip-lists-a-probabilistic-alternative-to-balanced-trees} 以概率平衡代替严格旋转维护，插入与删除逻辑简洁，工程实现也相对直接，因此在许多内存型系统中被用作有序集合或 memtable 的底层结构。Redis 的 Sorted Set 便是采用 “Hash Table + SkipList” 的典型代表。不过，SkipList 的查找路径本质上仍由多层前向指针跳转组成，其缓存行为较强依赖对象分配布局；当 key 较长或需要进行深范围扫描时，这类随机访问的代价会变得更加明显。
 
-	不过，原始 ART 的设计重点主要在 key 上的有序访问，对于 Redis Sorted Set 这类需要按 score/member 复合顺序组织，并支持按 rank 定位和区间扫描的场景，并没有直接给出完整支持。因此，在将 ART 用于键值数据库有序容器时，通常还需要结合复合编码、迭代器和子树计数等机制进行扩展。也正因为如此，ART 既为本文提供了一个缓存友好的有序索引基础，也为进一步面向 Redis 语义做工程化增强留下了空间。
+		为了进一步兼顾变长键上的公共前缀利用与范围访问能力，Mao 等人提出了一种复合索引结构（Masstree）\cite{Cache-Craftiness-for-Fast-Multicore-Key-Value-Storage}。该结构将 trie 与 B\textsuperscript{+}-tree 拼接起来处理变长键与长公共前缀，并结合缓存友好的节点布局与细粒度并发控制，在多核主内存环境下兼顾了范围访问能力和较高吞吐。这说明主内存环境下的有序索引设计，不能简单沿用面向磁盘的树结构，而需要显式考虑缓存层次、CPU 访存成本以及 key 编码特征。
+
+	在此基础上，Leis 等人提出可扩展基数树（Adaptive Radix Tree, ART）\cite{The-adaptive-radix-tree-ARTful-indexing-for-main-memory-databases}，通过路径压缩和 Node4、Node16、Node48、Node256 的自适应节点布局，在空间利用率和缓存局部性之间取得了更好的平衡。与传统 B\textsuperscript{+}-tree 相比，ART 直接按字节前缀组织键，能够更自然地处理长公共前缀；与 SkipList 相比，它减少了多层链式指针跳转带来的随机访问开销。ART 的点查性能接近哈希索引，同时仍然保留了按字典序遍历、前缀匹配和范围扫描等有序能力，因此成为主内存数据库中非常有代表性的有序索引结构。
+
 	
 	\section{系统概述}
-	本章主要概述 IdleKV 的整体设计原则与系统架构。描述系统中的核心模块（\allowbreak\texttt{Server}、\texttt{EventLoopPool}、\texttt{RedisService}、\texttt{IdleEngine}、\texttt{Transaction}、\texttt{Shard}、\texttt{DB} 以及 \texttt{Value}/\texttt{ZSet} 等数据结构）的主要职责及设计思路。
+	本章主要概述 IdleKV 的整体设计原则与系统架构。
 
 	\subsection{系统设计原则}
+
+	本文旨在实现一套在多核 CPU 上具备良好性能表现的 Redis 替代系统。为兼顾性能与工程可维护性，有必要在设计之初明确系统的整体设计原则与核心理念。
 
 	\subsubsection{一致性保证}
 
@@ -343,9 +360,9 @@
 
 	考虑到论文原型实现的范围，初版系统优先支持 RESP2，并围绕字符串命令、基础系统命令以及 Sorted Set 相关命令构建完整处理链路。这样的取舍既能够覆盖本文关注的核心工作负载，也为后续继续补齐更完整的 Redis 命令集留下了清晰扩展接口。
 
-	\subsubsection{垂直扩展性}
+	\subsubsection{多核并行利用}
 
-	垂直扩展性是本文系统设计的核心原则之一。与依赖集群分片提升吞吐的方案不同，面向单机多核的键值数据库应尽量减少共享状态与跨核通信开销，使请求尽可能在局部执行上下文中完成。为此，系统遵循“数据局部化、执行局部化、协调最小化”的设计原则：尽量将同一 key 的访问固定在局部处理单元中，避免热路径上的全局锁、频繁线程切换与不必要的同步操作，仅在必要时引入有限的跨核协作，从而在保证 Redis 兼容语义的前提下提升单机多核扩展能力。
+	提高多核 CPU 利用率是本文系统设计的核心目标之一。随着单机服务器核心数量不断增加，键值数据库的性能瓶颈不应长期集中在单个执行单元上，而应尽可能将并发请求转化为可并行处理的工作负载。对于主内存数据库而言，单次请求的计算路径通常较短，若系统结构无法有效分摊这些请求，即使硬件提供了更多 CPU 核心，整体吞吐也难以随之提升。因此，本文在设计上应按照“局部优先、并行推进、按需协调”的设计思路，减少夸核心数据迁移、缓存失效和同步带来的额外开销。
 
 	\subsection{系统总体架构}
 
@@ -359,6 +376,7 @@
 		\caption{IdleKV 整体架构图}
 		\label{fig:overall-architecture}
 	\end{figure}
+
 	如图~\ref{fig:overall-architecture} 所示，IdleKV 在示例配置中创建了 3 个工作线程，每个线程独立负责其分片内的 I/O 处理与数据管理。当新的客户端连接到达时，系统会将对应的客户端协程（fiber）分配至某一线程执行。线程选择由调度策略决定，默认采用 Round-Robin（轮询）方式以实现负载均衡。在 Linux 环境下，若配置了 RPS（Receive Packet Steering），IdleKV 可进一步将连接调度至处理该网络数据包的 CPU 所对应的线程，从而提升 CPU 缓存局部性，优化整体性能。
 
 	客户端的命令可能涉及到不同分片的数据，要保证多分片操作执行的全局顺序一致，就需要经过事务协调后，才能调度到对应分片的线程上执行数据操作。这里事务协调基于 VLL\cite{VLL} 并发控制机制来实现事务的全局顺序一致性，详细内容将在第~\ref{sec:vll-txn} 章中展开。
@@ -406,12 +424,11 @@
 
 	IdleKV 中的核心模块还需要分章节展开详细说明，主要是如下三个部分：
 
-	1. \textbf{基础设施}：为 Shared-Nothing 架构提供底层运行时支持，包括线程管理、网络 I/O、多路复用机制以及 Fiber 调度与同步原语等。
-
-	2. \textbf{VLL 事务框架}：系统实现 Strict Serializability 一致性语义的核心模块，通过全局顺序控制与冲突管理机制，保证事务执行结果等价于某一全局串行顺序。
-
-	3. \textbf{底层 DB 数据结构}：负责各类数据结构的具体实现，包括 KV 存储（KvStore）、有序集合（ZSet）等。
-
+	\begin{description}
+    \item[基础设施] 为 Shared-Nothing 架构提供底层运行时支持，包括线程管理、网络 I/O、多路复用机制以及 Fiber 调度与同步原语等。
+    \item[VLL 事务框架] 系统实现 Strict Serializability 一致性语义的核心模块，通过全局顺序控制与冲突管理机制，保证事务执行结果等价于某一全局串行顺序。
+    \item[底层 DB 数据结构] 负责各类数据结构的具体实现，包括 KV 存储（KvStore）、有序集合（ZSet）等。
+	\end{description}
 	\section{IO 与线程模型}\label{sec:io-thread-model}
 
 	IdleKV 采用“线程级并行 + 线程内异步”的总体线程模型。系统通过多个工作线程利用多核 CPU 的并行能力，而在每个线程内部，则借助 Fiber 与事件循环实现 Proactor 风格的异步 IO 模式。需要特别说明的是，异步性（asynchronicity）与并行性（parallelism）并不等价：前者强调单个线程在等待 I/O 时不被阻塞，后者强调多个 CPU 核同时推进不同任务。IdleKV 同时利用了二者，即跨线程实现并行，在线程内部实现异步。
@@ -421,8 +438,6 @@
 	\subsection{基于 Fiber 的异步 IO}
 	
 	IdleKV 选择了 Boost.Asio 以及 Boost.Fiber\cite{Boost-Asio,Boost-Fiber} 来为系统提供异步 IO 以及协程调度的能力。Boost.Asio 在调用异步操作时需要传入的 completion token 来生成对应的 async handler（在异步任务完成时执行后需要执行的任务）以及 async result（异步操作的返回值操作）。通常 async handler 是一个回调函数，但逻辑复杂时会出现回调函数过多，核心逻辑混乱的问题，也不能和 Boost.Fiber 很优雅的结合在一起。
-
-	为此，IdleKV 扩展了一种新的 completion token： \texttt{yield\_t}，并实现了 \allowbreak\texttt{yield\_handler} 负责将 fiber 挂起与唤醒。同时，还扩展实现了 \allowbreak\texttt{async\_result} 来返回异步操作的结果，把 fiber 的挂起与唤醒操作嵌入到异步流程之中，使异步代码能够以接近同步代码的方式书写如 Code~\ref{lst:yield-sync-io} 所示。
 
 \begin{listing}[htbp]
 \centering
@@ -438,6 +453,9 @@ while (true) {
 \caption{使用 \texttt{yield\_t} 的同步风格 I/O 示例}
 \label{lst:yield-sync-io}
 \end{listing}
+
+	为此，IdleKV 扩展了一种新的 completion token： \texttt{yield\_t}，并实现了 \allowbreak\texttt{yield\_handler} 负责将 fiber 挂起与唤醒。同时，还扩展实现了 \allowbreak\texttt{async\_result} 来返回异步操作的结果，把 fiber 的挂起与唤醒操作嵌入到异步流程之中，使异步代码能够以接近同步代码的方式书写如 Code~\ref{lst:yield-sync-io} 所示。
+
 
 	从代码表面上看，上述逻辑与阻塞式 socket 编程非常接近；但实际上，当执行流到达 \texttt{async\_read()} 和 \texttt{async\_write()} 时，异步操作流程就如图~\ref{fig:asio-yield-flow} 所示。
 
@@ -463,111 +481,283 @@ while (true) {
 
 	\subsection{Shared-Nothing 线程模型}
 
-	IdleKV 的扩展性首先来自基于 key 哈希的 Shared-Nothing 分片模型，但系统并非只依赖“分片内串行执行”来保证一致性。
+	IdleKV 的扩展性首先来自于 Shared-Nothing 分片模型。系统使用 XXHash64\cite{xxhash} 将 key 按哈希结果划分到不同的 shard 中，每个 shard 长期绑定到一个工作线程，并由该线程独占访问。这样一来，绝大多数单 key 命令从网络解析、路由判定到 DB 访问都可以在线程本地完成，线程间只需要共享极少的调度信息，不需要在热路径上引入全局锁或频繁的原子同步。由于同一个分片内部始终保持单线程执行，KvStore、ART、ZSet 等数据结构也不必再为分片内并发访问额外维护细粒度锁，这不仅减少了同步开销，也显著降低了实现复杂度。
+
+	在线程内部，IdleKV 的每个工作线程既运行 Asio 事件循环，也负责所属 shard 的任务消费与事务推进。线程本地会维护自己的任务队列、事务队列、逻辑 DB 切片以及独立的内存池。
+	
+	IdleKV 采用 mimalloc\cite{Leijen2019MimallocFL} 作为内存分配器，其线程本地化（thread-local）的设计与系统的 Shared-Nothing 架构高度契合。相比 glibc malloc、jemalloc 以及 tcmalloc 等传统分配器，mimalloc 通过为每个线程维护独立的堆，并结合延迟回收（deferred remote free）机制，有效降低了跨线程内存操作带来的竞争开销。此外，该设计还能够提升缓存局部性（cache locality），从而减少跨核访问带来的性能损耗，并在高并发场景下显著改善系统的尾延迟表现。
+	
+	但对于 \texttt{MGET}、\texttt{MSET}、\texttt{DEL} 等可能会跨 Shard 的多 Key 命令，IdleKV 仍需要一些跨线程的调度协作。参考图~\ref{fig:cross-shard} 所示的例子，请求首先由连接所在的线程接收并解析。图中 \texttt{Connection} 位于 \texttt{Shard-n} 对应的线程中，因此该线程既负责维护客户端连接，也负责发起这次跨 Shard 命令的调度。完成 key 路由后，系统会将属于 \texttt{Shard-n} 本地的数据访问组织为本地任务，同时把涉及 \texttt{Shard-m} 的子任务封装为调度单元（在 IdleKV 的实现中就是一个可调用对象），投递到目标线程的 \texttt{TaskQueue} 中。这样一来，跨 Shard 命令虽然由一个连接统一发起，但真正的数据操作仍然会被拆分后下沉到各个目标 shard 的本地执行上下文中。
+
+	\begin{figure}[htbp]
+		\centering
+		\includegraphics[width=0.75\textwidth]{figure/cross-shard.drawio.pdf}
+		\caption{跨 Shard 调度图}
+		\label{fig:cross-shard}
+	\end{figure}
+
+	通常 \texttt{TaskQueue} 中的任务有两类：1.数据读写操作；2. 事务调度操作。对于单分片命令可以直接发送其对应的数据操作到目标分片，但涉及多个分片的命令，在执行数据操作之前需要成功的在所有涉及到的分片中的事务队列中调度成功，详细逻辑将在第~\ref{sec:vll-txn}章展开。
+
+	从客户端视角看，这类跨分片命令依然表现为一次完整的请求-响应过程。连接线程负责聚合各个目标分片的执行结果，并在所有相关子任务完成后统一回复响应。
+
+	由上述过程可以看出，在 Shared-Nothing 执行路径中，\texttt{TaskQueue} 是承担跨线程任务传递的核心结构。当前 IdleKV 使用了 Boost.Fiber 提供的 \texttt{buffered\_channel}，将其作为 Fiber 友好的多生产者单消费者队列（MPSC Queue）来实现 \texttt{TaskQueue}。但其仍需要锁来同步多线程操作，后续可以考虑以更轻量的无锁队列替换现有实现。
 	
 	
-	\section{基于 VLL 的事务框架设计}\label{sec:vll-txn}
-	IdleKV 在 Shared-Nothing 分片模型之上实现了一套基于 VLL 思想的事务框架。该框架的核心不是构建全局中心化锁管理器，而是让事务在进入执行前完成读写集分析，在每个目标 shard 上利用轻量锁表判断冲突、利用按事务号排序的 \texttt{TxnQueue} 维持局部顺序，并通过 \texttt{PollTransaction()} 推进当前可运行的事务。这样既保留了分片本地执行的缓存友好性，也使多 key、跨 shard 命令能够在统一抽象下获得确定的执行顺序。
+	\section{基于 VLL 的事务框架}\label{sec:vll-txn}
 
-	\subsection{Shared-Nothing 分片执行基础}
-	IdleKV 的扩展性首先来自基于 key 哈希的 Shared-Nothing 分片模型，但系统并非只依赖“分片内串行执行”来保证一致性。对于单 key 命令，路由后通常只触达一个 shard；对于 \texttt{MGET}、\texttt{MSET}、\texttt{DEL} 等跨 key 命令，系统还会在各目标 shard 上执行事务注册、锁获取和顺序推进。因此，Shared-Nothing 提供的是第一层隔离边界，而基于 VLL 的事务框架负责补齐跨 shard 的执行次序与冲突控制，具体事务协调过程将在第~\ref{sec:vll-txn}章中展开。
+	对于 Redis 这类采用单线程执行模型的系统，由于所有命令在同一执行序列中按顺序处理，因此天然具备原子性，并能够满足 Strict Serializability 的一致性要求。而在多线程执行模型下，不同线程上的操作可能并发发生，如果缺乏统一的调度与协调机制，则难以保证全局执行顺序的一致性，因此需要引入额外的事务控制框架。
+	
+	IdleKV 基于 VLL~\cite{VLL} 实现了 Shared-Nothing 架构的事务机制。该机制通过为事务分配全局有序的 \texttt{txn\_id}，并在各个分片上按照该顺序推进执行，从而确保跨分片事务在逻辑上等价于按同一全局顺序串行执行。
 
-	系统使用 \texttt{XXH64} 对 key 进行哈希，并从同一个 64 位哈希值同时得到 \texttt{ShardId} 和 key 指纹。前者决定命令应路由到哪个 shard，后者作为锁表索引参与后续的共享/独占冲突检测。每个 shard 维护多个逻辑数据库实例，对应 Redis 的 \texttt{SELECT} 语义。这样的设计把“数据归属”和“事务锁定”统一建立在同一套 key 预处理结果之上，减少了执行阶段的重复计算。
+	\subsection{VLL：超轻量锁机制}\label{sec:vll-overview}
 
-	每个 shard 内部都有一个有界任务队列，由高优先级 Fiber 负责消费。普通单分片命令可以直接作为任务提交到该队列执行；需要事务排序的命令则先在分片本地 \texttt{LockTable} 和 \texttt{TxnQueue} 中完成注册，再由 \texttt{PollTransaction()} 推进真正可运行的事务。换言之，任务队列负责把工作带到正确的 shard，而事务队列则负责在 shard 内维持符合事务号顺序的执行语义。与此同时，每个 shard 还拥有独立的 \texttt{ShardMemoryResource} 和 mimalloc heap，用于跟踪当前内存占用和峰值内存占用。事务对象虽然通过线程局部对象池复用，但 \texttt{Value}、\texttt{ZSet} 和 ART 节点等数据仍主要由所属 shard 的内存资源分配。这样既减少了跨线程分配器竞争，也使性能分析和资源统计能够自然落到 shard 粒度。
+	在 VLL 中，传统的锁结构被简化为两个计数器 $(C_X, C_S)$，分别表示当前记录上持有排他访问和共享访问的事务数量。事务在分片中注册时，需要请求（Acquire）对应类型的锁，就是对相应 key 的 $C_X$ 或 $C_S$ 加 1，具体取决于锁的类型（Exclusive 或 Shared）。如果请求之后满足 $C_X = 1$ 且 $C_S = 0$，那么这个事务就被认为已经获得了排他锁；如果请求之后 $C_X = 0$，该事务就被认为已经获得了共享锁。如果一个事务成功的获取了所有键的锁，那么该事务会被标记为 $Free$，相反的该事务会被标记为 $Blocked$。
+	
+	当事务请求了所有 key 的锁后，无论事务是否是 $Free$ 的，都会被加入到分片中的 \texttt{TxnQueue} 中。由此很容易得出如下结论：1. 在队首的事务一定是可以执行的；2. 被标记为 $Free$ 的事务无论在不在队首都可以执行。后者对于实现乱序执行优化很有帮助。
 
-	\subsection{VLL 的核心思想与适用性}
-	VLL 关注的核心问题是：在主内存数据库中，真正拖慢系统的往往不是用户逻辑，而是并发控制元数据本身。IdleKV 采用的事务框架并未机械复刻论文中的全部细节，而是吸收了其中最适合键值场景的三个要点，即轻量锁状态、事务入口排序和尽量局部执行。
+	在 IdleKV 中为了进一步减少 \texttt{LockTable} 的开销，事务会将每个 key 转化为一个 64 位的数据指纹作为获取锁的键，来减少字符串的内存占用以及比较开销。
 
-	\subsubsection{轻量化锁管理的动机}
-	VLL 的第一个启发是，锁对象不必设计成重量级结构。IdleKV 在每个 \texttt{DB} 内维护独立的 \texttt{LockTable}，每个锁槽只记录共享和独占两个计数器。事务注册时，写集合上的 key 指纹尝试获取独占锁，读集合上的 key 指纹尝试获取共享锁；如果检测到冲突，事务并不会立即执行，而是被标记为 \texttt{Blocked}。这种设计避免了围绕单条记录维护复杂的等待链表，把元数据开销压缩到了“哈希定位 + 计数器更新”这一较小范围内。
+	\subsection{IdleKV 事务实现}
 
-	\subsubsection{事务顺序与局部执行}
-	VLL 的第二个启发是，事务顺序应尽可能在入口阶段确定。IdleKV 在命令解析后立即构造 \texttt{WRSet}，并通过 \texttt{InitByArgs()} 把访问集合拆解为多个分片计划。若事务仅访问一个 shard，系统优先在本地完成执行；若事务涉及多个 shard，则为其分配全局递增的 \texttt{TxnId}，并按该编号插入各 shard 的 \texttt{TxnQueue}。这样一来，跨 shard 命令不需要依赖中心调度器反复仲裁，而是通过“统一编号 + 分片内有序队列”维持全局上可解释的执行顺序。
+	在 IdleKV 中，事务的执行可以概括为两个步骤：1. 注册事务到所有涉及的分片中；2. 执行对应数据操作。一个事务的流程就可以被描述为图~\ref{fig:transaction-registration} 的样子。
 
-	\subsection{IdleKV 的事务抽象}
-	IdleKV 的事务层由 \texttt{ExecContext}、\texttt{CommandContext}、\texttt{Transaction} 与分片计划四部分组成。其中，前两者负责承载请求的动态状态与静态描述，后两者负责完成读写集拆分、事务注册和回调执行。
 
-	\subsubsection{ExecContext 与 CommandContext}
-	\texttt{ExecContext} 封装连接、发送器、当前事务对象和逻辑数据库编号等运行时信息，是命令执行函数访问上下文的统一入口。与之配套的 \texttt{CommandContext} 则记录命令对象、参数指针、\texttt{WRSet} 以及请求到达时间。前者描述“谁在执行”，后者描述“要执行什么”，二者共同构成事务框架和命令实现之间的桥梁。
+	\begin{figure}[!htb]
+		\centering
+		\includegraphics[width=0.8\textwidth]{figure/TransactionRegistration.pdf}
+		\caption{事务调度执行流程}
+		\label{fig:transaction-registration}
+	\end{figure}
 
-	\subsubsection{Transaction、WRSet 与分片计划}
-	\texttt{Transaction} 支持 \texttt{Normal}、\texttt{Multi} 和 \texttt{MultiSub} 三种工作模式。单条事务型命令使用 \texttt{Normal}，Pipeline 聚合使用 \texttt{Multi}，按 shard 拆分后的子事务使用 \texttt{MultiSub}。每次初始化事务时，系统都会遍历 \texttt{WRSet} 中的读 key 与写 key，计算其所属 shard 和 key 指纹，并为每个活跃 shard 生成一个 \texttt{ShardPlan}。该计划记录本 shard 相关的参数位置、读集指纹、写集指纹、\texttt{Free/Blocked} 标记、执行许可位以及在 \texttt{TxnQueue} 中的位置。
 
-	\subsubsection{事务对象的生命周期}
-	在命令分发阶段，所有带有 \texttt{Transactional} 标记的命令都会从线程局部对象池中获取一个 \texttt{Transaction} 实例。单条命令由 \texttt{DispatchCmd()} 创建并初始化；Pipeline 则由 \texttt{DispatchManyCmd()} 创建父事务，并在 \texttt{CmdSquasher} 中按 shard 派生 \texttt{MultiSub} 子事务。命令实现本身并不直接操作锁表和事务队列，而是统一调用 \texttt{Transaction::Execute()} 提交回调，使事务框架能够接管注册、调度、执行和清理过程。
+	IdleKV 的 Shared Nothing 架构不允许事务直接访问分片数据以及对应的 \texttt{TxnQueue}。相反，事务需要向分片发送请求，并指示它们在每个步骤中该做什么。每次事务发送消息时，都会阻塞直到收到回复。为了后文描述方便，我将这一次请求回复的过程称作一次\textbf{调度轮次（Schedule Round）}。
 
-	\subsection{事务注册与调度流程}
-	IdleKV 的事务执行可以概括为“注册成功后再执行”。注册阶段负责建立锁状态与队列顺序，执行阶段只推进已经获得许可的事务，因此运行路径相对清晰。
+	注意，只有事务所在 Fiber 被阻塞时，它所在的线程仍然可以执行其他 Fiber（比如处理其他连接上的请求）。这就是采用 Fiber 的优势，它让 IdleKV 能够将执行上下文与操作系统线程分离。
 
-	\subsubsection{注册阶段：加锁与入队}
-	\texttt{Transaction::RegisterOnActiveShards()} 会在所有活跃 shard 上循环尝试注册事务。若事务只访问单个本地 shard，则直接在本线程上执行注册；若事务涉及多个 shard，则先由 \texttt{IdleEngine::NextTxnId()} 分配全局事务号，再并发投递到各 shard 上执行 \texttt{RegisterInShard()}。在每个 shard 内，系统首先根据 \texttt{read\_fps} 与 \texttt{write\_fps} 获取共享/独占锁，并据此把事务标记为 \texttt{Free} 或 \texttt{Blocked}；随后再按 \texttt{TxnId} 把事务插入 \texttt{TxnQueue}，为后续调度建立顺序基础。
+	\subsubsection{事务注册}
 
-	\subsubsection{执行阶段：\texttt{PollTransaction()} 推进}
-	注册完成后，事务会在各自的 \texttt{ShardPlan} 中设置执行许可。每个 shard 的 \texttt{PollTransaction()} 从本地 \texttt{TxnQueue} 头部开始扫描：只要队首事务已经获得许可，就更新 \texttt{commit\_txn\_id\_} 并执行其回调；事务回调返回后，系统会把它从 \texttt{TxnQueue} 中移除、释放已持有的读写锁，并通过阻塞计数器通知调用方该 shard 的工作已完成。由于事务真正的命令逻辑只在“持锁且排队完成”后执行，冲突处理被集中在注册阶段，执行阶段只保留较低的协调成本。
+	在事务真正开始执行前，需要经过一次 Schedule Round 的注册操作，其目的是为所有相关 shard 建立一致的局部顺序与锁状态。当数据分片接收到注册请求后，会将该事务加入本地的事务队列（\texttt{TxnQueue}）中。为了保证可串行化（serializability），即确保所有分片以一致的顺序对事务进行排序，IdleKV 使用一个全局的原子变量，作为事务的全局序列计数器，用于为所有事务分配一个全序关系。在每个分片中，事务队列（\texttt{TxnQueue}）中的事务按照其序列号进行排序。
 
-	\subsubsection{单分片优化与重试机制}
-	为了避免短事务被不必要地放入队列，IdleKV 对单分片且立即成功持锁的事务提供了快速路径：若 \texttt{RegisterInShard()} 发现事务访问的仅是一个 shard 且所有锁均已获取，则直接在当前 shard 内执行命令回调，并把该分片计划标记为 \texttt{OptimizeExecution}，从而绕过事务队列。对于多分片事务，如果任一 shard 发现本地已提交事务号超过当前事务号，或被阻塞事务无法在现有 \texttt{TxnQueue} 中维持正确顺序，则整个注册过程会失败；系统随后释放所有已持有锁、移除已入队节点，并重新尝试注册，直到所有 shard 同时成功为止。
+	\begin{figure}[!htb]
+		\centering
+		\includegraphics[width=1\textwidth]{figure/Order Scheduling Sequence.pdf}
+		\caption{多分片事务顺序不一致情况流程图}
+		\label{fig:txn-reg}
+	\end{figure}
 
-	\subsection{与经典 VLL 的关系与当前限制}
-	IdleKV 的实现已经具备 VLL 风格的关键执行要素，但它仍是一套面向键值数据库工程场景的简化实现，而不是对原论文协议的逐项复刻。
+	但在一些情况下会出现两个分片线程接收到事务的顺序可能并不一致。如图 ~\ref{fig:txn-reg} 示例所示，T1 和 T2 的键值相同，且涉及到 Shard1 以及 Shard2 两个分片中的数据。当 T1 和 T2 同时开始调度时，就会出现了序列号较小的事务在序列号较大的事务之后被插入到队列中的情况。对于 Shard1 我们没办法把 T1 直接插入到 T2 之前，因为 T1 没有成功获取到全部 key 的锁，T1 没办法确定 T2 是否在已经进入到了执行阶段，如果 T2 已经进入执行阶段，就会导致 T1、T2 在不同 Shard 上执行顺序不同。
 
-	\subsubsection{一致之处}
-	两者都强调在事务入口提前得到访问集合，并以低开销的锁状态配合有序事务队列推进执行。IdleKV 中的 \texttt{Free/Blocked} 标记、按 \texttt{TxnId} 排序的 \texttt{TxnQueue}、以及“先注册后执行”的流程，都体现了 VLL 试图把协调前移、把执行局部化的基本思想。
+	
+	在这种情况下，协调者需要回滚此次注册操作，即从各个分片中移除该事务，并重新分配新的序列号以重试整个注册过程。在实际运行中，注册失败的概率较低，重试也较为少见（主要取决于键上的竞争程度）。需要注意的是，当多个事务同时调度跨分片事务时，才更容易出现这种顺序不一致的问题。
 
-	\subsubsection{工程化取舍}
-	与经典 VLL 相比，IdleKV 将锁表收敛到每个 \texttt{DB} 局部，并直接以 64 位 key 指纹作为索引，避免维护更复杂的记录元数据；冲突处理主要依赖失败后整体重试，而没有引入更细致的等待图分析和公平性策略。这样的取舍更符合当前系统以短命令、高吞吐为主的负载特征，也使实现复杂度保持在可控范围内。
+	\begin{listing}[!htb]
+	\centering
+	\begin{minipage}{0.82\textwidth}
+	\begin{lstlisting}[style=idlecpp]
+bool RegisterInShard(shard) {
+    if (txn_id != InvalidTxnId && shard.CommitedId() > txn_id)
+        return false;
 
-	\section{Pipeline 优化}
-	Redis Pipeline 能显著减少网络往返次数，但如果数据库内部仍按“每条命令一次事务初始化、一次分片判定、一次任务投递”执行，那么大量短命令会把 CPU 消耗在调度开销上。IdleKV 因此在网络层批量接收请求后，进一步通过 \texttt{CmdSquasher} 把批处理优势传递到执行层。
+    plan = shard_plans[shard.Id()];
+    txq  = shard.TxQueue();
+    db   = shard.DbAt(db_index);
 
-	\subsection{Pipeline 负载特征}
-	Pipeline 负载通常具有两个特点：第一，命令条数多但单条逻辑很短，若每条命令都完整走一遍事务分发路径，调度成本很容易高于真正的读写开销；第二，同一连接在短时间内发来的命令往往访问相近的数据热点，因此天然存在按 shard 聚合的机会。IdleKV 对这两点都做了利用。
+    key_locked = db.AcquireTxnLocks(plan.read_fps, plan.write_fps);
+    plan.flag |= LockAcquired | (key_locked ? Free : Blocked);
 
-	\subsection{逐条调度方式的额外开销}
-	如果系统对 Pipeline 中的每条命令都单独创建事务，那么一次批量请求会重复执行事务对象申请、\texttt{WRSet} 分析、shard 路由、队列投递和结果回送等步骤。在高并发场景下，这些重复元操作会增加 fiber 切换和缓存抖动，使“减少网络往返”带来的收益在执行层被部分抵消。特别是对于大量单 key 的 \texttt{GET}/\texttt{SET} 负载，逐条调度几乎等价于把调度器本身当成了瓶颈。
+    if (key_locked && active_shard_count == 1) {
+        cb(this, shard);
+        plan.flag |= OptimizeExecution;
+        db.ReleaseTxnLocks(plan.read_fps, plan.write_fps);
+        plan.flag &= ~LockAcquired;
+        return true;
+    }
 
-	\subsection{CmdSquasher 的设计}
-	\texttt{CmdSquasher} 是当前代码中最直接的 Pipeline 优化实现。它在 \texttt{DispatchManyCmd()} 中接管一批命令，把能够安全聚合的命令按 shard 重组后统一下发，从而减少重复的事务初始化和分片调度。
+    if (txn_id == InvalidTxnId)
+        txn_id = engine.NextTxnId();
 
-	\subsubsection{按 shard 聚合命令}
-	\texttt{CmdSquasher::TrySquash()} 会检查一条命令是否只涉及单个 shard；若是，则把它追加到该 shard 对应的子事务中。一个批次内，同一 shard 的多条命令共享一个 \texttt{MultiSub} 子事务，并在一次任务投递中顺序执行。这样一来，Pipeline 不再等价于“几十条独立事务”，而更接近“少量按 shard 聚合的命令块”。
+    if (!txq.Empty() &&
+        txq.Back()->TxId() > txn_id &&
+        !key_locked) {
+        db.ReleaseTxnLocks(plan.read_fps, plan.write_fps);
+        plan.flag &= ~LockAcquired;
+        return false;
+    }
 
-	\subsubsection{保持响应顺序}
-	虽然内部执行按 shard 分组，但客户端观察到的响应顺序仍必须与原始命令顺序一致。为此，子事务执行时并不直接向连接写回，而是借助 \texttt{ReplyCapturer} 把每条命令的响应暂存为 \texttt{Payload}；同时，\texttt{order\_} 数组记录命令原始顺序对应的 shard。待所有 shard 都完成后，系统再按照 \texttt{order\_} 的顺序回放 \texttt{Payload}，从而在“内部重排”和“外部顺序保持”之间建立清晰分层。
+    plan.qp_pos = txq.Insert(this);
+    return true;
+}
+	\end{lstlisting}
+	\end{minipage}
+	\caption{\texttt{RegisterInShard()} 的本地注册逻辑}
+	\label{lst:register-in-shard}
+	\end{listing}
 
-	\subsubsection{与事务上下文协同}
-	\texttt{CmdSquasher} 并不是独立于事务系统存在的优化，而是直接建立在 \texttt{InitMulti()}、\texttt{CreateMultiSub()} 与 \texttt{MultiMode::Squash} 这些事务接口之上。父事务只负责组织一次 Pipeline 的整体上下文，各 shard 子事务则在本地 worker fiber 上直接执行命令回调，不再重复进入完整的事务注册流程。因此，Pipeline 优化本质上不是单纯的批处理技巧，而是事务抽象复用带来的执行路径压缩。
+	如 ~\ref{sec:vll-overview} 小节中介绍的，事务会在被加入到 \texttt{TxnQueue} 前，请求到该事务涉及的 key 的锁，这些锁不会阻塞底层操作的执行（它们只是两个计数器），而仅用于表达该事务将要访问或修改相应键的意图。当所有注册阶段完成后，VLL 机制就可以在保证 Strict Serializability 的前提下，确保后续执行过程能够持续正确推进。
 
-	\section{基于 ART 的 ZSet 实现}
-	Sorted Set 是 Redis 中最典型的“既要按 member 精确操作，又要按 score 有序访问”的复合型数据结构。本章建议先从需求分析入手，再介绍 ART 的节点设计、迭代器与 rank 扩展，最后说明双索引 ZSet 的具体实现。
+	下面说明 IdleKV 注册流程的具体实现，以及一些工程上的优化。首先需要明确的是事务需要执行的任务会以回调函数 \texttt{cb}  的形式记录在事务内部，当满足执行条件后，就会在对应分片上执行该回调函数，对应事务在该分片上的任务也就执行完成了。
 
-	\subsection{ART 设计}
-	ART 是本文最关键的底层索引结构之一。本节应重点结合当前代码与设计文档展开，而不是只停留在论文层面的概念介绍。
+	代码 ~\ref{lst:register-in-shard} 展示了将事务注册进一个分片的详细逻辑。核心逻辑就是获取该分片上的锁，再将事务插入本地 \texttt{TxnQueue}，等待后续统一推进执行。但是这里有很多可以优化的细节：
 
-	\subsubsection{节点布局与路径压缩}
-	当前实现提供 \texttt{Node4}、\texttt{Node16}、\texttt{Node48}、\texttt{Node256} 与 \texttt{Leaf} 五类节点，并通过路径压缩在节点头部保存 prefix。本小节可说明不同节点在 child 管理方式、扩缩容策略和缓存友好性上的区别，并分析为什么这种自适应布局适合主内存场景。
+	1.首先注册前要检查当事务号是否已经落后于该分片的提交边界，判断这是否是一次过时的注册，这样的事务时一定不会注册成功的，所以可以避免一些无意义的加锁操作。
+	
+	2.若当前分片上所需的锁已经一次性获取完成，且事务只涉及单个分片，说明这个事务不需要和其他分片同步顺序，在当前分片也已经达成了可执行的条件，因此系统可以直接执行事务回调来完成任务，可以避免额外一次 Schedule Round。走了这个快速路径的事务会被标记为 OptimizeExecution，事务进入执行期前会用到，下一小节详细说明。
+	
+	3.为了保证单分片事务可以稳定调度成功，IdleKV 将单分片事务 \texttt{txn\_id} 的获取推迟到该注册操作正在被分片协程执行的时候，这样可以确保该事务的 \texttt{txn\_id} 在此时的分片中是最大的，也就能保证其一定注册成功。
+	
 
-	\subsubsection{前向迭代器与 LowerBound}
-	为支持有序扫描，ART 已补充前向迭代器、\texttt{Begin()}、\texttt{End()} 与 \texttt{LowerBound()} 等接口。这里建议结合 \texttt{docs/art\_iterator\_design.md} 中的设计，说明为何在没有父指针、leaf 不保存完整 key 的前提下，迭代器必须维护显式路径栈和 key buffer。
+	\subsubsection{事务执行}
+
+
+	当事务已经在所有相关 shard 上完成注册后，系统会进入真正的执行阶段。此阶段的事务不会出现任何回滚以及重试操作。每个 Shard 上的事务通过 \texttt{PollTransaction()} 来推进事务回调函数的执行。当事务在所有相关分片上注册完成后，会在每个相关分片上调用一次 \texttt{PollTransaction()}，推进对应分片的事务队列，以此来执行对应事务的回调函数，事务会阻塞等待所有分片上的回调都成功执行。
+
+
+
+	\texttt{PollTransaction()} 是本地推进事务的核心函数，其核心逻辑参考代码 ~\ref{lst:poll-transaction}。，它首先从 \texttt{TxnQueue} 队首开始扫描，获取已就绪的事务，更新本分片的 \texttt{commit\_txn\_id\_}，并调用该事务的回调函数。\texttt{ExecCbInShard()} 会在当前分片上执行对应的回调函数，并在执行完成后把该事务从 \texttt{TxnQueue} 中移除，释放在当前分片中持有的读写锁，并通过一个 BlockCounter 的同步原语通知调用方该 shard 的执行已经结束。对于 \texttt{MGET}、\texttt{MSET}、\texttt{DEL} 这类跨分片命令，每个分片只负责处理属于该分片的 key 子集，而原始事务所在的连接线程则在所有目标分片都完成后再统一汇总结果并返回响应。
+
+
+\begin{listing}[!htb]
+	\centering
+	\begin{minipage}{0.80\textwidth}
+	\begin{lstlisting}[style=idlecpp]
+void PollTransaction(caller) {
+    can_exec_by_myself =
+        caller &&
+        caller.IsFreeIn(id) &&
+        caller.GetExecutionPermit(id);
+
+    while (!tx_queue.Empty()) {
+        cur = tx_queue.Front();
+        should_run =
+            (cur == caller && can_exec_by_myself) ||
+            cur.GetExecutionPermit(id);
+        if (!should_run)
+            break;
+
+        if (cur == caller)
+            can_exec_by_myself = false;
+
+        assert(cur.TxId() > commit_txn_id);
+        commit_txn_id = cur.TxId();
+        cur.ExecCbInShard(this);
+    }
+
+    if (can_exec_by_myself)
+        caller.ExecCbInShard(this);
+}
+	\end{lstlisting}
+	\end{minipage}
+	\caption{\texttt{PollTransaction()} 的本地推进逻辑}
+	\label{lst:poll-transaction}
+	\end{listing}
+
+	要注意事务的回调函数不一定会被自己所调用的 \texttt{PollTransaction()} 执行。所以为了保证每个回调函数只会被执行一次，每个事务会在完全就绪后依次向每个相关分片上下发一个一次性执行权限（在实现中它是一个原子变量 \texttt{execution\_permit}），第一个获取到该权限的 \texttt{PollTransaction()} 调用者才可以执行对应事务的回调函数。对于在事务注册阶段被标记为 OptimizeExecution 的分片是不需要再被执行的，所以在下发 \texttt{execution\_permit} 时会跳过对应分片。
+
+	如果不是 $Free$ 状态的事务，就只能通过推进事务队列，来尝试执行自己的回调函数，在这个过程中如果遇到了还未就绪的事务，就只能等待其他事务来继续推进。如果是 $Free$ 状态的事务，就会在一开始尝试获取执行自己回调函数的权限，不管事务队列中是否还有未就绪的事务，都可以在本次 \texttt{PollTransaction()} 中完成回调函数的调用。因为队列前面没有和 \texttt{caller} 有依赖关系的事务，执行顺序就可以不按照 \texttt{txn\_id} 的顺序，也可以保证对外状态的正确性。
+
+	这种“局部执行、集中等待”的方式并不会把整个线程阻塞住。事务 Fiber 在等待注册完成或等待各 shard 执行结束时，只是当前 Fiber 被挂起；对应工作线程上的事件循环、连接处理 Fiber 以及其他 shard 任务仍然可以继续运行。也正因如此，IdleKV 能够在保持同步风格事务代码结构的同时，把真正的等待代价限制在 Fiber 级别，而不是操作系统线程级别。
+
+
+	\subsection{事务执行优化}
+
+
+	\subsubsection{Pipeline 优化}
+
+	对于 Shared Nothing 这样的架构，在响应 Pipeline 模式下的客户端时会有一个严重的性能问题，那就是每一条命令都需要走一遍昂贵的 Schedule Round。在观察了命令流之后，可以发现对于一系列只涉及到一个分片的命令，它们有两条性质：1）每个命令只需要相对于访问同一分片的其他命令保持其顺序即可；2）各个分片的命令序列可以并行执行。
+	
+	由此 IdleKV 实现了一套命令聚合逻辑，其基本思想是识别连续的一系列单分片命令，并按分片将它们分开，同时保持它们在每个分片中的相对顺序。一旦命令被分开，我们可以在所有相关分片上执行一次 Schedule Round。在每个分片内，跳转回调将依次执行仅分配给其各自分片的命令。由于所有命令已经放置在其相关线程上，因此不需要任何额外的 Schedule Round，所有命令回调都会内联执行。
+
+	在 IdleKV 当前代码中的对应实现是 \texttt{CmdSquasher}。在 \texttt{DispatchManyCmd()} 中，系统会先创建一个父事务，并把其工作模式设置为 \texttt{MultiMode::Squash}。随后，系统通过 \texttt{CmdSquasher} 检查每条命令涉及的所有 key 是否都落在同一个 shard 上；若是，则把该命令追加到该 shard 对应的 \texttt{MultiSub} 子事务中，并用 \texttt{order\_} 记录原始响应顺序；若命令无法安全聚合，则先冲刷当前批次，再回退到普通事务路径逐条执行。
+
+	真正的批量执行发生在 \texttt{ExecuteSquash()} 中。该函数不会让每条命令都单独经历一次完整的“注册全部 shard、设置执行许可、等待完成”流程，而是对每个活跃 shard 只投递一次任务，由目标线程上的 worker fiber 顺序执行该 shard 子事务中的全部命令。由于子事务处于 \texttt{MultiMode::Squash} 模式，命令内部调用 \texttt{Transaction::Execute()} 时会直接在本地 shard 上运行回调，从而跳过常规事务注册过程。所有响应先由 \texttt{ReplyCapturer} 捕获为 \texttt{Payload}，等所有 shard 的批次执行完毕后，再按照 \texttt{order\_} 中记录的原始顺序统一回放给客户端。这样既压缩了跨线程 hop 的数量，也避免了 pipeline 内部重复的事务初始化与队列调度开销。
+
+	\subsubsection{单分片命令优化}
+	对绝大多数只访问一个 key 的命令而言，完整的跨 shard 事务流程其实过于昂贵。为此，IdleKV 在 \texttt{RegisterInShard()} 中实现了单分片快速路径：如果事务只涉及一个 shard，且在注册阶段已经一次性获得了本地所需的全部锁，那么系统会立即执行命令回调，并把该分片计划标记为 \texttt{OptimizeExecution}。此时事务既不会进入 \texttt{TxnQueue}，也不需要等待后续的 \texttt{execution\_permit} 广播和 \texttt{PollTransaction()} 调度，执行完成后便直接释放锁并返回。
+
+	这一优化的价值在于，它把“注册”和“执行”合并成了同一次 shard 本地调用。对于 \texttt{GET}、\texttt{SET}、单 key \texttt{ZADD}/\texttt{ZREM}/\texttt{ZRANGE} 等高频命令来说，省去一次入队、一次出队和一次额外的调度投递，能够显著降低事务框架本身带来的常数开销。代码中对单分片事务延迟分配 \texttt{txn\_id} 的处理，也服务于这一目标：只有当事务无法走快速路径、确实需要进入本地事务队列时，才为其补上事务号并参与排序。
+
+	\subsubsection{乱序执行优化}	
+	VLL 的一个重要观察是：只要某个事务已经成功获得了本地所需的全部锁，那么它在局部上就是“自由的”（\texttt{Free}），并不一定非要等待自己成为 \texttt{TxnQueue} 队首才能执行。IdleKV 当前的 \texttt{PollTransaction()} 保留了这一思路。函数在优先推进队首且已经获得 \texttt{execution\_permit} 的事务之后，还会额外检查当前调用者事务是否满足“本 shard 上标记为 \texttt{Free}，且已经获得执行许可”这一条件；若满足，即便它暂时不在队首，也可以直接调用 \texttt{ExecCbInShard()} 在本地乱序执行。
+
+	这种优化的收益主要体现在减少队首阻塞带来的空转等待。若某个排在前面的事务由于尚未获得全部执行许可或仍受其他 shard 状态影响而暂时无法推进，那么其后方那些已经在本 shard 获取完锁的 \texttt{Free} 事务，不必继续被动排队，而可以先行完成本地工作。由于这些事务在本地锁层面已经没有冲突，乱序执行不会破坏 shard 内的隔离要求；与此同时，\texttt{commit\_txn\_id\_} 和 \texttt{TxnQueue} 仍然为真正需要顺序约束的事务保留了正确的推进边界。因此，这一优化并不是取消顺序，而是在不违反局部可执行条件的前提下，把原本会被阻塞的执行机会提前释放出来。
+
+	
+	\section{DB 存储结构}
+
+	如果说前两章关注的是“请求如何被送到正确的执行上下文”，那么本章讨论的则是“数据到达目标 shard 后应当以何种方式驻留在内存中”。对于一个 Redis 兼容的主内存系统而言，底层存储结构至少需要同时满足三类要求：其一，顶层键空间上的点查与更新必须保持较低常数开销；其二，复合对象需要针对自身访问模式建立专门索引，而不能退化为单一通用容器。
+
+	\subsection{设计目标与总体组织}
+
+	IdleKV 的每个 shard 都独占一组 \texttt{DB} 实例，每个 \texttt{DB} 负责维护某个逻辑数据库下的键空间。由于同一 shard 上的数据只会被该 shard 所属线程访问，底层容器不必再内嵌额外的互斥锁或原子同步逻辑，其设计重点主要是“缓存友好”“内存局部性”和“可预测的单次操作开销”。
+
+	在当前实现中，分片内部的对象、索引节点以及顶层键值项都尽量通过 shard 本地的 \texttt{pmr::memory\_resource} 分配。该资源以独立 mimalloc heap 为后端，一方面便于把同一 shard 的数据尽量聚集到本地内存区域，减轻跨核访问与缓存污染；另一方面也使得每个 shard 的内存占用和峰值使用量能够被单独统计。换言之，存储结构本身并不是孤立设计的，而是与前文的分片执行模型和本地调度语义配套出现：数据放在本地，任务在本地推进，分配也尽量留在本地。
+
+	\subsection{通用键值层}
+
+	\subsubsection{对象表示与生命周期管理}
+
+	顶层键空间中的 value 统一表示为 \texttt{PrimeValue}。它本质上是一个指向 \texttt{Value} 对象的 \texttt{shared\_ptr}。这样做的出发点并不只是“统一类型接口”，更重要的原因在于：在 IdleKV 的发送路径中，响应缓冲区可以直接持有底层 value 的引用，并通过 \texttt{writev} 进行聚合发送；因此，存储层对象的生命周期不能简单绑定到某一次命令调用栈，而需要允许“存储层已完成查找、网络层仍在发送”的短暂重叠。引用计数虽然会带来少量额外元数据与原子语义成本，但它显著简化了零拷贝响应与对象生命周期之间的协调关系。
+
+	\begin{figure}[htbp]
+		\centering
+		\includegraphics[width=0.75\textwidth]{figure/value.drawio.pdf}
+		\caption{Value 结构示意图}
+		\label{fig:value}
+	\end{figure}
+
+	\texttt{Value} 本身采用紧凑的 tagged union 布局，并针对短字符串做了内联优化。当前实现将长度不超过 12 字节的字符串直接保存在对象内部，而较长字符串和 \texttt{ZSet} 这类复合对象则退化为外部分配。这样设计的原因在于，Redis 工作负载中短 key、短 value 占比通常很高，若为每个小字符串都单独分配堆对象，不仅会增大分配器压力，也会显著增加对象指针追踪带来的缓存未命中。通过将小字符串内联到统一 value 容器中，顶层 \texttt{GET}/\texttt{SET} 路径可以在更少的内存访问中完成主要工作；而对于体积较大或结构较复杂的对象，再转交给专门的数据结构实现即可。
+
+	\subsubsection{KvStore 的实现}
+
+	顶层键空间当前由 \texttt{KvStore} 承载，其核心容器是 \texttt{absl::flat\_hash\_map}。选择开放寻址哈希表而非链式哈希表，主要是出于缓存局部性的考虑：开放寻址结构的桶数组更加紧凑，点查时通常只需访问较少的连续内存区域，这对于主内存数据库中的高频短路径操作更为有利。由于 shard 内部已经是串行访问环境，\texttt{KvStore} 无需考虑多线程并发插入和删除，因此可以把注意力集中在查找效率与重哈希成本控制上。
+
+	一个更关键的实现细节在于，\texttt{KvStore} 并未采用“一次性完整 rehash”的传统做法，而是将重哈希拆分为渐进式迁移过程。具体而言，容器在扩容后会同时维护旧表和新表，并在每次 \texttt{Set}/\texttt{Get}/\texttt{Del} 时顺带迁移少量元素。这样做的设计动机十分直接：在 Fiber 模型下，单次长时间 rehash 会占用当前 shard 线程较长的 CPU 时间片，进而阻塞同线程上的其他连接与任务推进，最终表现为尾延迟抖动。渐进式 rehash 的代价是实现上要处理“双表并存”以及短期额外空间占用，但它换来了更加平滑的单次操作成本，这一取舍与本文整体强调的“吞吐之外也要避免明显暂停”是一致的。
+
+	从逻辑边界上看，\texttt{DB} 并不只是一个纯粹的哈希表包装器。它在顶层键值表之外还维护了事务注册阶段使用的 \texttt{LockTable}，并负责在 \texttt{Get} 路径上执行对象类型检查。因此，\texttt{DB} 承担的是“逻辑数据库入口”角色：哈希表负责对象定位，value 容器负责对象表示，而 \texttt{DB} 负责把类型语义和事务元数据附着在这一层之上。
+
+	\subsection{ART 有序索引}
+
+	对于字符串对象而言，顶层哈希表已经足够；但对于 Sorted Set，这样的结构远不能满足需求。ZSet 既要求按 member 做精确更新与删除，又要求按 score 顺序执行范围扫描，特别是在 \texttt{ZRANGE start stop} 中还需要支持从较深的 rank 位置直接开始遍历。若仅使用哈希表，就无法提供有序访问；若仅使用一棵按 score 排序的树，又会使按 member 更新的代价变得过高。
+
+	\subsubsection{自适应节点布局与路径压缩}
+
+	当前实现的 ART 采用典型的自适应节点布局，提供 \texttt{Node4}、\texttt{Node16}、\texttt{Node48} 和 \texttt{Node256} 四类内部节点，以及保存最终值的叶子节点。其设计思想是：当某一层分支非常稀疏时，应使用更紧凑的小节点表示，避免像固定 256 路 trie 那样为大量空指针付出空间成本；而当某一层逐渐变得稠密时，再将其提升到更高容量的节点形态，以避免小节点上线性查找的代价持续放大。尤其是 \texttt{Node48} 这一层的存在，使结构能够在“完全稀疏”和“完全稠密”之间提供一个折中点：它用 256 项索引数组记录边值到槽位的映射，同时只保留 48 个真实 child 指针，从而避免直接进入 \texttt{Node256} 所带来的整页指针数组开销。
+
+	除了节点自适应布局之外，路径压缩是 ART 在主内存场景中更重要的原因。传统 trie 会为 key 的每一个字节都创建一层节点，面对长字符串或复合 key 时高度很容易膨胀；而当前实现会把“从当前节点继续向下直到分叉发生之前的公共后缀”直接压缩进节点前缀中。对于 ZSet 使用的复合编码 key 而言，这一点尤为关键：相邻元素常常共享相同的 score 高位字节，member 前缀也可能具有较强相似性。若没有路径压缩，树高度和指针跳转次数都会明显上升；引入压缩后，树的实际高度更接近“信息发生分化的位置”，这比简单按原始字节长度建树更适合内存型索引。
+
+	\subsubsection{有序编码与游标扫描}
+
+	ART 本身只理解“字节序”而不理解“数值序”或“字符串终止语义”，因此它能否表达 ZSet 所需的有序关系，取决于上层如何编码 key。当前实现通过 \texttt{ArtKeyCodec} 把字符串、整数和浮点数统一转换为“在字节字典序下仍保持原语义顺序”的二进制表示：字符串部分对 \texttt{0x00} 和 \texttt{0x01} 做转义，并在末尾追加终止符，以保证任意字节内容都可安全比较；固定宽度数值采用大端序编码；双精度浮点数则通过符号位变换将 IEEE-754 比特模式映射为可比较的有序字节串。这样一来，ART 可以继续保持“泛化的字节索引”身份，而 score、member 等具体排序语义则被封装在编码规则之中。
+
+	基于这一编码层，ART 进一步提供了 \texttt{Begin()}、\texttt{LowerBound()} 和 \texttt{Cursor::Next()} 等有序扫描接口。这里一个容易被忽略的设计点是：当前实现没有为节点维护父指针，叶子节点也不保存完整 key，因此游标不能像 B+Tree 那样只凭叶子链向前移动。相反，\texttt{Cursor} 必须显式维护一条从根到叶子的路径栈，以及用于重建当前 key 的缓冲区。这样的实现复杂度确实高于“父指针 + 叶子链”方案，但它避免了在更新热路径中维护更多结构性指针，也保留了 ART 节点本身较为紧凑的内存布局。为了简化一致性语义，当前实现还采用 version 检测策略，在树结构发生插入、删除或节点重组后令旧游标失效，从而避免在动态扩缩容后维护复杂的迭代器稳定性规则。
 
 	\subsubsection{基于子树计数的 Rank 定位}
-	对于 \texttt{ZRANGE start stop} 而言，只有按 key 下界查找还不够，还必须支持“从第 N 个元素开始扫描”。本小节可结合 \texttt{docs/art\_rank\_design.md} 说明 \texttt{value\_count\_} 的语义、\texttt{SeekByRank()} 的下沉逻辑，以及它如何避免对大量前缀元素做线性跳过。
 
-	\subsection{ZSet}
-	当前代码中的 ZSet 采用“哈希表 + ART”双索引结构：哈希表负责按 member 精确定位，ART 负责按 score 有序遍历。
+	仅有 \texttt{LowerBound()} 对于 ZSet 仍然不够。原因在于 \texttt{ZRANGE start stop} 的核心需求并不是“查找大于等于某个 key 的第一个元素”，而是“查找有序集合中的第 \texttt{start} 个元素”。若只依赖普通游标前进，那么从 \texttt{start=100000} 开始返回 10 个元素时，系统仍然需要执行 10 万次前缀跳过，时间复杂度将退化为 $O(start + k)$。对于深翻页负载，这种线性跳过几乎全部都是无效工作。
 
-	\subsubsection{双索引结构设计}
-	\texttt{score\_map\_} 保存 member 到 score 的映射，便于实现 \texttt{ZADD} 更新与 \texttt{ZREM} 删除；\texttt{score\_tree\_} 使用编码后的复合 key 维持有序性，便于实现 \texttt{ZRANGE}。这种设计本质上是以额外内存换取“精确查找”和“顺序访问”两种能力的兼得。
+	为此，当前 ART 实现在内部节点维护了 \texttt{value\_count\_} 计数，表示对应子树中叶子节点的数量；叶子节点则隐含记为 1。基于这一计数，\texttt{SeekByRank()} 可以在每一层按 child 顺序累减子树规模，直接下沉到目标 rank 所在的子树，再配合顺序游标继续扫描后续元素。这样，\texttt{ZRANGE} 的访问复杂度就从“先跳过大量前缀元素，再顺序输出”变成了“先按 rank 精确定位，再顺序输出”，近似可写为 $O(h + k)$，其中 $h$ 为树高、$k$ 为返回元素个数。对本文后续的 ZSet 深翻页测试而言，这一设计不是细节优化，而是决定访问路径是否可扩展的关键。
 
-	\subsubsection{有序编码与范围扫描}
-	ART 中的 key 采用“score 编码 + member 编码”的复合形式，以保证字典序遍历与 ZSet 语义下的 score 有序一致。本小节需要解释这一编码为什么能够同时支持同分数下的稳定排序，以及它对 \texttt{WITHSCORES} 返回格式的影响。
+	\subsection{ZSet 对象设计}
 
-	\subsubsection{核心命令实现}
-	本小节可分别说明 \texttt{ZADD}、\texttt{ZREM} 和 \texttt{ZRANGE} 的实现流程，重点分析插入、更新、删除时双索引如何保持一致，以及按 rank 范围扫描时如何从 \texttt{SeekByRank()} 直接下沉到起始位置。
+	\subsubsection{双索引总体方案}
 
-	\subsection{复杂度分析与工程取舍}
-	这一小节建议总结 ZSet 设计的时间复杂度、空间开销和工程权衡。例如，双索引方案提升了顺序访问效率，但也增加了维护成本；ART 提升了范围查询和深翻页性能，但实现复杂度高于跳表和简单有序数组。
+	Sorted Set 的核心矛盾在于：它既是“按 member 精确更新”的字典，又是“按 score 有序扫描”的序列。若只保留按 member 的哈希索引，则范围查询必须额外排序；若只保留按 score 的有序索引，则更新某个 member 的旧分数时又需要先做反向查找。当前实现因此采用双索引结构：\texttt{score\_map\_} 负责维护 \texttt{member} 到 \texttt{score} 的映射，\texttt{score\_tree\_} 则以编码后的 \texttt{(score, member)} 复合 key 建立 ART 有序索引。前者解决“这个 member 当前分数是多少”的问题，后者解决“按排序语义下一个元素是谁”的问题。
+
+	这种设计的优点在于职责划分清晰：哈希索引对点更新友好，有序索引对范围遍历友好，两者都不必勉强承担不擅长的访问模式。其代价也同样明显，即 member 信息会同时出现在哈希结构和编码索引中，从而放大对象的内存占用。换言之，本文对 ZSet 的设计取向并不是极端压缩空间，而是在可接受的内存代价下换取对更新与扫描两类路径都较稳定的时间复杂度。
+
+	\subsubsection{更新、删除与范围查询}
+
+	在插入与更新路径上，\texttt{ZADD} 首先通过 \texttt{score\_map\_} 判断 member 是否已经存在。若 member 首次出现，则直接把 \texttt{member $\rightarrow$ score} 写入哈希索引，并将对应的复合 key 插入 \texttt{score\_tree\_}；若 member 已存在且分数未变，则无需修改任何结构；若分数发生变化，则先从 ART 中删除旧的 \texttt{(old\_score, member)}，再插入新的 \texttt{(new\_score, member)}，最后更新哈希表中的分数字段。这个顺序保证了“双索引最终一致”的核心不变量：哈希索引始终能回答 member 的当前分数，ART 始终反映当前有效的排序视图。
+
+	删除路径与之对称。\texttt{ZREM} 先通过 \texttt{score\_map\_} 找到 member 当前对应的 score，然后从 \texttt{score\_tree\_} 中删除复合 key，再从哈希表中移除该 member。当对象元素数降为 0 时，顶层 \texttt{DB} 会继续删除这个 ZSet 对象本身。需要指出的是，这里之所以不需要为双索引之间再引入额外细粒度锁，根本原因不在于代码写得足够小心，而在于 shard 内部的事务执行已经提供了串行化上下文：同一时刻只会有一个本地事务真正修改该对象，因此双索引维护可以在一个连续的本地执行片段中完成。
+
+	范围查询路径则体现出 ART 有序索引真正的价值。当前实现首先按照 Redis 语义对 \texttt{start} 与 \texttt{stop} 做标准化处理，包括负下标转换、越界裁剪以及空范围判定；随后通过 \texttt{CountRange()} 预先确定返回元素个数，再调用基于 rank 的 \texttt{IterateRange()} 顺序输出结果。值得注意的是，ZSet 层并不会先构造一个完整的中间结果数组，再交由命令层重新编码为 RESP；相反，它采用回调式输出，把“如何组织协议返回值”的职责留给上层命令实现。这种分层方式的意义在于，容器层只负责有序访问本身，而不直接绑定网络协议格式，从而减少不必要的中间数据物化，也为后续继续优化返回路径留下空间。
+
+	\subsection{复杂度分析与工程权衡}
+
+	综合来看，当前存储层在顶层键空间上保持了较为典型的哈希型复杂度：字符串对象的 \texttt{GET}/\texttt{SET}/\texttt{DEL} 在期望意义上均可视为 $O(1)$；ZSet 的 \texttt{ZADD}/\texttt{ZREM} 由“哈希查找 + ART 更新”组成，其代价主要受 member 编码长度和 ART 高度影响；\texttt{ZRANGE} 在引入 rank 定位后，可近似写为 $O(h + k)$，其中 $h$ 为 ART 高度，$k$ 为返回元素个数。就实验所关心的访问模式而言，真正重要的不是将所有操作都压到理论上的最优大 $O$ 形式，而是避免两类在工程上极具破坏性的路径：其一是顶层哈希表扩容时的长时间停顿，其二是深翻页范围查询中的线性跳过。
+
+	当然，这一设计并非没有代价。首先，\texttt{shared\_ptr}、双索引以及 ART 节点元数据都会明显提高对象的空间开销，尤其在大规模 ZSet 上，这一问题会更加突出：member 既保留在哈希索引中，又参与了 ART 复合 key 的编码，而编码后的 key 进一步被拆分到 ART 的路径前缀、边标签和叶子后缀之中。尽管路径压缩可以回收一部分公共前缀带来的冗余，但由于树节点元数据、前缀存储以及双索引共存，这类开销很难像简单字符串对象那样继续压缩到较低水平。其次，ART 在范围扫描和深翻页上具有明显优势，但其实现复杂度也显著高于跳表、简单有序数组等替代结构，尤其是在节点扩缩容、游标失效语义和子树计数维护方面，需要付出更多工程复杂度。最后，分片本地内存资源改善了局部性和统计能力，却也意味着对象布局更偏向“局部更新、原地演化”，而非依赖后台压缩整理来换取极致空间效率。对于本文的原型系统而言，这种取舍是可以接受的，因为本文更关注的是验证一条面向高吞吐和有序访问的实现路径，而不是在所有对象类型上同时追求最小内存足迹。
 
 	\section{系统测试}
 
@@ -585,7 +775,7 @@ while (true) {
 			项目 & 配置 \\
 			\midrule
 			处理器 & AMD Ryzen 5 9600X，6 核 6 线程，最高主频 5.49\,GHz，L3 Cache 32\,MiB \\
-			内存 & DDR5 6000 c32 32GB  \\
+			内存 & DDR5 6000MHz c32 32GB  \\
 			操作系统 & Ubuntu 24.04.3 LTS，Linux 6.14.0-37-generic，x86\_64 \\
 			编译环境 & GCC/G++ 13.3.0，CMake 3.28.3，Ninja 1.11.1，C++20 \\
 			对比系统 & Redis 8.6.1 \\
@@ -611,25 +801,70 @@ while (true) {
 
 	这一结果首先来自 Shared-Nothing 多线程架构对多核 CPU 的有效利用。Redis 的核心命令路径仍然主要由单线程串行推进，因此即使 \texttt{GET} 与 \texttt{SET} 本身足够轻量，总吞吐仍受限于单核执行能力。相比之下，IdleKV 将 key 按哈希分发到不同 shard，每个 shard 在独立线程中推进请求处理、事务注册与数据访问，从而把原本集中在单线程上的请求流分散到多个执行上下文中。对于本实验中的高并发 pipelined 负载，这种分片并行能够持续压缩队列等待时间，并把更多 CPU 周期用于实际命令执行，因此整体吞吐提升较为明显。
 
+	需要指出的是，受限于实验硬件条件，本文目前只能在 6 核 CPU 环境下对 Redis 与 IdleKV 进行对比测试。因此，图~\ref{fig:get-set-overview} 更多反映的是 IdleKV 在当前机器规模下相对于 Redis 单线程执行模型的性能优势，而不能充分刻画系统在更多核心数量下的垂直扩展趋势。理论上，Shared-Nothing 架构应当能够随着 shard 数量和工作线程数量的增加继续释放多核并行能力，但实际扩展效果仍会受到网络栈、内存带宽、分片负载均衡、跨 shard 协调以及调度开销等因素影响。后续若能在更高核心数的服务器上补充 scaling 实验，例如逐步增加工作线程数量并观察吞吐、平均延迟和尾延迟变化，将能够更完整地评估 IdleKV 的单机扩展能力。
+
 	不过，图~\ref{fig:get-set-overview} 也表明当前实现的尾延迟控制仍有改进空间。尽管 IdleKV 的平均延迟明显优于 Redis，但其 P99 延迟在三组负载下分别为 9.21\,ms、7.65\,ms 和 8.03\,ms，均高于 Redis 的 6.66\,ms、6.40\,ms 和 4.93\,ms。这说明 IdleKV 已经显著优化了大多数请求的常规执行路径，但少量请求仍可能受到 shard 队列排队、Fiber 调度、事务注册以及批量发送策略的影响，从而在尾部产生额外抖动。换言之，当前系统已经在吞吐与平均响应时间上建立明显优势，但在尾延迟稳定性方面仍需继续优化。
 
 	\subsubsection{ZSet}
-	本小节的实验数据仍在整理中，后续将补充 \texttt{ZADD}、\texttt{ZREM}、\texttt{ZRANGE} 等典型工作负载下的吞吐、平均延迟与尾延迟结果，并与 Redis 做进一步对比分析。
+
+	\begin{figure}[htbp]
+		\centering
+		\includegraphics[width=1\textwidth]{zset_benchmark/figures_pub/zset_overview.pdf}
+		\caption{ZSet 工作负载总体对比}
+		\label{fig:zset-overview}
+	\end{figure}
+
+	本小节展示 ZSet 的对比结果。其中两组实验底层都对应 ZSet 插入负载，只是前者持续向同一个 key 中写入 member，后者则把请求分散到多个 key 上，以观察 Shared-Nothing 分片对复合对象路径的影响。
+
+	从图~\ref{fig:zset-overview} 可以看到，IdleKV 在两组 ZSet 负载下吞吐提升约 2.02 倍；平均延迟分别为 0.026\,ms 与 0.054\,ms，IdleKV 约降低 48.7\%。在 \texttt{Multi key} 负载下，IdleKV 的吞吐进一步达到 3.65M ops/sec，显著高于 Redis 的 0.96M ops/sec，对应吞吐提升约 3.79 倍；平均延迟则从 Redis 的 0.066\,ms 降至 0.015\,ms，下降约 77.3\%。与此同时，P99 延迟在两组负载下也都明显优于 Redis：\texttt{Single key} 为 0.035\,ms 对 0.078\,ms，\texttt{Multi key} 为 0.039\,ms 对 0.131\,ms。
+
+	\begin{table}[htbp]
+		\centering
+		\small
+		\caption{单个 ZSet 键在不同数据规模下的内存占用}\label{tab:zset-memory}
+		\begin{tabular}{ccc}
+			\toprule
+			Key-Value服务 & 数据量 & 内存占用 \\
+			\midrule
+			IdleKV & 100{,}000 & 14.68\,MB \\
+			Redis & 100{,}000 & 10.35\,MB \\
+			IdleKV & 1{,}000{,}000 & 175.33\,MB \\
+			Redis & 1{,}000{,}000 & 95.64\,MB \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+
+	不过，从空间开销角度看，IdleKV 当前的 ZSet 实现明显重于 Redis。由表~\ref{tab:zset-memory} 可见，在单个 ZSet 键包含 100{,}000 个 member 时，IdleKV 的内存占用为 14.68\,MB，高于 Redis 的 10.35\,MB；当数据规模扩大到 1{,}000{,}000 个 member 时，IdleKV 的内存占用进一步上升到 175.33\,MB，而 Redis 为 95.64\,MB，前者约为后者的 1.83 倍，平均每个元素要比 Redis 多用 ~80 bytes。
+
+	其主要原因在于 Redis 采用 SkipList + Hash Table 的方式，对于每一个 （socre，member）数据，可以只分配一份对象空间，SkipList 和 Hash Table 都只存储该对象的地址即可。但对于 IdleKV 采用的 ART 顺序索引结构，（socre，member） 不会只以一整条字符串的形式存放在单个对象中，而是会随着节点分裂和路径压缩被拆散到节点前缀、边以及叶子后缀中，难以实现像 Redis 那样的优化。
 
 	\subsubsection{结果讨论}
 	从已经完成的 \texttt{GET}/\texttt{SET} 实验来看，IdleKV 当前最明确的优势体现在基础命令路径上。Shared-Nothing 分片、多线程事件循环以及连接内批量处理共同降低了单位请求的调度摊销，使系统在单机多核环境下能够稳定获得高于 Redis 的总体吞吐，并在平均延迟上保持更优表现。这说明本文在运行时层面所采用的线程模型与分片执行策略是有效的。
 
-	与此同时，实验也暴露出当前实现的若干工程短板。首先，系统虽然在平均路径上表现良好，但 P99 延迟仍弱于 Redis，表明尾延迟控制、调度公平性与批量发送策略仍需继续打磨。其次，\texttt{MULTI/EXEC} 等更完整的 Redis 事务语义尚未实现，Hash、Set、List 等对象类型的覆盖度也有限，这意味着当前原型更适合作为体系结构与数据结构设计验证平台，而非直接替代工程上成熟的 Redis。最后，有序索引路径的性能优势还需要结合后续 ZSet 实验进一步验证，尤其是 \texttt{ZRANGE} 深翻页、\texttt{ZADD} 更新和双索引维护成本等方面，仍有待通过系统化测试给出更完整的结论。
-
+	与此同时，实验也暴露出当前实现的若干工程短板。首先，系统虽然在平均路径上表现良好，但 Get/Set 场景下的 P99 延迟仍弱于 Redis，表明尾延迟控制、调度公平性与批量发送策略仍需继续打磨。其次基于 ART 实现的有序集合虽然在吞吐已经延迟上优于 Redis 的实现，但是内存占用要比 Redis 高近 2 倍，并且难以优化。
+	
 	\section{总结与展望}
 	\subsection{工作总结}
 	本文完成了一个面向 Redis 兼容语义的主内存键值数据库原型。系统在运行时层面构建了基于 Boost.Asio 与 Boost.Fiber 的多线程事件驱动框架，在执行层面实现了 Shared-Nothing 分片架构和基于 VLL 的事务注册机制，在数据结构层面实现了基于 ART 的 ZSet 双索引结构，并通过 Get/Set 与 ZSet 两类实验验证了整体设计的有效性。综合来看，IdleKV 已经具备了较清晰的模块边界、可运行的事务调度路径和后续继续扩展的工程基础。
 
-	\subsection{不足分析}
-	当前系统仍存在若干明显不足。首先，事务框架已经支持单命令事务型操作和跨 shard 的多 key 命令，但 Redis 的 \texttt{MULTI/EXEC} 原子多命令事务尚未实现；其次，命令覆盖范围仍然有限，Hash、List、Set 等对象类型还未形成完整能力；再次，\texttt{TxnQueue}、锁表和 ART/ZSet 等关键路径虽然已可工作，但还缺少在更复杂负载和更大规模数据集上的系统化验证。
+	\subsection{不足分析与后续工作}
 
-	\subsection{后续工作}
-	后续工作可从两个方向继续推进。第一，继续扩展事务层，补齐 \texttt{MULTI/EXEC} 等原子多命令语义，并研究更完善的阻塞队列、公平性和冲突处理策略。第二，继续增强 ART 与容器对象实现，补充更多真实业务负载下的性能测试与工程验证。
+	虽然在基础命令的性能上 IdleKV 已经优于 Redis 不少，但仍存在若干明显不足与待完成工作。
+
+	\begin{itemize}
+		\item \textbf{长尾延迟严重。} 实验结果表明，IdleKV 虽然在总体吞吐和平均延迟上已经优于 Redis，但在部分基础读写负载下 P99 延迟仍然偏高，说明系统在尾部请求上的稳定性仍有不足。造成这一问题的原因可能包括 shard 任务队列排队、Fiber 调度时机、事务注册与执行阶段的额外调度，以及批量发送策略对少量请求的等待放大。后续需要进一步优化调度公平性和队列推进策略，并对关键路径中的批处理阈值、让权机制和跨 shard 协调开销进行更细粒度的分析，以在保持高吞吐的同时降低尾延迟抖动。
+		\item \textbf{命令覆盖不足。} 当前系统仅实现了 Redis 命令集中与本文实验密切相关的一部分功能，主要覆盖字符串对象、基础系统命令以及 Sorted Set 相关命令。Hash、List、Set 等常用对象类型仍未完整实现，\texttt{MULTI/EXEC} 等事务型接口也尚未补齐。因此，IdleKV 目前更接近一个用于验证核心架构和关键数据结构的原型系统，后续仍需要继续扩展命令集合、完善对象语义，并提升与 Redis 生态工具的兼容程度。
+		\item \textbf{持久化缺失。} 当前系统尚未实现数据持久化能力，重启后无法恢复内存数据。Redis 通常结合 AOF 与 Fork Snapshot 实现持久化，但 Fork Snapshot 在大内存实例中可能因写时复制带来短时间内存占用激增，并进一步影响尾延迟稳定性。后续可以参考 DragonflyDB 的 Forkless Snapshot 设计，在避免大规模 fork 开销的前提下实现一致性快照，并进一步结合增量日志机制提升系统恢复能力\cite{Dragonfly-RDB-Save}。
+		\item \textbf{集群能力缺失。} 一个完整的生产级内存数据库不仅需要提升单机多核利用率，还需要支持分布式集群部署，以满足水平扩展、故障恢复和高可用需求。当前 IdleKV 仍只关注单机内的分片执行与事务协调，尚未实现跨节点分片、数据迁移、副本同步、故障检测和自动主从切换等机制。后续若要面向更大规模负载，需要在保持单机执行效率的基础上进一步设计集群协议和复制机制。
+	\end{itemize}
+
+
+
+	\newpage
+
+	\section{致谢}
+
+	
 
 	\newpage
 	\phantomsection
