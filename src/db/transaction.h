@@ -289,6 +289,7 @@ public:
 
         if (CanInPlace()) {
             engine->LocalShard()->PollTransaction(shared_from_this());
+            return;
         }
 
         for (Shard* shard : shards_) {

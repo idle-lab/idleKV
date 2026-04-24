@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory_resource>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -30,11 +31,6 @@ class ZSet {
     static constexpr size_t kScoreBytes = ArtKeyCodec::kFixedBytes;
 
 public:
-    struct MemberScore {
-        std::string member;
-        double      score{0};
-    };
-
     explicit ZSet(std::pmr::memory_resource* mr) : score_tree_(mr), score_map_(mr) {}
 
     auto Add(std::string_view member, double score) -> bool {
@@ -65,11 +61,44 @@ public:
         return true;
     }
 
-    auto Range(int64_t start, int64_t stop) -> std::vector<MemberScore> {
-        std::vector<MemberScore> out;
-        const int64_t            size = static_cast<int64_t>(score_map_.size());
+    auto CountRange(int64_t start, int64_t stop) const -> size_t {
+        auto spec = NormalizeRange(start, stop);
+        return spec.has_value() ? spec->count : 0;
+    }
+
+    template <class Fn>
+    auto IterateRange(int64_t start, int64_t stop, Fn&& fn) -> size_t {
+        auto spec = NormalizeRange(start, stop);
+        if (!spec.has_value()) {
+            return 0;
+        }
+
+        size_t visited = 0;
+        score_tree_.IterateByRank(spec->start, spec->stop, [&](auto& it) -> bool {
+            const auto key = it.Key();
+            ++visited;
+            return fn(DecodeMember(key), DecodeScore(key));
+        });
+        return visited;
+    }
+
+    auto Size() const -> size_t { return score_map_.size(); }
+
+private:
+    struct RangeSpec {
+        uint32_t start{0};
+        uint32_t stop{0};
+        size_t   count{0};
+    };
+
+    static auto NormalizeIndex(int64_t index, int64_t size) -> int64_t {
+        return index < 0 ? index + size : index;
+    }
+
+    auto NormalizeRange(int64_t start, int64_t stop) const -> std::optional<RangeSpec> {
+        const int64_t size = static_cast<int64_t>(score_map_.size());
         if (size == 0) {
-            return out;
+            return std::nullopt;
         }
 
         start = NormalizeIndex(start, size);
@@ -79,30 +108,20 @@ public:
             start = 0;
         }
         if (stop < 0 || start >= size) {
-            return out;
+            return std::nullopt;
         }
         if (stop >= size) {
             stop = size - 1;
         }
         if (start > stop) {
-            return out;
+            return std::nullopt;
         }
 
-        out.reserve(static_cast<size_t>(stop - start + 1));
-        score_tree_.IterateByRank(static_cast<uint32_t>(start), static_cast<uint32_t>(stop),
-                                  [&](auto& it) -> bool {
-                                      const auto key = it.Key();
-                                      out.emplace_back(DecodeMember(key), DecodeScore(key));
-                                      return true;
-                                  });
-        return out;
-    }
-
-    auto Size() const -> size_t { return score_map_.size(); }
-
-private:
-    static auto NormalizeIndex(int64_t index, int64_t size) -> int64_t {
-        return index < 0 ? index + size : index;
+        return RangeSpec{
+            .start = static_cast<uint32_t>(start),
+            .stop  = static_cast<uint32_t>(stop),
+            .count = static_cast<size_t>(stop - start + 1),
+        };
     }
 
     static auto EncodeKey(double score, std::string_view member) -> std::string {
