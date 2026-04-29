@@ -183,7 +183,7 @@
 %   页眉页脚
 \pagestyle{fancy}     
 \fancyhf{} 
-\fancyhead[CO]{\zihao{-5}{\songti 宁波大学信息科学与工程学院学院本科毕业设计（论文）\vspace{0.4ex}}}
+\fancyhead[CO]{\zihao{-5}{\songti 宁波大学信息科学与工程学院本科毕业设计（论文）\vspace{0.4ex}}}
 \fancyhead[CE]{\zihao{-5}{\songti 基于可扩展基数树的键值内存数据库设计 \vspace{0.4ex}}}
 \cfoot{\thepage}
 
@@ -234,7 +234,7 @@
 	\rightline{\textbf{\zihao{-3}{\kaishu {承诺人（签名）: 陈一波}}}}
 	%\rightline{\textbf{\zihao{-3}{\kaishu {承诺人（签名）:\qquad \qquad}}}}
 
-	\rightline{\textbf{\zihao{-3}{\kaishu {2026 年 5 月 24 日 \qquad}}}}
+	\rightline{\textbf{\zihao{-3}{\kaishu {2026 年 5 月 3 日 \qquad}}}}
 
 	\thispagestyle{empty}
 \end{spacing}
@@ -262,10 +262,11 @@
 	\end{center}
 
 		{\kaishu
-		随着多核 CPU 普及和主内存容量持续增长，传统 Redis 单线程执行模型在单机垂直扩展能力以及有序复合对象支持方面逐渐暴露出瓶颈。为此，本文设计并实现了一个面向 Redis 兼容语义的主内存键值数据库原型 IdleKV。系统在运行时层面采用 Shared-Nothing 分片架构，以及基于 Boost.Asio 与 Boost.Fiber 的多线程事件驱动模型，使请求能够尽可能在本地执行上下文中完成；在执行层面引入基于 Very Lightweight Locking（VLL）的事务注册与调度机制，以在多分片访问场景下维持 Strict Serializability；在数据结构层面实现了基于可扩展基数树（Adaptive Radix Tree, ART）的 ZSet 双索引结构，并通过有序编码、游标扫描与 rank 定位支持 \texttt{ZADD}、\texttt{ZREM} 和 \texttt{ZRANGE} 等操作。实验结果表明，在 \texttt{GET}/\texttt{SET} 工作负载下，IdleKV 的总体吞吐达到 Redis 的 1.81$\sim$2.57 倍，平均延迟显著降低；在 ZSet 工作负载下，其吞吐最高可达到 Redis 的 3.79 倍，P99 延迟也整体优于 Redis。与此同时，基于 ART 的 ZSet 实现带来了更高的内存占用，说明有序索引性能与空间效率之间仍存在明显权衡。本文工作验证了在 Redis 兼容语义下，将 Shared-Nothing 执行模型、轻量级事务调度机制与 ART 有序索引结合起来构建单机多核高性能键值数据库的可行性，并为后续完善事务能力与容器实现奠定了基础。
+		随着多核 CPU 的普及和主内存容量的持续增长，传统 Redis 单线程执行模型在单机垂直扩展能力和有序复合对象支持方面逐渐暴露出瓶颈。针对这一问题，本文设计并实现了一个面向 Redis 兼容语义的主内存键值数据库原型 IdleKV。系统在运行时层面采用 Shared-Nothing 分片架构，并基于 Boost.Asio 与 Boost.Fiber 构建多线程事件驱动模型，使请求尽可能在线程本地执行上下文中完成；在执行层面引入基于 Very Lightweight Locking（VLL）的事务注册与调度机制，以保证多分片访问场景下的 Strict Serializability；在数据结构层面实现了基于可扩展基数树的 ZSet 双索引结构，并通过有序编码、游标扫描和 rank 定位支持 \texttt{ZADD}、\texttt{ZREM} 和 \texttt{ZRANGE} 等操作。实验结果表明，在 \texttt{GET}/\texttt{SET} 工作负载下，IdleKV 的总体吞吐达到 Redis 的 1.81 $\sim$ 2.57 倍，平均延迟显著降低；在 ZSet 工作负载下，IdleKV 的最高吞吐达到 Redis 的 3.79 倍，P99 延迟也整体优于 Redis。同时，基于 ART 的 ZSet 实现带来了更高的内存占用，说明有序索引性能与空间效率之间仍然存在明显权衡。本文工作表明，在 Redis 兼容语义下，将 Shared-Nothing 执行模型、轻量级事务调度机制和 ART 有序索引结合起来构建单机多核高性能键值数据库是可行的，并为后续完善事务能力与容器实现提供了基础。
 		}
 
-	{\heiti 关键字}\quad {\kaishu 内存数据库；键值存储；可扩展基数树；NoSQL }
+	{\heiti 关键字}\quad {\kaishu 主内存数据库；键值存储；Redis兼容；多核并行；可扩展基数树}
+
 
 	\newpage
 
@@ -281,13 +282,13 @@
 	\end{center}
 
 			\begin{spacing}{1.5}
-			This thesis presents IdleKV, an in-memory key-value database prototype. It aims to preserve compatibility with Redis semantics while improving single-node multicore scalability and ordered-access performance. As modern servers provide abundant CPU cores and memory capacity, the traditional single-threaded execution model of Redis increasingly limits vertical scalability, especially for workloads that combine high concurrency with ordered data access. To address this issue, IdleKV adopts a Shared-Nothing sharding architecture together with a multithreaded event-driven runtime built on Boost.Asio and Boost.Fiber, so that requests can be processed as locally as possible. On the execution side, the system introduces a transaction registration and scheduling mechanism based on Very Lightweight Locking (VLL) to maintain strict serializability for multi-shard operations. On the storage side, it implements a dual-index ZSet structure based on the Adaptive Radix Tree (ART), and supports ordered operations such as \texttt{ZADD}, \texttt{ZREM}, and \texttt{ZRANGE} through composite-key encoding, cursor-based traversal, and rank-aware positioning.
+			This doctoral thesis puts forward IdleKV, it is a prototype of key-value database that stores data in memory. This object is to retain compatibility with Redis semantics, at the same time as promoting single-node multi-core scalability and ordered-access performance. Because modern servers give very many CPU cores and memory space, the traditional single-thread running mode of Redis more and more restricts vertical expansion ability, especially for work loads which mix high concurrent visiting with ordered data visiting. For solving this problem, IdleKV uses a Share-Nothing sharding structure, together with a multi-thread event-driven running environment which is constructed on Boost. The Asio and the Boost. The fiber may let requests be processed in the as-local-as-possible manner. In the execution aspect, this system has introduced a transaction registration and scheduling mechanism which is based on Very Lightweight Locking (VLL) to maintain strict serializability for multi-shard operations. On the storage aspect, it has realized a dual-index ZSet structure which is based on the Adaptive Radix Tree (ART), and supports ordered operations like \texttt{ZADD}, \texttt{ZREM}, and \texttt{ZRANGE} via the method of composite-key coding, cursor-based passing through, and rank-aware position locating.
 
 			Experimental results show that, under \texttt{GET}/\texttt{SET} workloads, IdleKV achieves 1.81$\sim$2.57$\times$ the throughput of Redis while also reducing average latency. Under ZSet workloads, the throughput improvement reaches up to 3.79$\times$, and the P99 latency is consistently better than that of Redis. At the same time, the ART-based ZSet design incurs noticeably higher memory overhead, indicating a clear trade-off between ordered-index performance and space efficiency. Overall, this work demonstrates the feasibility of combining a Shared-Nothing execution model, lightweight transaction scheduling, and an ART-based ordered index to build a high-performance Redis-compatible key-value store on a multicore single machine.
 
 			\vspace{0.5em}
 
-			\textbf{KEYWORDS}\quad In-Memory Database, Key-Value Stores, Adaptive Radix Tree, NoSQL
+			{\textbf{Keywords}}\quad In-memory database; key-value store; Redis compatibility; multicore parallelism; Adaptive Radix Tree
 
 	\end{spacing}
 
@@ -300,15 +301,15 @@
 	\subsection{选题背景与意义}
 	随着主内存容量增长和成本下降，越来越多的数据管理系统开始将关键工作集乃至全部事务数据驻留在内存中，以减少磁盘访问带来的高延迟开销；在 OLAP 场景中，生产系统也常通过引入内存缓存或内存加速层来降低交互式查询延迟、提升查询性能。其中 Key-Value 内存数据库在高并发、低延迟的数据处理场景中得到广泛应用，如：缓存系统、实时推荐、流式计算以及 AI 基础设施等等\cite{In-memory-databases-The-foundation-of-real-time-AI-and-analytics}。
 
-	然而 Redis 作为目前最广泛使用的键值型内存数据库，仍采用单线程的执行模型，这一设计源于早期内存键值存储系统被认为是 I/O 密集型服务，单线程已能够满足性能需求。但在当前多核 CPU 成为服务器标配、网络带宽逐步增加的背景下，Redis 服务想要利用一台服务器上的多核 CPU 处理指令，通常需要依赖集群分片，这无疑从而增加了部署与运维的复杂度。
+	然而 Redis 作为目前最广泛使用的键值型内存数据库，仍采用单线程的执行模型，这一设计源于早期内存键值存储系统被认为是 I/O 密集型服务，单线程已能够满足性能需求。但在当前多核 CPU 成为服务器标配、网络带宽逐步增加的背景下，Redis 服务若要利用单机上的多核 CPU 资源，通常需要依赖集群分片，从而增加了部署与运维的复杂度。
 
-	另一方面，键值数据库的应用场景并不局限于简单的点查和更新。在排行榜、区间检索、前缀匹配、流式状态管理和推荐系统等场景中，系统还需要同时支持按 key 精确定位和按顺序范围访问。传统的跳表或通用树结构虽然能够提供有序能力，但在主内存场景下往往存在指针跳转较多、缓存局部性较差的问题。可扩展基数树（Adaptive Radix Tree, ART）通过路径压缩和自适应节点布局，在保持有序遍历能力的同时提高了内存访问效率，因此成为主内存数据库中一种具有潜力的有序索引结构。
+	另一方面，键值数据库的实际应用并不只局限于简单的点查询与更新操作。在诸如排行榜、区间查询、前缀匹配以及流式状态管理和推荐系统等场景下，系统往往既需要基于 key 的精确访问能力，也需要支持按顺序进行范围遍历。传统的跳表或通用树结构虽然具备一定的有序性，但在以内存为主要存储介质的环境中，频繁的指针跳转容易带来较差的缓存局部性，从而影响整体性能表现。相比之下，可扩展基数树（Adaptive Radix Tree，ART）通过路径压缩以及节点结构的自适应调整，在保证有序访问能力的同时，有效减少了内存访问开销，因此逐渐被认为是主内存数据库中一种较具潜力的有序索引方案。
 	
-	在上述背景下，设计一种兼顾 Redis 协议兼容性、多核扩展能力与高效有序索引结构的主内存键值数据库具有重要的研究价值与工程意义。本文实现的 IdleKV 在我们的基准测试中，使用多核 CPU 在不同工作负载下，吞吐以及平均延迟指标实现相对 Redis 大约 2 倍的性能提升，具体提升参考图 ~\ref{fig:relative-gain-intro} 所示。
+	在上述背景下，设计一种兼顾 Redis 协议兼容性、多核扩展能力与高效有序索引结构的主内存键值数据库具有重要的研究价值与工程意义。本文实现的 IdleKV 在基准测试中能够利用多核 CPU 并行处理请求，并在不同工作负载下相对于 Redis 获得约 2 倍的吞吐和平均延迟改进，具体提升如图~\ref{fig:relative-gain-intro} 所示。
 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.85\textwidth]{get_set_benchmark/figures_pub/relative_gain_intro.pdf}
+    \includegraphics[width=0.75\textwidth]{get_set_benchmark/figures_pub/relative_gain_intro.pdf}
     \caption{IdleKV 相对 Redis 的基础读写性能提升概览}
     \label{fig:relative-gain-intro}
 \end{figure}
@@ -319,26 +320,48 @@
 	\subsubsection{主内存键值数据库}
 	随着主内存容量持续增长，越来越多的键值存储系统开始以 DRAM 作为主要数据承载介质，重新审视传统数据库中由磁盘主导的系统设计。Ousterhout 等人提出的 RAMCloud 是较早的代表性工作之一，它主张将数据常驻内存、将磁盘主要作为备份介质，从而在集群环境中提供低延迟、高吞吐的存储服务\cite{The-Case-for-RAMClouds-Scalable-High-Performance-Storage-Entirely-in-DRAM}。这一方向表明，当磁盘 I/O 不再位于关键路径上时，数据布局、网络路径和并发执行模型会成为影响系统性能的核心因素。
 
-	在单机高性能键值系统方向，相关研究进一步把优化重点转向了多核并行执行和缓存友好的内存访问。MemC3 通过紧凑哈希表、近似 LRU 的 CLOCK 淘汰策略以及乐观锁等工程优化，显著提升了 Memcached 的内存利用率与并发性能\cite{MemC3-Compact-and-Concurrent-MemCache-with-Dumber-Caching-and-Smarter-Hashing}。MICA 则从请求分发、网络收包、数据分区和并行访问等多个层面协同优化，在通用多核服务器上实现了极高的单机吞吐\cite{MICA-A-Holistic-Approach-to-Fast-In-Memory-Key-Value-Storage}。进一步地，FASTER 利用缓存友好的并发哈希索引与混合日志相结合的设计，优化了点查、更新与 read-modify-write 路径，体现了现代键值存储对高并发更新场景的关注\cite{FASTER-A-Concurrent-Key-Value-Store-with-In-Place-Updates}。
+	在单机高性能键值系统方向，相关研究把优化重点转向了多核并行执行和缓存友好的内存访问。Bin Fan 等人实现了 MemC3\cite{MemC3-Compact-and-Concurrent-MemCache-with-Dumber-Caching-and-Smarter-Hashing}， 其通过紧凑哈希表、近似 LRU 的 CLOCK 淘汰策略，还有一些比较轻量级的并发控制机制，显著提升了 Memcached 的内存利用率与并发性能。MICA\cite{MICA-A-Holistic-Approach-to-Fast-In-Memory-Key-Value-Storage} 则从内核网络层、数据分区和并行数据访问等多项优化实现了优秀的吞吐和延迟。Microsoft 在 18 年实现的 FASTER\cite{FASTER-A-Concurrent-Key-Value-Store-with-In-Place-Updates} KV 存储系统，它利用缓存友好的并发哈希索引与混合日志相结合的设计，达到了非常优秀的性能表现，在单机就有 160M QPS 的优秀性能。
+
+	近年来，国内在高性能键值存储方向也有不少工程化和系统层面的探索。比如阿里云 Tair 团队提出的 TairString\cite{TairString}，主要是围绕 Redis 做改进，对字符串对象的内部表示和访问方式做了一些调整，在不改变原有接口使用方式的前提下，尽量减少元数据开销和内存分配带来的负担，这类工作更多体现的是在现有系统上的持续打磨。谢国羿围绕分布式持久化 Redis 数据库的关键技术进行了设计与优化研究，重点关注 Redis 在持久化、分布式部署和系统性能方面的工程问题\cite{Xie2025RedisPersistence}，这与本文后续需要补齐持久化和集群能力的方向较为接近。另一类思路可以看到像清华大学等单位提出的 SpanDB\cite{SpanDB}，它把 LSM-tree 中内存处理和磁盘 I/O 的路径做了拆分，再配合异步请求处理以及分层的资源调度，在高速存储设备上能把吞吐进一步拉高。整体来看，这些工作的切入点其实不完全一样，但多少都在说明一个问题：要把键值系统性能做上去，往往不能只盯着某一个点，接口兼容、内存组织方式、请求调度路径以及底层硬件这些因素基本都绕不开。
 
 	总体来看，主内存键值数据库相关研究主要围绕“如何充分发挥内存介质优势”和“如何在多核平台上压缩每次请求的常数开销”两个方向展开。然而，这类系统大多以无序键值访问、点查与更新负载为主要优化目标，对于兼顾 Redis 兼容接口、多核扩展能力和有序范围访问的统一设计关注相对较少，这也构成了本文工作的切入点。
 	\subsubsection{主内存事务与并发控制}
 	事务作为数据库领域最核心的主题之一，相关研究已经非常成熟。为了在保证基础的 ACID 性质的前提下尽可能提高并发度，提出了非常多的并发控制机制，这些机制大致可以分为两类：1.悲观并发控制；2.乐观并发控制。
 	
-	悲观并发控制协议通常基于锁来实现。Two-Phase Locking (2PL)作为一种基础的锁并发控制协议，它可以保证可序列化的（Serializable）事务一致性模型，最早由 Jim Gray 在早期研究中奠定了 2PL 基本思想，后来由 Bernstein 和 Goodman 在其关于并发控制机制的综合研究中予以系统化\cite{Concurrency-Control-in-Distributed-Database-Systems}。在此基础上，为了在提高事务并发度的，Gray 等人进一步提出了多粒度锁\cite{Granularity-of-locks-in-a-shared-data-base}，引入了层次结构的意向锁，在保证可串行化的前提下，有效降低了粗粒度锁带来的并发受限问题。
+	悲观并发控制协议通常基于锁来实现。Two-Phase Locking (2PL)作为一种基础的锁并发控制协议，它可以保证可序列化的（Serializable）事务一致性模型，最早由 Jim Gray 在早期研究中奠定了 2PL 基本思想，后来由 Bernstein 和 Goodman 在其关于并发控制机制的综合研究中予以系统化\cite{Concurrency-Control-in-Distributed-Database-Systems}。在此基础上，为了在保证可串行化的同时提高事务并发度，Gray 等人进一步提出了多粒度锁\cite{Granularity-of-locks-in-a-shared-data-base}，引入层次结构和意向锁，有效缓解了粗粒度锁带来的并发受限问题。
 
-	乐观并发控制协议通常假设事务的冲突很少发生，在真正发生冲突时会重启事务。David P. Reed 在 1978 提出了一种基于时间戳（T/O）的乐观并发控制协议\cite{NAMING-AND-SYNCHRONIZATION-IN-A-DECENTRALIZED-COMPUTER-SYSTEM}，在单个事务涉及数据不多且冲突较少时，可以节省 2PL 中控制锁的额外成本，提高事务并发度。H. T. Kung 和 John T. Robinson 等人提出在此基础上提出一种更通用的乐观并发控制（Optimistic Concurrency Control, OCC）模型\cite{On-optimistic-methods-for-concurrency-control}，将事务执行过程划分为读阶段、验证阶段和写阶段，通过延迟冲突检测来提高系统的并发度与执行效率。
+	乐观并发控制协议通常假设事务的冲突很少发生，并在真正发生冲突时重启事务。David P. Reed 在 1978 提出了一种基于时间戳（T/O）的乐观并发控制协议\cite{NAMING-AND-SYNCHRONIZATION-IN-A-DECENTRALIZED-COMPUTER-SYSTEM}，在单个事务涉及数据不多且冲突较少时，可以节省 2PL 中维护锁的额外成本，提高事务并发度。H. T. Kung 和 John T. Robinson 等人在此基础上提出一种更通用的乐观并发控制（Optimistic Concurrency Control, OCC）模型\cite{On-optimistic-methods-for-concurrency-control}，将事务执行过程划分为读阶段、验证阶段和写阶段，通过延迟冲突检测来提高系统的并发度与执行效率。
 
-	传统并发控制协议起源于磁盘数据库时代，其设计目标主要围绕降低磁盘 I/O 开销与提升事务吞吐能力，因此系统瓶颈通常集中于存储访问延迟，并发控制开销相对次要。在主内存数据库中，数据完全驻留于内存，磁盘 I/O 不再构成主要瓶颈，并发控制机制的开销逐渐成为性能关键限制。针对上述问题，Kun Ren 等人提出一种轻量级的锁控制机制（Very Lightweight Locking，VLL）\cite{VLL}，通过去除中心化的共享/独占计数器与有序事务队列来推进可执行事务，以降低并发控制本身的元数据成本，使其在单核以及多核环境下都有非常优秀的性能表现。
+	传统并发控制协议起源于磁盘数据库时代，其设计目标主要围绕降低磁盘 I/O 开销与提升事务吞吐能力，因此系统瓶颈通常集中于存储访问延迟，并发控制开销相对次要。在主内存数据库中，数据完全驻留于内存，磁盘 I/O 不再构成主要瓶颈，并发控制机制的开销逐渐成为性能关键限制。赵泓尧等人针对内存数据库中的典型并发控制算法进行了系统实验研究，对 2PL、OCC、时间戳排序、MVCC 和确定性并发控制等机制在不同负载下的性能表现进行了比较\cite{Zhao2022ConcurrencyControlExperiment}，其结果也说明没有一种协议可以在所有冲突率和访问模式下始终最优。针对主内存事务开销问题，Kun Ren 等人提出一种轻量级的锁控制机制（Very Lightweight Locking，VLL）\cite{VLL}，通过去除中心化的共享/独占计数器与有序事务队列来推进可执行事务，以降低并发控制本身的元数据成本，使其在单核以及多核环境下都有非常优秀的性能表现。
+
+	国内研究者也在主内存事务处理和分布式并发控制方向开展了有代表性的探索。上海交通大学等单位提出的 Polyjuice\cite{Polyjuice} 将学习方法引入并发控制策略选择中，不再只是在 2PL、OCC 等少数固定协议之间切换，而是通过离线训练在更细粒度的策略空间中搜索适合具体负载的并发控制动作，从而提升内存事务系统在不同冲突模式下的适应能力。该方向表明，当数据访问路径被压缩到内存层面后，事务元数据维护、冲突检测和提交策略本身会成为影响系统吞吐与延迟的重要因素。与这类自适应事务系统相比，本文更关注单机多核环境下 Redis 兼容命令的事务化调度，但二者都体现了主内存场景下“降低并发控制常数开销”的共同目标。
 
 	\subsubsection{可扩展基数树与有序索引}
-	在有序索引方向，经典的 B\textsuperscript{+}-tree 仍然是最重要的基线结构之一。它依靠较高扇出和叶子层顺序链接，能够同时支持点查与区间扫描，因此长期被广泛用于数据库系统中。然而，传统 B\textsuperscript{+}-tree 的节点组织方式主要围绕页式存储设计，在主内存环境下，其性能瓶颈会逐渐从磁盘 I/O 转向指针跳转、缓存失效与字符串比较。针对这一问题，Rao 和 Ross 提出的 cache-sensitive B\textsuperscript{+}-tree（CSB\textsuperscript{+}-tree）\cite{Making-B-Trees-Cache-Conscious-in-Main-Memory} 通过压缩子指针布局和增强节点连续性，显式地将缓存局部性纳入设计目标，说明即便仍保留 B\textsuperscript{+}-tree 的整体框架，主内存场景下也需要重新审视节点布局与访存模式。
+
+	在有序索引这一方向上，B\textsuperscript{+}-tree 依然算是最常见、也最基础的一类结构。它通过较大的节点以及叶子节点之间的顺序链接，可以同时支持点查询和区间扫描，所以在数据库系统中一直用得比较多。不过，这类结构最初还是围绕磁盘页来设计的，当运行环境变成主内存之后，影响性能的因素就慢慢发生了变化，不再主要是 I/O，而更多体现在指针跳转、缓存命中情况以及字符串比较这些细节上。针对这一点，Rao 和 Ross 提出的 cache-sensitive B\textsuperscript{+}-tree（CSB\textsuperscript{+}-tree）\cite{Making-B-Trees-Cache-Conscious-in-Main-Memory}，对节点内部布局做了一些调整，比如压缩子指针、让节点在内存中更加连续，从而尽量减少访存开销。整体来看，这类工作其实是在说明，即便还沿用 B\textsuperscript{+}-tree 的基本结构，在主内存场景下也往往需要重新考虑节点组织方式以及访问路径。
 
 	另一类常见的有序结构是 SkipList。Pugh 提出的 SkipList\cite{Skip-lists-a-probabilistic-alternative-to-balanced-trees} 以概率平衡代替严格旋转维护，插入与删除逻辑简洁，工程实现也相对直接，因此在许多内存型系统中被用作有序集合或 memtable 的底层结构。Redis 的 Sorted Set 便是采用 “Hash Table + SkipList” 的典型代表。不过，SkipList 的查找路径本质上仍由多层前向指针跳转组成，其缓存行为较强依赖对象分配布局；当 key 较长或需要进行深范围扫描时，这类随机访问的代价会变得更加明显。
 
 		为了进一步兼顾变长键上的公共前缀利用与范围访问能力，Mao 等人提出了一种复合索引结构（Masstree）\cite{Cache-Craftiness-for-Fast-Multicore-Key-Value-Storage}。该结构将 trie 与 B\textsuperscript{+}-tree 拼接起来处理变长键与长公共前缀，并结合缓存友好的节点布局与细粒度并发控制，在多核主内存环境下兼顾了范围访问能力和较高吞吐。这说明主内存环境下的有序索引设计，不能简单沿用面向磁盘的树结构，而需要显式考虑缓存层次、CPU 访存成本以及 key 编码特征。
 
-	在此基础上，Leis 等人提出可扩展基数树（Adaptive Radix Tree, ART）\cite{The-adaptive-radix-tree-ARTful-indexing-for-main-memory-databases}，通过路径压缩和 Node4、Node16、Node48、Node256 的自适应节点布局，在空间利用率和缓存局部性之间取得了更好的平衡。与传统 B\textsuperscript{+}-tree 相比，ART 直接按字节前缀组织键，能够更自然地处理长公共前缀；与 SkipList 相比，它减少了多层链式指针跳转带来的随机访问开销。ART 的点查性能接近哈希索引，同时仍然保留了按字典序遍历、前缀匹配和范围扫描等有序能力，因此成为主内存数据库中非常有代表性的有序索引结构。
+	在此基础上，Leis 等人提出可扩展基数树（Adaptive Radix Tree, ART）\cite{The-adaptive-radix-tree-ARTful-indexing-for-main-memory-databases}，通过路径压缩和 Node4、Node16、Node48、Node256 的自适应节点布局，在空间利用率和缓存局部性之间取得了更好的平衡。与传统 B\textsuperscript{+}-tree 相比，ART 直接按字节前缀组织键，能够更自然地处理长公共前缀；与 SkipList 相比，它减少了多层链式指针跳转带来的随机访问开销。ART 的点查性能接近哈希索引，同时仍然保留了按字典序遍历、前缀匹配和范围扫描等有序能力，因此成为主内存数据库中非常有代表性的有序索引结构。在 IdleKV 实现过程中，本文使用 perf stat 采集并对比了 ART 与 C++ 标准库 \texttt{std::map} 的缓存未命中次数，结果如表~\ref{tab:art-map-cache} 所示，表明 ART 的路径压缩和紧凑节点布局在主内存场景下具有更好的缓存友好性。
+
+\begin{table}[htbp]
+	\centering
+	\small
+	\caption{ART 与 \texttt{std::map} 的缓存访问对比}
+	\label{tab:art-map-cache}
+	\begin{tabular}{lccc}
+		\toprule
+		索引结构 & cache-references & L1-dcache-load-misses & L1-icache-load-misses \\
+		\midrule
+		ART & 263,625,449 & 85,242,204 & 10,956,793 \\
+		\texttt{std::map} & 478,266,521 & 270,274,252 & 21,761,039 \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+	近些年国内学术界还围绕学习型索引和字符串有序索引进行了新的探索。上海交通大学等单位提出的 XIndex\cite{XIndex} 将学习型索引扩展到多核并发场景，通过分层模型、局部结构调整和并发控制机制提升有序索引在高并发读写负载下的可扩展性。进一步地，SIndex\cite{SIndex} 面向字符串键设计可扩展学习型索引，通过结合前缀处理、模型预测和局部修正结构改善变长字符串键上的查找性能。这些工作与 ART 一样，都试图减少传统树结构中的比较和指针跳转成本，只是 ART 依赖自适应基数节点组织键空间，而学习型索引则利用数据分布模型预测键的位置。
 
 	
 	\section{系统概述}
@@ -362,11 +385,11 @@
 
 	\subsubsection{多核并行利用}
 
-	提高多核 CPU 利用率是本文系统设计的核心目标之一。随着单机服务器核心数量不断增加，键值数据库的性能瓶颈不应长期集中在单个执行单元上，而应尽可能将并发请求转化为可并行处理的工作负载。对于主内存数据库而言，单次请求的计算路径通常较短，若系统结构无法有效分摊这些请求，即使硬件提供了更多 CPU 核心，整体吞吐也难以随之提升。因此，本文在设计上应按照“局部优先、并行推进、按需协调”的设计思路，减少夸核心数据迁移、缓存失效和同步带来的额外开销。
+	提高多核 CPU 利用率是本文系统设计的主要目标之一。随着单机服务器核心数量的不断增加，键值数据库的性能瓶颈不应长期集中在单个执行线程上，而应尽可能将并发请求转换为可并行处理的工作负载。对于主内存数据库而言，单次请求路径通常较短，如果无法有效分摊并发请求，即使硬件提供更多 CPU 核心，整体吞吐也难以持续提升。因此，本文在系统设计上遵循“局部优先、并行推进、按需协调”的思路，以减少跨核心数据迁移、缓存失效和同步带来的额外开销。
 
 	\subsection{系统总体架构}
 
-	传统多线程系统通常依赖锁机制或原子操作来实现并发控制，然而，随着线程数量的增加，资源竞争显著加剧，导致系统性能难以随着 CPU 核心数的增长实现线性扩展。为此，IdleKV 采用 Shared-Nothing\cite{The-Case-for-Shared-Nothing} 架构，将系统划分为 $N$ 个相互独立的分片，其中 $N \leq$ CPU 核心数。每个分片由单一线程独占访问，并通过线程与 CPU 核心的绑定（CPU pinning）减少线程迁移带来的缓存失效开销。在该设计中，每个线程同时负责 TCP 连接处理以及对应数据库分片的管理，从而避免跨线程的数据访问与同步开销。
+	传统的多线程系统一般还是依赖锁或者原子操作来做并发控制，但线程一多起来之后，竞争问题往往会变得比较明显，性能也很难随着 CPU 核心数增加而继续提升。基于这一点，IdleKV 采用了 Shared-Nothing\cite{The-Case-for-Shared-Nothing} 的思路，把整个系统拆成多个相互独立的分片，数量控制在不超过 CPU 核心数的范围内。每个分片由一个线程单独负责，同时和固定的 CPU 核心绑定，这样可以减少线程在不同核心之间切换带来的缓存开销。在这种设计下，线程本身既要处理 TCP 连接，也要负责对应分片的数据管理，就避免了跨线程访问数据以及额外的同步成本。
 	
 	在每个线程之上，IdleKV 采用更轻量级的 Fiber（协程）来执行不同的任务（如：数据操作执行、客户端连接处理以及异步 IO 等）。相比于操作系统线程，Fiber 具有更低的创建与上下文切换开销，其调度完全由用户态控制，从而避免了内核调度带来的额外开销。此外 IdleKV 能够根据系统特性设计调度策略，以此来提升线程内部的执行效率，增强系统在高负载场景下的可控性。详细内容将在第~\ref{sec:io-thread-model}章展开。
 
@@ -377,7 +400,7 @@
 		\label{fig:overall-architecture}
 	\end{figure}
 
-	如图~\ref{fig:overall-architecture} 所示，IdleKV 在示例配置中创建了 3 个工作线程，每个线程独立负责其分片内的 I/O 处理与数据管理。当新的客户端连接到达时，系统会将对应的客户端协程（fiber）分配至某一线程执行。线程选择由调度策略决定，默认采用 Round-Robin（轮询）方式以实现负载均衡。在 Linux 环境下，若配置了 RPS（Receive Packet Steering），IdleKV 可进一步将连接调度至处理该网络数据包的 CPU 所对应的线程，从而提升 CPU 缓存局部性，优化整体性能。
+	如图~\ref{fig:overall-architecture} 呈现的内容可以看到，IdleKV于示例配置里创建了3个工作线程，每个线程专门负责自身分片范围内的I/O处理、数据管理工作。当有新的客户端连接到来时，系统会把相应的客户端协程（fiber）分配到某一个线程去执行。线程的选择是由调度策略来决定的，默认运用Round-Robin（轮询）方式，以此达成负载均衡的目的。在Linux环境当中，如果配置了RPS（Receive Packet Steering），IdleKV能够进一步把连接调度到处理该网络数据包的CPU所对应的线程，进而提高CPU缓存局部性，优化整体性能表现。
 
 	客户端的命令可能涉及到不同分片的数据，要保证多分片操作执行的全局顺序一致，就需要经过事务协调后，才能调度到对应分片的线程上执行数据操作。这里事务协调基于 VLL\cite{VLL} 并发控制机制来实现事务的全局顺序一致性，详细内容将在第~\ref{sec:vll-txn} 章中展开。
 
@@ -397,7 +420,7 @@
 				Simple String & + & 响应 \\
 				Error & \texttt{-} & 响应  \\
 				Integer & \texttt{:} & 响应  \\
-				Bulk String & \texttt{\$<len>}  \\
+				Bulk String & \texttt{\$<len>} & 请求、响应 \\
 				Array & \texttt{*<len>} & 请求、响应  \\
 				Null Bulk String & \texttt{\$-1} & 响应 \\
 				\bottomrule
@@ -415,17 +438,25 @@
 	
 	首先是命令解析使用的 \texttt{Parser}，对于协议的数据类型、字符串长度和数组长度这样的头部数据，\texttt{Parser} 使用一个固定大小的缓冲区来处理，避免频繁的小内存分配，对于命令以及参数这样的数据本身，会被直接读取到一个已经提前申请好空间的 \texttt{CmdArgs} 类型中，在后续的所有操作中不会对 \texttt{CmdArgs} 中的参数做任何的移动以及拷贝。
 	
-	之后是用于响应恢复的 \texttt{Sender}，我希望尽可能减少 \allowbreak\texttt{write} 系统调用的次数，尽可能批量的发送响应，以此提高整个系统的吞吐，因此 \texttt{Sender} 内部有一个可扩容的写缓冲区，只有当缓冲区写满以及显示调用 \texttt{Flush} 时才调用 \texttt{write} 发送响应数据，这个对吞吐的提升是显而易见的，在实现过程中添加此优化后系统吞吐有 2$\sim$3 倍的提升。
+	之后是用于响应返回的 \texttt{Sender}。为减少 \allowbreak\texttt{write} 系统调用次数并尽可能批量发送响应，\texttt{Sender} 内部维护了一个可扩容的写缓冲区，只有当缓冲区写满或显式调用 \texttt{Flush} 时才调用 \texttt{write} 发送响应数据。该优化能够显著提升吞吐，在实现过程中引入后，系统吞吐提升了约 2$\sim$3 倍。
 	
-	然而，对于 \texttt{GET}、\texttt{MGET} 等读操作而言，若将返回的 Value 数据拷贝至缓冲区再统一发送，会引入一次额外且可避免的内存拷贝。为此，\texttt{Sender} 在处理此类请求时仅持有 Value 数据的内存地址，而不将其复制至内部缓冲区。在实际发送阶段，采用 \texttt{writev} 系统调用将多个非连续内存区域（如协议头部与 Value 数据）组织为一组 \texttt{iovec} 结构进行聚合写入，从而在避免额外拷贝的同时，仍然保持批量发送的优势。此外，\texttt{Sender} 在持有 Value 内存引用期间，需要保证其生命周期的有效性。IdleKV 中 Value 采用 \texttt{std::shared\_ptr} 进行管理，因此 \texttt{Sender} 仅需持有一份指针拷贝，即可确保其在发送完成前不会被提前释放。
+	然而，对于 \texttt{GET}、\texttt{MGET} 等读操作而言，若将需要返回的 Value 对应的数据拷贝至缓冲区再发送，就会引入一次不必要的内存拷贝。所以 \texttt{Sender} 在处理此类请求时仅持有 Value 数据的内存地址，而不是将其复制至内部缓冲区。在实际发送时，调用 \texttt{writev} 系统调用将多个非连续内存区域（如协议头部与 Value 数据）组织为一组 \texttt{iovec} 结构（一个由内存地址和对应内存空间大小组成的结构体）进行合并写入，从而避免额外拷贝。但是在 \texttt{Sender} 还未发送前，对应的 Value 数据可能被删除导致对应内存空间被释放，所以 \texttt{Sender} 在持有 Value 内存引用期间，需要保证其生命周期的有效性。在 IdleKV 系统的实现中 Value 采用 \texttt{std::shared\_ptr} 进行管理，因此 \texttt{Sender} 仅需持有一份指针拷贝，即可确保其在发送完成前不会被提前释放。
 	
 
 	\subsection{核心模块划分}
 
-	IdleKV 中的核心模块还需要分章节展开详细说明，主要是如下三个部分：
+	IdleKV 中的核心模块还需要分章节展开详细说明，主要是如图 ~\ref{fig:core-module} 所示模块。
+
+
+	\begin{figure}[!htb]
+		\centering
+		\includegraphics[width=1\textwidth]{figure/overview.drawio.pdf}
+		\caption{核心模块图}
+		\label{fig:core-module}
+	\end{figure}
 
 	\begin{description}
-    \item[基础设施] 为 Shared-Nothing 架构提供底层运行时支持，包括线程管理、网络 I/O、多路复用机制以及 Fiber 调度与同步原语等。
+    \item[IO 与线程模型] 为 Shared-Nothing 架构提供底层运行时支持，包括线程管理、网络 I/O、多路复用机制以及 Fiber 调度与同步原语等。
     \item[VLL 事务框架] 系统实现 Strict Serializability 一致性语义的核心模块，通过全局顺序控制与冲突管理机制，保证事务执行结果等价于某一全局串行顺序。
     \item[底层 DB 数据结构] 负责各类数据结构的具体实现，包括 KV 存储（KvStore）、有序集合（ZSet）等。
 	\end{description}
@@ -433,7 +464,7 @@
 
 	IdleKV 采用“线程级并行 + 线程内异步”的总体线程模型。系统通过多个工作线程利用多核 CPU 的并行能力，而在每个线程内部，则借助 Fiber 与事件循环实现 Proactor 风格的异步 IO 模式。需要特别说明的是，异步性（asynchronicity）与并行性（parallelism）并不等价：前者强调单个线程在等待 I/O 时不被阻塞，后者强调多个 CPU 核同时推进不同任务。IdleKV 同时利用了二者，即跨线程实现并行，在线程内部实现异步。
 
-	在这一模型下，连接处理、分片任务执行等待任务都与一个 Fiber 绑定，Fiber 间采用主动让权的协调式 CPU 调度机制，Fiber 在遇到阻塞任务时或在一些条件下（如：到达 CPU 使用配额上限）就会主动放弃 CPU，由同线程中的其他 ready Fiber 继续运行。
+	在这一模型下，连接处理、分片任务执行等任务都与一个 Fiber 绑定。Fiber 间采用主动让权的协调式 CPU 调度机制，当 Fiber 遇到阻塞任务或满足特定调度条件（如到达 CPU 使用配额上限）时，会主动放弃 CPU，由同线程中的其他 ready Fiber 继续运行。
 
 	\subsection{基于 Fiber 的异步 IO}
 	
@@ -473,7 +504,7 @@ while (true) {
 
 	\subsection{Fiber 调度机制}
 
-	同一个线程上会允许各种各样的类型的任务，如：客户端请求处理、分片任务队列。为了最小化客户端的响应延迟，当一个客户端对一个分片发起读写请求时，我们希望尽可能快的执行对应操作。为此系统在事件循环线程中启用自定义优先级调度器，并为 Fiber 定义 HIGH、NORMAL 和 BACKGROUND 三个优先级，使 shard 任务队列消费者、连接处理和后台任务能够在同一线程内获得不同调度权重。
+	同一个线程上会同时存在多类任务，例如客户端请求处理和分片任务队列消费。为了降低客户端响应延迟，当客户端向某个分片发起读写请求时，系统需要尽快执行对应操作。为此，IdleKV 在事件循环线程中启用自定义优先级调度器，并为 Fiber 定义 HIGH、NORMAL 和 BACKGROUND 三个优先级，使 shard 任务队列消费者、连接处理和后台任务能够在同一线程内获得不同调度权重。
 
 	仅有优先级还不足以保证线程内公平性。协调式调度的一个风险在于：如果某个 Fiber 长时间不主动让出 CPU，那么即使线程内部仍有其他 ready Fiber，也无法及时获得执行机会。为此，IdleKV 利用硬件 cycle counter 为热路径设置 CPU 预算，并在超过预算后触发主动 \texttt{yield}。其中，解析阶段和 Pipeline 聚合阶段分别由 \texttt{kMaxParseCpuCycles} 与 \texttt{kMaxSquashCpuCycles} 两个阈值约束，从而缓解单个长任务对线程内尾延迟的拖累。
 
@@ -483,9 +514,9 @@ while (true) {
 
 	IdleKV 的扩展性首先来自于 Shared-Nothing 分片模型。系统使用 XXHash64\cite{xxhash} 将 key 按哈希结果划分到不同的 shard 中，每个 shard 长期绑定到一个工作线程，并由该线程独占访问。这样一来，绝大多数单 key 命令从网络解析、路由判定到 DB 访问都可以在线程本地完成，线程间只需要共享极少的调度信息，不需要在热路径上引入全局锁或频繁的原子同步。由于同一个分片内部始终保持单线程执行，KvStore、ART、ZSet 等数据结构也不必再为分片内并发访问额外维护细粒度锁，这不仅减少了同步开销，也显著降低了实现复杂度。
 
-	在线程内部，IdleKV 的每个工作线程既运行 Asio 事件循环，也负责所属 shard 的任务消费与事务推进。线程本地会维护自己的任务队列、事务队列、逻辑 DB 切片以及独立的内存池。
+	在线程内部，IdleKV 的每个工作线程既运行 Asio 事件循环，也负责所属分片的任务消费与事务推进。线程本地会维护自己的任务队列、事务队列、逻辑 DB 切片以及独立的内存池。
 	
-	IdleKV 采用 mimalloc\cite{Leijen2019MimallocFL} 作为内存分配器，其线程本地化（thread-local）的设计与系统的 Shared-Nothing 架构高度契合。相比 glibc malloc、jemalloc 以及 tcmalloc 等传统分配器，mimalloc 通过为每个线程维护独立的堆，并结合延迟回收（deferred remote free）机制，有效降低了跨线程内存操作带来的竞争开销。此外，该设计还能够提升缓存局部性（cache locality），从而减少跨核访问带来的性能损耗，并在高并发场景下显著改善系统的尾延迟表现。
+	IdleKV 采用 mimalloc\cite{Leijen2019MimallocFL} 作为内存分配器，其线程本地化（thread-local）的设计与系统的 Shared-Nothing 架构高度契合。相比 glibc malloc、jemalloc 以及 tcmalloc 等传统分配器，mimalloc 通过为每个线程维护独立的堆，并结合延迟回收（deferred remote free）机制，可以很有效的降低跨线程内存操作引发的竞争开销。除此之外，mimalloc 还能够显著提升缓存局部性，可以在高并发场景下改善系统的尾延迟表现。
 	
 	但对于 \texttt{MGET}、\texttt{MSET}、\texttt{DEL} 等可能会跨 Shard 的多 Key 命令，IdleKV 仍需要一些跨线程的调度协作。参考图~\ref{fig:cross-shard} 所示的例子，请求首先由连接所在的线程接收并解析。图中 \texttt{Connection} 位于 \texttt{Shard-n} 对应的线程中，因此该线程既负责维护客户端连接，也负责发起这次跨 Shard 命令的调度。完成 key 路由后，系统会将属于 \texttt{Shard-n} 本地的数据访问组织为本地任务，同时把涉及 \texttt{Shard-m} 的子任务封装为调度单元（在 IdleKV 的实现中就是一个可调用对象），投递到目标线程的 \texttt{TaskQueue} 中。这样一来，跨 Shard 命令虽然由一个连接统一发起，但真正的数据操作仍然会被拆分后下沉到各个目标 shard 的本地执行上下文中。
 
@@ -530,7 +561,7 @@ while (true) {
 	\end{figure}
 
 
-	IdleKV 的 Shared Nothing 架构不允许事务直接访问分片数据以及对应的 \texttt{TxnQueue}。相反，事务需要向分片发送请求，并指示它们在每个步骤中该做什么。每次事务发送消息时，都会阻塞直到收到回复。为了后文描述方便，我将这一次请求回复的过程称作一次\textbf{调度轮次（Schedule Round）}。
+	IdleKV 的 Shared-Nothing 架构不允许事务直接访问分片数据以及对应的 \texttt{TxnQueue}。相反，事务需要向分片发送请求，并指示它们在每个步骤中执行相应操作。每次事务发送消息时，当前事务 Fiber 都会挂起直到收到回复。为便于后文描述，本文将这一次请求-回复过程称作一次\textbf{调度轮次（Schedule Round）}。
 
 	注意，只有事务所在 Fiber 被阻塞时，它所在的线程仍然可以执行其他 Fiber（比如处理其他连接上的请求）。这就是采用 Fiber 的优势，它让 IdleKV 能够将执行上下文与操作系统线程分离。
 
@@ -545,7 +576,7 @@ while (true) {
 		\label{fig:txn-reg}
 	\end{figure}
 
-	但在一些情况下会出现两个分片线程接收到事务的顺序可能并不一致。如图 ~\ref{fig:txn-reg} 示例所示，T1 和 T2 的键值相同，且涉及到 Shard1 以及 Shard2 两个分片中的数据。当 T1 和 T2 同时开始调度时，就会出现了序列号较小的事务在序列号较大的事务之后被插入到队列中的情况。对于 Shard1 我们没办法把 T1 直接插入到 T2 之前，因为 T1 没有成功获取到全部 key 的锁，T1 没办法确定 T2 是否在已经进入到了执行阶段，如果 T2 已经进入执行阶段，就会导致 T1、T2 在不同 Shard 上执行顺序不同。
+	但在一些情况下，不同分片线程接收到事务的顺序可能并不一致。如图~\ref{fig:txn-reg} 所示，T1 和 T2 的键值相同，且涉及 Shard1 和 Shard2 两个分片中的数据。当 T1 和 T2 同时开始调度时，可能出现序列号较小的事务在序列号较大的事务之后被插入队列的情况。对于 Shard1，系统不能直接将 T1 插入到 T2 之前，因为 T1 尚未成功获取全部 key 的锁，也无法确认 T2 是否已经进入执行阶段。如果 T2 已经进入执行阶段，强行调整顺序就可能导致 T1、T2 在不同 shard 上的执行顺序不一致。
 
 	
 	在这种情况下，协调者需要回滚此次注册操作，即从各个分片中移除该事务，并重新分配新的序列号以重试整个注册过程。在实际运行中，注册失败的概率较低，重试也较为少见（主要取决于键上的竞争程度）。需要注意的是，当多个事务同时调度跨分片事务时，才更容易出现这种顺序不一致的问题。
@@ -613,7 +644,7 @@ bool RegisterInShard(shard) {
 
 
 
-	\texttt{PollTransaction()} 是本地推进事务的核心函数，其核心逻辑参考代码 ~\ref{lst:poll-transaction}。，它首先从 \texttt{TxnQueue} 队首开始扫描，获取已就绪的事务，更新本分片的 \texttt{commit\_txn\_id\_}，并调用该事务的回调函数。\texttt{ExecCbInShard()} 会在当前分片上执行对应的回调函数，并在执行完成后把该事务从 \texttt{TxnQueue} 中移除，释放在当前分片中持有的读写锁，并通过一个 BlockCounter 的同步原语通知调用方该 shard 的执行已经结束。对于 \texttt{MGET}、\texttt{MSET}、\texttt{DEL} 这类跨分片命令，每个分片只负责处理属于该分片的 key 子集，而原始事务所在的连接线程则在所有目标分片都完成后再统一汇总结果并返回响应。
+	\texttt{PollTransaction()} 是本地推进事务的核心函数，其核心逻辑如代码~\ref{lst:poll-transaction} 所示。该函数首先从 \texttt{TxnQueue} 队首开始扫描，获取已就绪的事务，更新本分片的 \texttt{commit\_txn\_id\_}，并调用该事务的回调函数。\texttt{ExecCbInShard()} 会在当前分片上执行对应的回调函数，并在执行完成后把该事务从 \texttt{TxnQueue} 中移除，释放在当前分片中持有的读写锁，并通过一个 BlockCounter 同步原语通知调用方该 shard 的执行已经结束。对于 \texttt{MGET}、\texttt{MSET}、\texttt{DEL} 这类跨分片命令，每个分片只负责处理属于该分片的 key 子集，而原始事务所在的连接线程则在所有目标分片都完成后再统一汇总结果并返回响应。
 
 
 \begin{listing}[!htb]
@@ -651,7 +682,7 @@ void PollTransaction(caller) {
 	\label{lst:poll-transaction}
 	\end{listing}
 
-	要注意事务的回调函数不一定会被自己所调用的 \texttt{PollTransaction()} 执行。所以为了保证每个回调函数只会被执行一次，每个事务会在完全就绪后依次向每个相关分片上下发一个一次性执行权限（在实现中它是一个原子变量 \texttt{execution\_permit}），第一个获取到该权限的 \texttt{PollTransaction()} 调用者才可以执行对应事务的回调函数。对于在事务注册阶段被标记为 OptimizeExecution 的分片是不需要再被执行的，所以在下发 \texttt{execution\_permit} 时会跳过对应分片。
+	需要注意的是，事务的回调函数不一定由该事务自身触发的 \texttt{PollTransaction()} 执行。为了保证每个回调函数只会被执行一次，每个事务会在完全就绪后依次向每个相关分片下发一次性执行权限（在实现中它是一个原子变量 \texttt{execution\_permit}），第一个获取到该权限的 \texttt{PollTransaction()} 调用者才可以执行对应事务的回调函数。对于在事务注册阶段被标记为 OptimizeExecution 的分片，由于其回调已经在快速路径中完成，因此下发 \texttt{execution\_permit} 时会跳过对应分片。
 
 	如果不是 $Free$ 状态的事务，就只能通过推进事务队列，来尝试执行自己的回调函数，在这个过程中如果遇到了还未就绪的事务，就只能等待其他事务来继续推进。如果是 $Free$ 状态的事务，就会在一开始尝试获取执行自己回调函数的权限，不管事务队列中是否还有未就绪的事务，都可以在本次 \texttt{PollTransaction()} 中完成回调函数的调用。因为队列前面没有和 \texttt{caller} 有依赖关系的事务，执行顺序就可以不按照 \texttt{txn\_id} 的顺序，也可以保证对外状态的正确性。
 
@@ -663,9 +694,9 @@ void PollTransaction(caller) {
 
 	\subsubsection{Pipeline 优化}
 
-	对于 Shared Nothing 这样的架构，在响应 Pipeline 模式下的客户端时会有一个严重的性能问题，那就是每一条命令都需要走一遍昂贵的 Schedule Round。在观察了命令流之后，可以发现对于一系列只涉及到一个分片的命令，它们有两条性质：1）每个命令只需要相对于访问同一分片的其他命令保持其顺序即可；2）各个分片的命令序列可以并行执行。
+	在 Shared-Nothing 架构下，处理 Pipeline 模式客户端请求时，一个主要性能问题是每条命令都需要经历一次开销较高的 Schedule Round。观察命令流可以发现，对于一系列只涉及单个分片的命令，它们具有两条性质：1）每个命令只需要相对于访问同一分片的其他命令保持顺序；2）不同分片上的命令序列可以并行执行。
 	
-	由此 IdleKV 实现了一套命令聚合逻辑，其基本思想是识别连续的一系列单分片命令，并按分片将它们分开，同时保持它们在每个分片中的相对顺序。一旦命令被分开，我们可以在所有相关分片上执行一次 Schedule Round。在每个分片内，跳转回调将依次执行仅分配给其各自分片的命令。由于所有命令已经放置在其相关线程上，因此不需要任何额外的 Schedule Round，所有命令回调都会内联执行。
+	由此 IdleKV 实现了一套命令聚合逻辑，其基本思想是识别连续的一系列单分片命令，并按分片将它们分开，同时保持它们在每个分片中的相对顺序。一旦命令完成分组，系统即可在所有相关分片上执行一次 Schedule Round。在每个分片内，跳转回调将依次执行仅分配给该分片的命令。由于所有命令已经放置在其相关线程上，因此不需要任何额外的 Schedule Round，所有命令回调都会内联执行。
 
 	在 IdleKV 当前代码中的对应实现是 \texttt{CmdSquasher}。在 \texttt{DispatchManyCmd()} 中，系统会先创建一个父事务，并把其工作模式设置为 \texttt{MultiMode::Squash}。随后，系统通过 \texttt{CmdSquasher} 检查每条命令涉及的所有 key 是否都落在同一个 shard 上；若是，则把该命令追加到该 shard 对应的 \texttt{MultiSub} 子事务中，并用 \texttt{order\_} 记录原始响应顺序；若命令无法安全聚合，则先冲刷当前批次，再回退到普通事务路径逐条执行。
 
@@ -684,19 +715,29 @@ void PollTransaction(caller) {
 	
 	\section{DB 存储结构}
 
-	如果说前两章关注的是“请求如何被送到正确的执行上下文”，那么本章讨论的则是“数据到达目标 shard 后应当以何种方式驻留在内存中”。对于一个 Redis 兼容的主内存系统而言，底层存储结构至少需要同时满足三类要求：其一，顶层键空间上的点查与更新必须保持较低常数开销；其二，复合对象需要针对自身访问模式建立专门索引，而不能退化为单一通用容器。
+	本章介绍 IdleKV 数据存储的核心 DB 存储结构。对于一个 Redis 兼容的主内存系统而言，底层存储结构至少需要同时满足两类要求：其一，顶层键空间上的点查与更新必须保持较低常数开销；其二，复合对象需要针对自身访问模式建立专门索引，而不能退化为单一通用容器。
 
-	\subsection{设计目标与总体组织}
+	\subsection{总体组织结构}
 
-	IdleKV 的每个 shard 都独占一组 \texttt{DB} 实例，每个 \texttt{DB} 负责维护某个逻辑数据库下的键空间。由于同一 shard 上的数据只会被该 shard 所属线程访问，底层容器不必再内嵌额外的互斥锁或原子同步逻辑，其设计重点主要是“缓存友好”“内存局部性”和“可预测的单次操作开销”。
 
-	在当前实现中，分片内部的对象、索引节点以及顶层键值项都尽量通过 shard 本地的 \texttt{pmr::memory\_resource} 分配。该资源以独立 mimalloc heap 为后端，一方面便于把同一 shard 的数据尽量聚集到本地内存区域，减轻跨核访问与缓存污染；另一方面也使得每个 shard 的内存占用和峰值使用量能够被单独统计。换言之，存储结构本身并不是孤立设计的，而是与前文的分片执行模型和本地调度语义配套出现：数据放在本地，任务在本地推进，分配也尽量留在本地。
+	\begin{figure}[!htb]
+		\centering
+		\includegraphics[width=0.8\textwidth]{figure/db-overview.drawio.pdf}
+		\caption{DB 总体组织结构}
+		\label{fig:db-overview}
+	\end{figure}
+
+	如图~\ref{fig:db-overview} 所示，IdleKV 的存储层以 shard 为资源边界组织。每个 shard 独占一组 \texttt{DB} 实例，每个 \texttt{DB} 对应一个逻辑数据库，并在内部维护顶层键值表、过期时间表、事务锁表以及分片本地内存资源。由于同一 shard 上的数据只会被该 shard 所属线程访问，存储层不需要在底层容器中额外嵌入互斥锁或原子同步逻辑，设计重点因此转向缓存友好、内存局部性以及可预测的单次操作开销。
+
+	在 \texttt{DB} 内部，\texttt{PrimeTable}  是访问最频繁的主键值结构，负责把用户 key 映射成统一的 \texttt{PrimeValue} 对象；\texttt{ExpiredTable} 则记录 key 对应的过期时间，用于支持带 TTL 的对象管理；\texttt{LockTable} 保存事务注册阶段所需的锁信息，其索引对象并非完整的value数据，而是 key 的指纹。这种拆分方式使得数据访问、过期管理和并发控制元数据各自保持相对独立：普通读写命令主要经过 \texttt{PrimeTable} ，带过期语义的命令会再额外更新\texttt{ExpiredTable}，而事务调度只需要访问 \texttt{LockTable} 中的轻量级锁状态。
+
+	在内存管理方面，分片内部的对象、索引节点以及顶层键值项都通过分片本地的 \allowbreak\texttt{pmr::memory\_resource} 分配。该资源由 \texttt{ShardMemoryResource} 封装，并以独立 mimalloc heap 为后端：一方面可以将同一分片的数据尽量聚集到本地内存区域，减轻跨核访问与缓存污染；另一方面也便于按照 shard 维度统计内存占用和峰值使用量。换言之，存储结构并不是孤立的数据容器，而是与前文的分片执行模型和本地调度语义共同构成一条局部化路径：数据放在本地，任务在本地推进，内存分配也尽量留在本地。
 
 	\subsection{通用键值层}
 
 	\subsubsection{对象表示与生命周期管理}
 
-	顶层键空间中的 value 统一表示为 \texttt{PrimeValue}。它本质上是一个指向 \texttt{Value} 对象的 \texttt{shared\_ptr}。这样做的出发点并不只是“统一类型接口”，更重要的原因在于：在 IdleKV 的发送路径中，响应缓冲区可以直接持有底层 value 的引用，并通过 \texttt{writev} 进行聚合发送；因此，存储层对象的生命周期不能简单绑定到某一次命令调用栈，而需要允许“存储层已完成查找、网络层仍在发送”的短暂重叠。引用计数虽然会带来少量额外元数据与原子语义成本，但它显著简化了零拷贝响应与对象生命周期之间的协调关系。
+	顶层键空间中的 value 统一表示为 \texttt{PrimeValue}。IdleKV 使用引用计数的方式来维护 \texttt{PrimeValue} 的生命周期，当前为了实现简单，直接采用了 C++ 标准库的 \texttt{shared\_ptr}。这样做的出发点并不只是“统一类型接口”，更重要的原因在于：在 IdleKV 的发送路径中，响应缓冲区可以直接持有底层 value 的引用，并通过 \texttt{writev} 进行聚合发送；因此，存储层对象的生命周期不能简单绑定到某一次命令调用栈，而需要允许“存储层已完成查找、网络层仍在发送”的短暂重叠。引用计数虽然会带来少量额外元数据与原子语义成本，但它显著简化了零拷贝响应与对象生命周期之间的协调关系。
 
 	\begin{figure}[htbp]
 		\centering
@@ -705,23 +746,34 @@ void PollTransaction(caller) {
 		\label{fig:value}
 	\end{figure}
 
-	\texttt{Value} 本身采用紧凑的 tagged union 布局，并针对短字符串做了内联优化。当前实现将长度不超过 12 字节的字符串直接保存在对象内部，而较长字符串和 \texttt{ZSet} 这类复合对象则退化为外部分配。这样设计的原因在于，Redis 工作负载中短 key、短 value 占比通常很高，若为每个小字符串都单独分配堆对象，不仅会增大分配器压力，也会显著增加对象指针追踪带来的缓存未命中。通过将小字符串内联到统一 value 容器中，顶层 \texttt{GET}/\texttt{SET} 路径可以在更少的内存访问中完成主要工作；而对于体积较大或结构较复杂的对象，再转交给专门的数据结构实现即可。
+	说回 \texttt{Value} 值本身，它采用紧凑的 tagged union 布局，并针对短字符串做了内联优化，其结构大致如图~\ref{fig:value} 所示。当前实现中 \texttt{Value} 的主体由一个 12 字节的 \texttt{ValueUnion} 和 6 bit 的元数据组成，后续会有几字节。\texttt{ValueUnion} 根据对象类型复用同一段空间：当 value 是短字符串时，它直接保存最多 12 字节的 \texttt{inline\_str}；当 value 是长字符串时，它保存一个 \texttt{Str} 结构，其中包含外部分配字符串的指针和长度；当 value 是 ZSet 时，它保存指向 \texttt{ZSet} 对象的指针。
+
+	元数据部分并不直接保存完整过期时间，而是由 5 bit 的 \texttt{len\_tag\_} 和 1 bit 的 \texttt{has\_ttl\_} 组成。对于内联字符串，\texttt{len\_tag\_} 的取值直接表示字符串长度，因此 0 到 12 既是合法长度也是内联字符串标记；对于非内联对象，\texttt{len\_tag\_} 存放对象类型标签，例如 \texttt{STR}、\texttt{INT} 或 \texttt{ZSET}。\texttt{has\_ttl\_} 只表示该对象是否带有过期语义，真正的过期时间由 \texttt{DB} 中的 \texttt{ExpiredTable} 维护。这样的设计把高频访问路径中的类型判断和短字符串长度判断压缩到极少的元数据位中，同时避免在每个 \texttt{Value} 内部都存放完整时间戳。
 
 	\subsubsection{KvStore 的实现}
 
 	顶层键空间当前由 \texttt{KvStore} 承载，其核心容器是 \texttt{absl::flat\_hash\_map}。选择开放寻址哈希表而非链式哈希表，主要是出于缓存局部性的考虑：开放寻址结构的桶数组更加紧凑，点查时通常只需访问较少的连续内存区域，这对于主内存数据库中的高频短路径操作更为有利。由于 shard 内部已经是串行访问环境，\texttt{KvStore} 无需考虑多线程并发插入和删除，因此可以把注意力集中在查找效率与重哈希成本控制上。
 
-	一个更关键的实现细节在于，\texttt{KvStore} 并未采用“一次性完整 rehash”的传统做法，而是将重哈希拆分为渐进式迁移过程。具体而言，容器在扩容后会同时维护旧表和新表，并在每次 \texttt{Set}/\texttt{Get}/\texttt{Del} 时顺带迁移少量元素。这样做的设计动机十分直接：在 Fiber 模型下，单次长时间 rehash 会占用当前 shard 线程较长的 CPU 时间片，进而阻塞同线程上的其他连接与任务推进，最终表现为尾延迟抖动。渐进式 rehash 的代价是实现上要处理“双表并存”以及短期额外空间占用，但它换来了更加平滑的单次操作成本，这一取舍与本文整体强调的“吞吐之外也要避免明显暂停”是一致的。
+	\texttt{KvStore} 参考了 Redis 的渐进式 rehash 的做法，将 rehash 的开销分摊到每一次键值操作中。具体而言，容器在扩容后会同时维护旧表和新表，并在每次 \texttt{Set}/\texttt{Get}/\texttt{Del} 时顺带迁移少量元素。这样做的设计动机十分直接：在 Fiber 模型下，单次长时间 rehash 会占用当前 shard 线程较长的 CPU 时间片，进而阻塞同线程上的其他连接与任务推进，最终表现为尾延迟抖动。渐进式 rehash 的代价是实现上要处理“双表并存”以及短期额外空间占用，但它换来了更加平滑的单次操作成本，这一取舍与本文整体强调的“吞吐之外也要避免明显暂停”是一致的。
+	
 
 	从逻辑边界上看，\texttt{DB} 并不只是一个纯粹的哈希表包装器。它在顶层键值表之外还维护了事务注册阶段使用的 \texttt{LockTable}，并负责在 \texttt{Get} 路径上执行对象类型检查。因此，\texttt{DB} 承担的是“逻辑数据库入口”角色：哈希表负责对象定位，value 容器负责对象表示，而 \texttt{DB} 负责把类型语义和事务元数据附着在这一层之上。
 
 	\subsection{ART 有序索引}
 
-	对于字符串对象而言，顶层哈希表已经足够；但对于 Sorted Set，这样的结构远不能满足需求。ZSet 既要求按 member 做精确更新与删除，又要求按 score 顺序执行范围扫描，特别是在 \texttt{ZRANGE start stop} 中还需要支持从较深的 rank 位置直接开始遍历。若仅使用哈希表，就无法提供有序访问；若仅使用一棵按 score 排序的树，又会使按 member 更新的代价变得过高。
+	对于字符串对象来讲，顶层哈希表就已经能够满足其需求，然而对于Sorted Set这种结构，单纯依靠顶层哈希表远远无法满足其各项要求。ZSet不仅需要按照member进行精确的更新、删除操作，同时还要求按照score的顺序去执行范围扫描，尤其是在\texttt{ZRANGE start stop}这个操作里面，还需要支持直接从较深的rank位置开始进行遍历。要是仅仅使用哈希表，那么将无法提供有序访问，要是仅仅使用一棵按照score排序的树，那么按member更新的代价又会变得过高。
 
 	\subsubsection{自适应节点布局与路径压缩}
 
-	当前实现的 ART 采用典型的自适应节点布局，提供 \texttt{Node4}、\texttt{Node16}、\texttt{Node48} 和 \texttt{Node256} 四类内部节点，以及保存最终值的叶子节点。其设计思想是：当某一层分支非常稀疏时，应使用更紧凑的小节点表示，避免像固定 256 路 trie 那样为大量空指针付出空间成本；而当某一层逐渐变得稠密时，再将其提升到更高容量的节点形态，以避免小节点上线性查找的代价持续放大。尤其是 \texttt{Node48} 这一层的存在，使结构能够在“完全稀疏”和“完全稠密”之间提供一个折中点：它用 256 项索引数组记录边值到槽位的映射，同时只保留 48 个真实 child 指针，从而避免直接进入 \texttt{Node256} 所带来的整页指针数组开销。
+	\begin{figure}[!htb]
+		\centering
+		\includegraphics[width=1\textwidth]{figure/art.drawio.pdf}
+		\caption{ART 节点类型}
+		\label{fig:art-node}
+	\end{figure}
+
+
+	当前实现的 ART 采用典型的自适应节点布局，提供 \texttt{Node4}、\texttt{Node16}、\texttt{Node48} 和 \texttt{Node256} 四类内部节点，以及保存最终值的叶子节点，参考图 ~\ref{fig:art-node}。其设计思想是：当某一层分支非常稀疏时，应使用更紧凑的小节点表示，避免像固定 256 路 trie 那样为大量空指针付出空间成本；而当某一层逐渐变得稠密时，再将其提升到更高容量的节点形态，以避免小节点上线性查找的代价持续放大。尤其是 \texttt{Node48} 这一层的存在，使结构能够在“完全稀疏”和“完全稠密”之间提供一个折中点：它用 256 项索引数组记录边值到槽位的映射，同时只保留 48 个真实 child 指针，从而避免直接进入 \texttt{Node256} 所带来的整页指针数组开销。
 
 	除了节点自适应布局之外，路径压缩是 ART 在主内存场景中更重要的原因。传统 trie 会为 key 的每一个字节都创建一层节点，面对长字符串或复合 key 时高度很容易膨胀；而当前实现会把“从当前节点继续向下直到分叉发生之前的公共后缀”直接压缩进节点前缀中。对于 ZSet 使用的复合编码 key 而言，这一点尤为关键：相邻元素常常共享相同的 score 高位字节，member 前缀也可能具有较强相似性。若没有路径压缩，树高度和指针跳转次数都会明显上升；引入压缩后，树的实际高度更接近“信息发生分化的位置”，这比简单按原始字节长度建树更适合内存型索引。
 
@@ -747,7 +799,7 @@ void PollTransaction(caller) {
 
 	\subsubsection{更新、删除与范围查询}
 
-	在插入与更新路径上，\texttt{ZADD} 首先通过 \texttt{score\_map\_} 判断 member 是否已经存在。若 member 首次出现，则直接把 \texttt{member $\rightarrow$ score} 写入哈希索引，并将对应的复合 key 插入 \texttt{score\_tree\_}；若 member 已存在且分数未变，则无需修改任何结构；若分数发生变化，则先从 ART 中删除旧的 \texttt{(old\_score, member)}，再插入新的 \texttt{(new\_score, member)}，最后更新哈希表中的分数字段。这个顺序保证了“双索引最终一致”的核心不变量：哈希索引始终能回答 member 的当前分数，ART 始终反映当前有效的排序视图。
+	在插入与更新的路径方面，\texttt{ZADD} 首先借助\texttt{score\_map\_} 来判断 member 是否已经存在。要是 member 首次出现，那么就直接将\texttt{member $\rightarrow$ score} 写入哈希索引，并且把对应的复合 key 插入 \texttt{score\_tree\_}。要是member 已经存在且分数没有改变，那么就不需要修改任何结构。要是分数出现了变化，那么就先从ART中删除旧的 \texttt{(old\_score, member)} ，接着插入新的 \texttt{(new\_score, member)}，最后对哈希表中的分数字段进行更新。这样的顺序确保了“双索引最终一致”这个核心不变量：哈希索引一直能够回答member的当前分数，ART一直反映当前有效的排序视图。
 
 	删除路径与之对称。\texttt{ZREM} 先通过 \texttt{score\_map\_} 找到 member 当前对应的 score，然后从 \texttt{score\_tree\_} 中删除复合 key，再从哈希表中移除该 member。当对象元素数降为 0 时，顶层 \texttt{DB} 会继续删除这个 ZSet 对象本身。需要指出的是，这里之所以不需要为双索引之间再引入额外细粒度锁，根本原因不在于代码写得足够小心，而在于 shard 内部的事务执行已经提供了串行化上下文：同一时刻只会有一个本地事务真正修改该对象，因此双索引维护可以在一个连续的本地执行片段中完成。
 
@@ -787,8 +839,8 @@ void PollTransaction(caller) {
 	除特殊说明外，文中的对比实验均在本机回环地址 \texttt{127.0.0.1} 上完成，以尽量减少外部网络抖动对结果的影响。Redis 绑定到本地 \texttt{6379} 端口，并关闭 RDB 快照与 AOF 持久化；IdleKV 绑定到本地 \texttt{4396} 端口，并关闭 metrics 端口。
 
 	\subsection{Redis VS IdleKV}
-	本节基于已有的 \texttt{GET}/\texttt{SET} 压测结果，对 IdleKV 与 Redis 在基础读写负载下的表现进行对比。需要说明的是，图中横轴沿用压测脚本的比例记号，表示 \texttt{SET:GET} 请求比例；因此，\texttt{9:1} 对应写密集负载，\texttt{1:1} 对应读写均衡负载，\texttt{1:9} 对应读密集负载。
 
+	本节将综合对比 IdleKV 与 Redis 在不同工作负载下基础读写以及 ZSet 有序读写场景的性能表现。
 	\subsubsection{Get/Set}
 	\begin{figure}[htbp]
 		\centering
@@ -803,8 +855,7 @@ void PollTransaction(caller) {
 
 	需要指出的是，受限于实验硬件条件，本文目前只能在 6 核 CPU 环境下对 Redis 与 IdleKV 进行对比测试。因此，图~\ref{fig:get-set-overview} 更多反映的是 IdleKV 在当前机器规模下相对于 Redis 单线程执行模型的性能优势，而不能充分刻画系统在更多核心数量下的垂直扩展趋势。理论上，Shared-Nothing 架构应当能够随着 shard 数量和工作线程数量的增加继续释放多核并行能力，但实际扩展效果仍会受到网络栈、内存带宽、分片负载均衡、跨 shard 协调以及调度开销等因素影响。后续若能在更高核心数的服务器上补充 scaling 实验，例如逐步增加工作线程数量并观察吞吐、平均延迟和尾延迟变化，将能够更完整地评估 IdleKV 的单机扩展能力。
 
-	不过，图~\ref{fig:get-set-overview} 也表明当前实现的尾延迟控制仍有改进空间。尽管 IdleKV 的平均延迟明显优于 Redis，但其 P99 延迟在三组负载下分别为 9.21\,ms、7.65\,ms 和 8.03\,ms，均高于 Redis 的 6.66\,ms、6.40\,ms 和 4.93\,ms。这说明 IdleKV 已经显著优化了大多数请求的常规执行路径，但少量请求仍可能受到 shard 队列排队、Fiber 调度、事务注册以及批量发送策略的影响，从而在尾部产生额外抖动。换言之，当前系统已经在吞吐与平均响应时间上建立明显优势，但在尾延迟稳定性方面仍需继续优化。
-
+	不过，图~\ref{fig:get-set-overview} 也表明当前实现的尾延迟控制仍有改进空间。IdleKV 在平均延迟方面明显优于 Redis，但 P99 延迟在三组负载下分别为 9.21\,ms、7.65\,ms 和 8.03\,ms，均高于 Redis 的 6.66\,ms、6.40\,ms 和 4.93\,ms。这说明 IdleKV 已经显著优化了大多数请求的常规执行路径，但少量请求仍可能受到分片任务队列排队、Fiber 调度不公平、事务注册以及批量发送等相关策略的影响，从而在尾部产生额外抖动。因此，长尾延迟控制仍是后续需要重点优化的问题。
 	\subsubsection{ZSet}
 
 	\begin{figure}[htbp]
@@ -836,12 +887,12 @@ void PollTransaction(caller) {
 
 	不过，从空间开销角度看，IdleKV 当前的 ZSet 实现明显重于 Redis。由表~\ref{tab:zset-memory} 可见，在单个 ZSet 键包含 100{,}000 个 member 时，IdleKV 的内存占用为 14.68\,MB，高于 Redis 的 10.35\,MB；当数据规模扩大到 1{,}000{,}000 个 member 时，IdleKV 的内存占用进一步上升到 175.33\,MB，而 Redis 为 95.64\,MB，前者约为后者的 1.83 倍，平均每个元素要比 Redis 多用 ~80 bytes。
 
-	其主要原因在于 Redis 采用 SkipList + Hash Table 的方式，对于每一个 （socre，member）数据，可以只分配一份对象空间，SkipList 和 Hash Table 都只存储该对象的地址即可。但对于 IdleKV 采用的 ART 顺序索引结构，（socre，member） 不会只以一整条字符串的形式存放在单个对象中，而是会随着节点分裂和路径压缩被拆散到节点前缀、边以及叶子后缀中，难以实现像 Redis 那样的优化。
+	其主要原因在于 Redis 采用 SkipList + Hash Table 的方式，对于每一个 （score，member）数据，可以只分配一份对象空间，SkipList 和 Hash Table 都只存储该对象的地址即可。但对于 IdleKV 采用的 ART 顺序索引结构，（score，member） 不会只以一整条字符串的形式存放在单个对象中，而是会随着节点分裂和路径压缩被拆散到节点前缀、边以及叶子后缀中，难以实现像 Redis 那样的优化。
 
 	\subsubsection{结果讨论}
 	从已经完成的 \texttt{GET}/\texttt{SET} 实验来看，IdleKV 当前最明确的优势体现在基础命令路径上。Shared-Nothing 分片、多线程事件循环以及连接内批量处理共同降低了单位请求的调度摊销，使系统在单机多核环境下能够稳定获得高于 Redis 的总体吞吐，并在平均延迟上保持更优表现。这说明本文在运行时层面所采用的线程模型与分片执行策略是有效的。
 
-	与此同时，实验也暴露出当前实现的若干工程短板。首先，系统虽然在平均路径上表现良好，但 Get/Set 场景下的 P99 延迟仍弱于 Redis，表明尾延迟控制、调度公平性与批量发送策略仍需继续打磨。其次基于 ART 实现的有序集合虽然在吞吐已经延迟上优于 Redis 的实现，但是内存占用要比 Redis 高近 2 倍，并且难以优化。
+	与此同时，实验也暴露出当前实现的若干工程短板。首先，系统虽然在平均路径上表现良好，但 Get/Set 场景下的 P99 延迟仍弱于 Redis，表明尾延迟控制、调度公平性与批量发送策略仍需继续打磨。其次，基于 ART 实现的有序集合虽然在吞吐和延迟上优于 Redis 的实现，但内存占用接近 Redis 的 2 倍，后续仍需进一步优化空间效率。
 	
 	\section{总结与展望}
 	\subsection{工作总结}
@@ -853,18 +904,11 @@ void PollTransaction(caller) {
 
 	\begin{itemize}
 		\item \textbf{长尾延迟严重。} 实验结果表明，IdleKV 虽然在总体吞吐和平均延迟上已经优于 Redis，但在部分基础读写负载下 P99 延迟仍然偏高，说明系统在尾部请求上的稳定性仍有不足。造成这一问题的原因可能包括 shard 任务队列排队、Fiber 调度时机、事务注册与执行阶段的额外调度，以及批量发送策略对少量请求的等待放大。后续需要进一步优化调度公平性和队列推进策略，并对关键路径中的批处理阈值、让权机制和跨 shard 协调开销进行更细粒度的分析，以在保持高吞吐的同时降低尾延迟抖动。
-		\item \textbf{命令覆盖不足。} 当前系统仅实现了 Redis 命令集中与本文实验密切相关的一部分功能，主要覆盖字符串对象、基础系统命令以及 Sorted Set 相关命令。Hash、List、Set 等常用对象类型仍未完整实现，\texttt{MULTI/EXEC} 等事务型接口也尚未补齐。因此，IdleKV 目前更接近一个用于验证核心架构和关键数据结构的原型系统，后续仍需要继续扩展命令集合、完善对象语义，并提升与 Redis 生态工具的兼容程度。
+		\item \textbf{命令覆盖不足。} 目前系统只实现了 Redis 命令集中与实验相关的一部分功能，主要集中在字符串对象、基础系统命令以及 Sorted Set 相关操作上。像 Hash、List、Set 这类常见数据结构还没有完全补齐，\texttt{MULTI/EXEC} 这类事务接口也暂时没有实现。从整体来看，IdleKV 目前更偏向一个用于验证核心架构和关键数据结构的原型系统，而不是一个完整的 Redis 兼容实现。后续工作还需要继续扩展命令覆盖范围，逐步补全对象语义，同时提高与 Redis 生态工具的兼容性。
 		\item \textbf{持久化缺失。} 当前系统尚未实现数据持久化能力，重启后无法恢复内存数据。Redis 通常结合 AOF 与 Fork Snapshot 实现持久化，但 Fork Snapshot 在大内存实例中可能因写时复制带来短时间内存占用激增，并进一步影响尾延迟稳定性。后续可以参考 DragonflyDB 的 Forkless Snapshot 设计，在避免大规模 fork 开销的前提下实现一致性快照，并进一步结合增量日志机制提升系统恢复能力\cite{Dragonfly-RDB-Save}。
 		\item \textbf{集群能力缺失。} 一个完整的生产级内存数据库不仅需要提升单机多核利用率，还需要支持分布式集群部署，以满足水平扩展、故障恢复和高可用需求。当前 IdleKV 仍只关注单机内的分片执行与事务协调，尚未实现跨节点分片、数据迁移、副本同步、故障检测和自动主从切换等机制。后续若要面向更大规模负载，需要在保持单机执行效率的基础上进一步设计集群协议和复制机制。
 	\end{itemize}
 
-
-
-	\newpage
-
-	\section{致谢}
-
-	
 
 	\newpage
 	\phantomsection
@@ -882,6 +926,24 @@ void PollTransaction(caller) {
 	\end{spacing}
 	\endgroup
 
+
+	\newpage
+
+	\section*{致谢}
+	\addcontentsline{toc}{section}{致谢}
+	\begin{spacing}{1.5}
+
+	至此本科期间最后一个项目也就告一段落，学习生涯也到了结尾。回顾大学时光，我从入学以来就为工作焦虑不已，总觉得自己不够努力、不够优秀，只顾埋头苦学苦练。但停下脚步才发现自己早已变成了当初梦寐以求的样子，懂得了很多技术，也能独立实现复杂系统，还拿到了不错的 Offer。
+	
+	这一路的痛苦与迷茫很少去诉说，所以本篇致谢我首先想感谢的是自己，感谢自己坚定的选择了计算机这条路，即使时常面对失败也没有放弃技术的学习，希望未来我可以继续保持这份对技术的纯粹热爱完成人生的下一篇章。
+
+	同时要感谢父母对我的理解与支持，父母给予我稳定的生活与学习环境，使得我能够专注于所热爱的领域，安心完成本阶段的学习目标，得以不必为现实所困扰。
+	
+	还要感谢同学和伙伴的陪伴与帮助。首先要感谢姚婉欣学姐对我的帮助与陪伴，在我最迷茫的时候给我鼓励，让我有继续前进的动力，也感谢学姐在我学习遇到困难时无条件的帮助；也感谢朱文豪学长，是他带我接触了存储这个领域，帮助我了解学习了很多优秀课程与资料。最后也要感谢陪我玩耍的同学与伙伴，是你们帮我排解压力，让我在学习成长路上不那么孤单。
+
+	最后感谢宁波大学以及本科期间遇到的所有老师，感谢你们给我的教育资源以及锻炼学习的平台，让我更好的学习进步。
+
+	\end{spacing}
 
 
 \end{spacing}

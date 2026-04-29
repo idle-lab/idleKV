@@ -1,4 +1,4 @@
-\begin{thebibliography}{22}
+\begin{thebibliography}{29}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{#1}
 \expandafter\ifx\csname urlstyle\endcsname\relax\else
@@ -43,6 +43,25 @@ Proceedings of the 2018 International Conference on Management of Data.
 \newblock Houston, TX, USA: Association for Computing Machinery, 2018: 275-290.
 \newblock \url{https://www.microsoft.com/en-us/research/publication/faster-concurrent-key-value-store-place-updates/}.
 
+\bibitem[{Alibaba Cloud Tair Team}(2021)]{TairString}
+{Alibaba Cloud Tair Team}.
+\newblock The fastest kv engine: Innovative engine developed by the tair team\allowbreak[EB/OL].
+\newblock 2021\allowbreak[2026-04-25].
+\newblock \url{https://alibaba-cloud.medium.com/the-fastest-kv-engine-innovative-engine-developed-by-the-tair-team-c2473cc89e5a}.
+
+\bibitem[谢国羿(2025)]{Xie2025RedisPersistence}
+谢国羿.
+\newblock 分布式持久化Redis数据库的关键技术设计与优化\allowbreak[D/OL].
+\newblock 电子科技大学, 2025\allowbreak[2026-04-25].
+\newblock \url{https://cnki.istiz.org.cn/kcms/detail/detail.aspx?dbcode=CMFD&dbname=CMFD2025&filename=1025406560.nh}.
+
+\bibitem[Chen et~al.(2020)Chen, Chen, Zhang, Zang, Guan, and Zhang]{SpanDB}
+CHEN J, CHEN Y, ZHANG S, et~al.
+\newblock Spandb: A fast, cost-effective lsm-tree based kv store on hybrid storage\allowbreak[C/OL]//\allowbreak
+18th USENIX Conference on File and Storage Technologies (FAST 20).
+\newblock USENIX Association, 2020: 17-32.
+\newblock \url{https://www.usenix.org/conference/fast20/presentation/chen-jiqiang}.
+
 \bibitem[Bernstein et~al.(1981)Bernstein and Goodman]{Concurrency-Control-in-Distributed-Database-Systems}
 BERNSTEIN P~A, GOODMAN N.
 \newblock Concurrency control in distributed database systems\allowbreak[J].
@@ -64,10 +83,23 @@ KUNG H~T, ROBINSON J~T.
 \newblock On optimistic methods for concurrency control\allowbreak[J].
 \newblock ACM Trans. Database Syst., 1981, 6\allowbreak (2): 213–226.
 
+\bibitem[赵泓尧\ 等(2022)赵泓尧, 赵展浩, 杨皖晴, 卢卫, 李海翔, and 杜小勇]{Zhao2022ConcurrencyControlExperiment}
+赵泓尧, 赵展浩, 杨皖晴, 等.
+\newblock 内存数据库并发控制算法的实验研究\allowbreak[J/OL].
+\newblock 软件学报, 2022, 33\allowbreak (3): 867-890\allowbreak[2026-04-25].
+\newblock \url{https://www.jos.org.cn/html/2022/3/6454.htm}.
+
 \bibitem[Ren et~al.(2015)Ren, Thomson, and Abadi]{VLL}
 REN K, THOMSON A, ABADI D~J.
 \newblock Vll: a lock manager redesign for main memory database systems\allowbreak[J].
 \newblock The VLDB Journal, 2015, 24\allowbreak (5): 681–705.
+
+\bibitem[Wang et~al.(2021)Wang, Ding, Wang, Christensen, Wang, Chen, and Li]{Polyjuice}
+WANG J, DING D, WANG H, et~al.
+\newblock Polyjuice: High-performance transactions via learned concurrency control\allowbreak[C/OL]//\allowbreak
+15th USENIX Symposium on Operating Systems Design and Implementation (OSDI 21).
+\newblock USENIX Association, 2021: 198-216.
+\newblock \url{https://www.usenix.org/conference/osdi21/presentation/wang-jiachen}.
 
 \bibitem[Rao et~al.(2000)Rao and Ross]{Making-B-Trees-Cache-Conscious-in-Main-Memory}
 RAO J, ROSS K~A.
@@ -92,6 +124,19 @@ LEIS V, KEMPER A, NEUMANN T.
 \newblock The adaptive radix tree: Artful indexing for main-memory databases\allowbreak[C]//\allowbreak
 ICDE '13: Proceedings of the 2013 IEEE International Conference on Data Engineering (ICDE 2013).
 \newblock USA: IEEE Computer Society, 2013: 38–49.
+
+\bibitem[Tang et~al.(2020)Tang, Wang, Dong, Hu, Wang, Wang, and Chen]{XIndex}
+TANG C, WANG Y, DONG Z, et~al.
+\newblock Xindex: A scalable learned index for multicore data storage\allowbreak[C]//\allowbreak
+Proceedings of the 25th ACM SIGPLAN Symposium on Principles and Practice of Parallel Programming.
+\newblock Association for Computing Machinery, 2020: 308-320.
+
+\bibitem[Wang et~al.(2020)Wang, Tang, Wang, and Chen]{SIndex}
+WANG Y, TANG C, WANG Z, et~al.
+\newblock Sindex: A scalable learned index for string keys\allowbreak[C/OL]//\allowbreak
+Proceedings of the 11th ACM SIGOPS Asia-Pacific Workshop on Systems.
+\newblock Association for Computing Machinery, 2020: 17-24.
+\newblock \url{https://ipads.se.sjtu.edu.cn/_media/publications/apsys20-final71.pdf}.
 
 \bibitem[Herlihy et~al.(1990)Herlihy and Wing]{Linearizability:a-correctness-condition-for-concurrent-objects}
 HERLIHY M~P, WING J~M.
