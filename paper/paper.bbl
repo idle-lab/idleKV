@@ -1,0 +1,190 @@
+\begin{thebibliography}{29}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{#1}
+\expandafter\ifx\csname urlstyle\endcsname\relax\else
+  \urlstyle{same}\fi
+\expandafter\ifx\csname href\endcsname\relax
+  \DeclareUrlCommand\doi{\urlstyle{rm}}
+  \def\eprint#1#2{#2}
+\else
+  \def\doi#1{\href{https://doi.org/#1}{\nolinkurl{#1}}}
+  \let\eprint\href
+\fi
+
+\bibitem[Tessier(2025)]{In-memory-databases-The-foundation-of-real-time-AI-and-analytics}
+TESSIER J.
+\newblock In-memory databases: The foundation of real-time ai and analytics\allowbreak[EB/OL].
+\newblock \allowbreak(2025-10-23)\allowbreak[2026-04-20].
+\newblock \url{https://redis.io/blog/in-memory-databases-the-foundation-of-real-time-ai-and-analytics/}.
+
+\bibitem[Ousterhout et~al.(2009)Ousterhout, Agrawal, Erickson, Kozyrakis, Leverich, Mazi{\`e}res, Mitra, Narayanan, Ongaro, Parulkar, Rosenblum, Rumble, Stratmann, and Stutsman]{The-Case-for-RAMClouds-Scalable-High-Performance-Storage-Entirely-in-DRAM}
+OUSTERHOUT J, AGRAWAL P, ERICKSON D, et~al.
+\newblock The case for ramclouds: Scalable high-performance storage entirely in dram\allowbreak[J].
+\newblock SIGOPS Operating Systems Review, 2009, 43\allowbreak (4): 92-105.
+
+\bibitem[Fan et~al.(2013)Fan, Andersen, and Kaminsky]{MemC3-Compact-and-Concurrent-MemCache-with-Dumber-Caching-and-Smarter-Hashing}
+FAN B, ANDERSEN D~G, KAMINSKY M.
+\newblock Memc3: Compact and concurrent memcache with dumber caching and smarter hashing\allowbreak[C/OL]//\allowbreak
+10th USENIX Symposium on Networked Systems Design and Implementation (NSDI 13).
+\newblock Lombard, IL: USENIX Association, 2013: 371-384.
+\newblock \url{https://www.usenix.org/conference/nsdi13/technical-sessions/presentation/fan}.
+
+\bibitem[Lim et~al.(2014)Lim, Han, Andersen, and Kaminsky]{MICA-A-Holistic-Approach-to-Fast-In-Memory-Key-Value-Storage}
+LIM H, HAN D, ANDERSEN D~G, et~al.
+\newblock Mica: A holistic approach to fast in-memory key-value storage\allowbreak[C/OL]//\allowbreak
+11th USENIX Symposium on Networked Systems Design and Implementation (NSDI 14).
+\newblock Seattle, WA: USENIX Association, 2014: 429-444.
+\newblock \url{https://www.usenix.org/conference/nsdi14/technical-sessions/presentation/lim}.
+
+\bibitem[Chandramouli et~al.(2018)Chandramouli, Prasaad, Kossmann, Levandoski, Hunter, and Barnett]{FASTER-A-Concurrent-Key-Value-Store-with-In-Place-Updates}
+CHANDRAMOULI B, PRASAAD G, KOSSMANN D, et~al.
+\newblock Faster: A concurrent key-value store with in-place updates\allowbreak[C/OL]//\allowbreak
+Proceedings of the 2018 International Conference on Management of Data.
+\newblock Houston, TX, USA: Association for Computing Machinery, 2018: 275-290.
+\newblock \url{https://www.microsoft.com/en-us/research/publication/faster-concurrent-key-value-store-place-updates/}.
+
+\bibitem[{Alibaba Cloud Tair Team}(2021)]{TairString}
+{Alibaba Cloud Tair Team}.
+\newblock The fastest kv engine: Innovative engine developed by the tair team\allowbreak[EB/OL].
+\newblock 2021\allowbreak[2026-04-25].
+\newblock \url{https://alibaba-cloud.medium.com/the-fastest-kv-engine-innovative-engine-developed-by-the-tair-team-c2473cc89e5a}.
+
+\bibitem[谢国羿(2025)]{Xie2025RedisPersistence}
+谢国羿.
+\newblock 分布式持久化Redis数据库的关键技术设计与优化\allowbreak[D/OL].
+\newblock 电子科技大学, 2025\allowbreak[2026-04-25].
+\newblock \url{https://cnki.istiz.org.cn/kcms/detail/detail.aspx?dbcode=CMFD&dbname=CMFD2025&filename=1025406560.nh}.
+
+\bibitem[Chen et~al.(2020)Chen, Chen, Zhang, Zang, Guan, and Zhang]{SpanDB}
+CHEN J, CHEN Y, ZHANG S, et~al.
+\newblock Spandb: A fast, cost-effective lsm-tree based kv store on hybrid storage\allowbreak[C/OL]//\allowbreak
+18th USENIX Conference on File and Storage Technologies (FAST 20).
+\newblock USENIX Association, 2020: 17-32.
+\newblock \url{https://www.usenix.org/conference/fast20/presentation/chen-jiqiang}.
+
+\bibitem[Bernstein et~al.(1981)Bernstein and Goodman]{Concurrency-Control-in-Distributed-Database-Systems}
+BERNSTEIN P~A, GOODMAN N.
+\newblock Concurrency control in distributed database systems\allowbreak[J].
+\newblock ACM Comput. Surv., 1981, 13\allowbreak (2): 185–221.
+
+\bibitem[Gray et~al.(1975)Gray, Lorie, and Putzolu]{Granularity-of-locks-in-a-shared-data-base}
+GRAY J~N, LORIE R~A, PUTZOLU G~R.
+\newblock Granularity of locks in a shared data base\allowbreak[C]//\allowbreak
+VLDB '75: Proceedings of the 1st International Conference on Very Large Data Bases.
+\newblock New York, NY, USA: Association for Computing Machinery, 1975: 428–451.
+
+\bibitem[Reed(1978)]{NAMING-AND-SYNCHRONIZATION-IN-A-DECENTRALIZED-COMPUTER-SYSTEM}
+REED D~P.
+\newblock Naming and synchronization in a decentralized computer system\allowbreak[R].
+\newblock USA: Massachusetts Institute of Technology, 1978.
+
+\bibitem[Kung et~al.(1981)Kung and Robinson]{On-optimistic-methods-for-concurrency-control}
+KUNG H~T, ROBINSON J~T.
+\newblock On optimistic methods for concurrency control\allowbreak[J].
+\newblock ACM Trans. Database Syst., 1981, 6\allowbreak (2): 213–226.
+
+\bibitem[赵泓尧\ 等(2022)赵泓尧, 赵展浩, 杨皖晴, 卢卫, 李海翔, and 杜小勇]{Zhao2022ConcurrencyControlExperiment}
+赵泓尧, 赵展浩, 杨皖晴, 等.
+\newblock 内存数据库并发控制算法的实验研究\allowbreak[J/OL].
+\newblock 软件学报, 2022, 33\allowbreak (3): 867-890\allowbreak[2026-04-25].
+\newblock \url{https://www.jos.org.cn/html/2022/3/6454.htm}.
+
+\bibitem[Ren et~al.(2015)Ren, Thomson, and Abadi]{VLL}
+REN K, THOMSON A, ABADI D~J.
+\newblock Vll: a lock manager redesign for main memory database systems\allowbreak[J].
+\newblock The VLDB Journal, 2015, 24\allowbreak (5): 681–705.
+
+\bibitem[Wang et~al.(2021)Wang, Ding, Wang, Christensen, Wang, Chen, and Li]{Polyjuice}
+WANG J, DING D, WANG H, et~al.
+\newblock Polyjuice: High-performance transactions via learned concurrency control\allowbreak[C/OL]//\allowbreak
+15th USENIX Symposium on Operating Systems Design and Implementation (OSDI 21).
+\newblock USENIX Association, 2021: 198-216.
+\newblock \url{https://www.usenix.org/conference/osdi21/presentation/wang-jiachen}.
+
+\bibitem[Rao et~al.(2000)Rao and Ross]{Making-B-Trees-Cache-Conscious-in-Main-Memory}
+RAO J, ROSS K~A.
+\newblock Making b+-trees cache conscious in main memory\allowbreak[C]//\allowbreak
+Proceedings of the 2000 ACM SIGMOD International Conference on Management of Data.
+\newblock New York, NY, USA: Association for Computing Machinery, 2000: 475-486.
+
+\bibitem[Pugh(1990)]{Skip-lists-a-probabilistic-alternative-to-balanced-trees}
+PUGH W.
+\newblock Skip lists: a probabilistic alternative to balanced trees\allowbreak[J].
+\newblock Communications of the ACM, 1990, 33\allowbreak (6): 668-676.
+
+\bibitem[Mao et~al.(2012)Mao, Kohler, and Morris]{Cache-Craftiness-for-Fast-Multicore-Key-Value-Storage}
+MAO Y, KOHLER E, MORRIS R.
+\newblock Cache craftiness for fast multicore key-value storage\allowbreak[C/OL]//\allowbreak
+Proceedings of the 7th ACM European Conference on Computer Systems.
+\newblock Bern, Switzerland: Association for Computing Machinery, 2012: 183-196.
+\newblock \url{https://read.seas.harvard.edu/~kohler/pubs/mao12cache.pdf}.
+
+\bibitem[Leis et~al.(2013)Leis, Kemper, and Neumann]{The-adaptive-radix-tree-ARTful-indexing-for-main-memory-databases}
+LEIS V, KEMPER A, NEUMANN T.
+\newblock The adaptive radix tree: Artful indexing for main-memory databases\allowbreak[C]//\allowbreak
+ICDE '13: Proceedings of the 2013 IEEE International Conference on Data Engineering (ICDE 2013).
+\newblock USA: IEEE Computer Society, 2013: 38–49.
+
+\bibitem[Tang et~al.(2020)Tang, Wang, Dong, Hu, Wang, Wang, and Chen]{XIndex}
+TANG C, WANG Y, DONG Z, et~al.
+\newblock Xindex: A scalable learned index for multicore data storage\allowbreak[C]//\allowbreak
+Proceedings of the 25th ACM SIGPLAN Symposium on Principles and Practice of Parallel Programming.
+\newblock Association for Computing Machinery, 2020: 308-320.
+
+\bibitem[Wang et~al.(2020)Wang, Tang, Wang, and Chen]{SIndex}
+WANG Y, TANG C, WANG Z, et~al.
+\newblock Sindex: A scalable learned index for string keys\allowbreak[C/OL]//\allowbreak
+Proceedings of the 11th ACM SIGOPS Asia-Pacific Workshop on Systems.
+\newblock Association for Computing Machinery, 2020: 17-24.
+\newblock \url{https://ipads.se.sjtu.edu.cn/_media/publications/apsys20-final71.pdf}.
+
+\bibitem[Herlihy et~al.(1990)Herlihy and Wing]{Linearizability:a-correctness-condition-for-concurrent-objects}
+HERLIHY M~P, WING J~M.
+\newblock Linearizability: a correctness condition for concurrent objects\allowbreak[J].
+\newblock ACM Trans. Program. Lang. Syst., 1990, 12\allowbreak (3): 463–492.
+
+\bibitem[{Jepsen-io}(2020)]{Elle}
+{Jepsen-io}.
+\newblock Elle\allowbreak[EB/OL].
+\newblock \allowbreak(2020-02-23)\allowbreak[2026-04-20].
+\newblock \url{https://github.com/jepsen-io/elle}.
+
+\bibitem[Stonebraker(1985)]{The-Case-for-Shared-Nothing}
+STONEBRAKER M.
+\newblock The case for shared nothing\allowbreak[C/OL]//\allowbreak
+High Performance Transaction Systems Workshop.
+\newblock 1985.
+\newblock \url{https://api.semanticscholar.org/CorpusID:260427782}.
+
+\bibitem[{Boostorg}(2026)]{Boost-Asio}
+{Boostorg}.
+\newblock Boost.asio\allowbreak[EB/OL].
+\newblock 2026\allowbreak[2026-04-21].
+\newblock \url{https://github.com/boostorg/asio}.
+
+\bibitem[{Boostorg}(2026)]{Boost-Fiber}
+{Boostorg}.
+\newblock Boost.fiber\allowbreak[EB/OL].
+\newblock 2026\allowbreak[2026-04-21].
+\newblock \url{https://github.com/boostorg/fiber}.
+
+\bibitem[Collet(2012)]{xxhash}
+COLLET Y.
+\newblock xxhash - extremely fast non-cryptographic hash algorithm\allowbreak[EB/OL].
+\newblock 2012.
+\newblock \url{https://xxhash.com/}.
+
+\bibitem[Leijen et~al.(2019)Leijen, Zorn, and de~Moura]{Leijen2019MimallocFL}
+LEIJEN D, ZORN B~G, DE~MOURA L~M.
+\newblock Mimalloc: Free list sharding in action\allowbreak[C/OL]//\allowbreak
+Asian Symposium on Programming Languages and Systems.
+\newblock 2019.
+\newblock \url{https://api.semanticscholar.org/CorpusID:198363081}.
+
+\bibitem[{DragonflyDB}(2026)]{Dragonfly-RDB-Save}
+{DragonflyDB}.
+\newblock Rdb save design\allowbreak[EB/OL].
+\newblock 2026\allowbreak[2026-04-24].
+\newblock \url{https://github.com/dragonflydb/dragonfly/blob/main/docs/rdbsave.md}.
+
+\end{thebibliography}

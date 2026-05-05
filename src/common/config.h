@@ -64,6 +64,9 @@ public:
             ->default_val("0.0.0.0");
         opts_.add_option("--metrics-port", metrics_port_, "Prometheus metrics port")
             ->default_val(9108);
+        opts_.add_option("--log-file", log_file_, "Write logs to this file");
+        opts_.add_option("--log-level", log_level_,
+                         "Log level: trace, debug, info, warn, error, critical, off");
 
         opts_.add_option("-c,--config", config_file_path, "Config file path");
         opts_.add_option("--DbNum", db_num_, "number of DB");
@@ -71,7 +74,17 @@ public:
 
     DISABLE_COPY_MOVE(Config);
 
-    void Parse(int argc, char** argv) { opts_.parse(argc, argv); }
+    void Parse(int argc, char** argv) {
+        try {
+            opts_.parse(argc, argv);
+        } catch (const CLI::CallForHelp&) {
+            std::cout << opts_.help() << '\n';
+            std::exit(0);
+        } catch (const CLI::CallForAllHelp&) {
+            std::cout << opts_.help("", CLI::AppFormatMode::All) << '\n';
+            std::exit(0);
+        }
+    }
 
     void ParseFromFile() { throw std::runtime_error("Not yet implemented"); }
 
@@ -79,6 +92,8 @@ public:
 
     std::string ip_, port_;
     std::string metrics_ip_;
+    std::string log_file_;
+    std::string log_level_;
     uint16_t    io_threads_     = 1;
     uint16_t    worker_threads_ = 0;
     uint16_t    metrics_port_   = 0;

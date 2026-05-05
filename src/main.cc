@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
             cfg.Parse(argc, argv);
         }
 
-        spdlog::set_default_logger(idlekv::MakeDefaultLogger());
+        spdlog::set_default_logger(idlekv::MakeDefaultLogger(cfg));
 
 #ifdef NDEBUG
         LOG(info, "you are running in release mode");

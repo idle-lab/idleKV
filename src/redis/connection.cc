@@ -174,6 +174,12 @@ auto Connection::HandleRequests() noexcept -> void {
         if (!parse_res.Ok()) [[unlikely]] {
             if (parse_res == ParserResut::STD_ERROR) {
                 if (IsConnectionClosedError(parse_res.ErrorCode())) {
+                    input_eof_ = true;
+                    async_cv_.notify_all();
+                    if (async_fiber_.joinable()) {
+                        async_fiber_.join();
+                    }
+                    Flush();
                     break;
                 }
 
@@ -238,10 +244,19 @@ auto Connection::AsyncHandle() noexcept -> void {
     bool                                        yielded_for_batch = false;
 
     while (!IsClosed()) {
-        async_cv_.wait(lk, [this]() -> bool { return IsClosed() || !pipeline_queue_.empty(); });
+        async_cv_.wait(
+            lk, [this]() -> bool { return IsClosed() || input_eof_ || !pipeline_queue_.empty(); });
 
         if (IsClosed()) {
             return;
+        }
+
+        if (pipeline_queue_.empty()) {
+            if (input_eof_) {
+                s_.Flush();
+                return;
+            }
+            continue;
         }
 
         if (!yielded_for_batch && pipeline_queue_.size() == 1 && p_.HashMore()) {
@@ -288,8 +303,11 @@ auto Connection::AsyncHandle() noexcept -> void {
 
         if (pipeline_queue_.empty()) {
             yielded_for_batch = false;
-            if (!p_.HashMore()) {
+            if (input_eof_ || !p_.HashMore()) {
                 s_.Flush();
+            }
+            if (input_eof_) {
+                return;
             }
         }
     }
@@ -305,9 +323,10 @@ auto Connection::Flush() -> void {
 auto Connection::Init(asio::ip::tcp::socket&& socket) -> void {
     CHECK(socket_.has_value() == false) << "override a connection that is currently in use";
     socket_.emplace(std::move(socket));
-    closing_  = false;
-    cur_args_ = RedisService::Tlocal()->GetCmdArgsOrCreate();
-    ctx_      = std::make_unique<ExecContext>(this);
+    closing_   = false;
+    input_eof_ = false;
+    cur_args_  = RedisService::Tlocal()->GetCmdArgsOrCreate();
+    ctx_       = std::make_unique<ExecContext>(this);
 }
 
 auto Connection::Reset() -> void {

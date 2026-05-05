@@ -77,17 +77,15 @@ auto IdleEngine::DispatchCmd(ExecContext* ctx, CmdArgs& args) noexcept -> void {
     }
 
     if (cmd->IsTransactional()) {
-        if (ctx->txn == nullptr) {
-            ctx->txn = std::make_unique<Transaction>();
-        }
-
-        ctx->txn->InitSingle(cmd, &args, cmd->PrepareKeys(args));
+        ctx->txn.reset();
+        ctx->txn = Transaction::AcquirePooled();
+        ctx->txn->InitSingle(cmd, &args, cmd->PrepareKeys(args), ctx->db_index);
     }
 
     cmd->Exec(ctx, args);
 
-    if (cmd->IsTransactional()) {
-        ctx->txn->Done();
+    if (cmd->IsTransactional() && ctx->exec_state == ExecContext::ExecState::MultiInactive) {
+        ctx->txn.reset();
     }
 }
 
@@ -97,11 +95,10 @@ auto IdleEngine::DispatchManyCmd(ExecContext* ctx, utils::Generator<PendingReque
     pipeline_cmds.reserve(limit);
     auto*  conn  = ctx->conn;
     size_t count = 0;
-
-    if (ctx->txn == nullptr) {
-        ctx->txn = std::make_unique<Transaction>();
-    }
-    ctx->txn->InitMulti(MultiMode::Squash);
+    
+    ctx->txn.reset();
+    ctx->txn = Transaction::AcquirePooled();
+    ctx->txn->InitMulti(ctx->db_index, MultiMode::Squash);
 
     auto squash = [&]() {
         if (pipeline_cmds.empty()) {
@@ -148,8 +145,8 @@ auto IdleEngine::DispatchManyCmd(ExecContext* ctx, utils::Generator<PendingReque
     }
 
     squash();
+    ctx->txn.reset();
 
-    ctx->txn->Done();
     return count;
 }
 

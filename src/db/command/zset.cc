@@ -173,8 +173,8 @@ auto ZRange(ExecContext* ctx, CmdArgs& args) -> void {
         return sender->SendError(kSyntaxErr);
     }
 
-    std::vector<ZSet::MemberScore> members;
-    OpStatus                       status = OpStatus::OK;
+    std::vector<std::string> response;
+    OpStatus                 status = OpStatus::OK;
 
     ctx->CurTxn()->Execute([&](Transaction*, Shard* shard) {
         auto* db  = shard->DbAt(ctx->db_index);
@@ -184,20 +184,19 @@ auto ZRange(ExecContext* ctx, CmdArgs& args) -> void {
             return;
         }
 
-        members = res.payload->GetZSet()->Range(start, stop);
+        auto* zset = res.payload->GetZSet();
+        response.reserve(zset->CountRange(start, stop) * (with_scores ? 2U : 1U));
+        zset->IterateRange(start, stop, [&](std::string member, double score) -> bool {
+            response.push_back(std::move(member));
+            if (with_scores) {
+                response.push_back(fmt::format("{}", score));
+            }
+            return true;
+        });
     });
 
     if (status == OpStatus::WrongType) {
         return sender->SendError(kWrongTypeErr);
-    }
-
-    std::vector<std::string> response;
-    response.reserve(members.size() * (with_scores ? 2U : 1U));
-    for (const auto& member : members) {
-        response.push_back(member.member);
-        if (with_scores) {
-            response.push_back(fmt::format("{}", member.score));
-        }
     }
 
     sender->SendBulkStringArray(std::move(response));

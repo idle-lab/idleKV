@@ -29,7 +29,7 @@ auto EqualsIgnoreCase(std::string_view lhs, std::string_view rhs) -> bool {
 
 auto ReadCurrentRssBytes() -> size_t {
     std::ifstream statm("/proc/self/statm");
-    size_t        total_pages = 0;
+    size_t        total_pages    = 0;
     size_t        resident_pages = 0;
     statm >> total_pages >> resident_pages;
     if (!statm) {
@@ -79,7 +79,7 @@ auto CollectInfoMemoryStats(IdleEngine* eng) -> InfoMemoryStats {
     stats.shard_used_memory_peak.reserve(stats.shard_num);
 
     for (size_t i = 0; i < stats.shard_num; ++i) {
-        const Shard* shard = eng->ShardAt(i);
+        const Shard* shard      = eng->ShardAt(i);
         const size_t shard_used = shard != nullptr ? shard->MemoryUsage() : 0;
         const size_t shard_peak = shard != nullptr ? shard->PeakMemoryUsage() : 0;
 

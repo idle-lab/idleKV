@@ -27,7 +27,7 @@ public:
 
     auto CurTxn() -> Transaction* { return txn.get(); }
 
-    std::unique_ptr<Transaction> txn{nullptr};
+    std::shared_ptr<Transaction> txn{nullptr};
     ExecState                    exec_state{ExecState::MultiInactive};
     size_t                       db_index{0};
     Connection*                  conn{nullptr};

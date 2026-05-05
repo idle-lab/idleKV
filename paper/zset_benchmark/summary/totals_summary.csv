@@ -1,0 +1,5 @@
+server,workload,op,case_label,sample_count,ops_per_sec,avg_latency_ms,p99_latency_ms
+redis,single,zadd_insert,Single key,1,1181374.809193,0.05398318,0.078
+idlekv,single,zadd_insert,Single key,1,2382753.250706,0.026314786000000003,0.035
+redis,multi,zadd_insert,Multi key,1,962973.362312,0.066173974,0.131
+idlekv,multi,zadd_insert,Multi key,1,3645974.015898,0.014996808,0.039

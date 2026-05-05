@@ -88,6 +88,8 @@ public:
         return len_tag_ <= STR ? STR : static_cast<TypeEnum>(len_tag_);
     }
 
+    static auto MemoryResource() -> std::pmr::memory_resource* { return value_mr; }
+
     ~Value() { ReleaseValue(); }
 
 private:
@@ -128,7 +130,7 @@ private:
         ValueUnio() : inline_str() {}
     } value_;
 
-    // The lower four bits store the length of the inline string 
+    // The lower four bits store the length of the inline string
     // The highest bit indicates whether the type is a string
     uint8_t len_tag_ : 5 {0};
     uint8_t has_ttl_ : 1 {false};
@@ -142,7 +144,8 @@ using PrimeValue = std::shared_ptr<Value>;
 
 template <Value::TypeEnum Tag, class... Args>
 inline auto MakeValue(Args&&... args) -> PrimeValue {
-    auto pv = std::make_shared<Value>();
+    void*                  ptr = Value::MemoryResource()->allocate(sizeof(Value), alignof(Value));
+    std::shared_ptr<Value> pv(new (ptr) Value());
 
     if constexpr (Tag == Value::STR) {
         pv->InitString(std::forward<Args>(args)...);

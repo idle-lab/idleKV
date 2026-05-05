@@ -10,6 +10,7 @@
 #include <absl/container/inlined_vector.h>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -21,15 +22,17 @@ struct Ok {};
 struct Pong {};
 struct SimpleString : std::string {};
 struct BulkString {
-    PrimeValue pv;
+    PrimeValue  pv;
     std::string s;
 };
-using BulkStringArray = std::vector<std::string>;
-using Integer         = int64_t;
+using BulkStringArray         = std::vector<std::string>;
+using NullableBulkStringArray = std::vector<std::optional<std::string>>;
+using Integer                 = int64_t;
 struct Error : std::string {};
 using Null = std::nullptr_t;
 
-using Payload = std::variant<std::monostate, Ok, Pong, SimpleString, BulkString, BulkStringArray, Integer, Error, Null>;
+using Payload = std::variant<std::monostate, Ok, Pong, SimpleString, BulkString, BulkStringArray,
+                             NullableBulkStringArray, Integer, Error, Null>;
 
 class PayloadVisitor {
 public:
@@ -47,6 +50,9 @@ public:
         }
     }
     auto operator()(const BulkStringArray& values) -> void { sender_->SendBulkStringArray(values); }
+    auto operator()(const NullableBulkStringArray& values) -> void {
+        sender_->SendBulkStringArray(values);
+    }
     auto operator()(const Integer& i) -> void { sender_->SendInteger(i); }
     auto operator()(const Error& e) -> void { sender_->SendError(e); }
     auto operator()(const Null&) -> void { sender_->SendNullBulkString(); }
@@ -63,13 +69,16 @@ public:
     auto SendOk() -> void override { payload_ = Ok{}; }
     auto SendPong() -> void override { payload_ = Pong{}; }
     auto SendBulkString(std::string_view, PrimeValue holder) -> void override {
-        payload_ = BulkString{.pv=std::move(holder)};
+        payload_ = BulkString{.pv = std::move(holder), .s = {}};
     }
     auto SendBulkString(std::string s) -> void override {
-        payload_ = BulkString{.s=std::move(s)};
+        payload_ = BulkString{.pv = {}, .s = std::move(s)};
     }
     auto SendBulkStringArray(std::vector<std::string> values) -> void override {
         payload_ = BulkStringArray(std::move(values));
+    }
+    auto SendBulkStringArray(std::vector<std::optional<std::string>> values) -> void override {
+        payload_ = NullableBulkStringArray(std::move(values));
     }
     auto SendNullBulkString() -> void override { payload_ = Null{}; }
     auto SendInteger(int64_t value) -> void override { payload_ = Integer(value); }
@@ -95,7 +104,7 @@ public:
 
     explicit CmdSquasher(ExecContext* client) : parent_ctx_(client) {}
 
-    static auto Squash(std::vector<CommandContext>& cmds, Sender* sender, ExecContext* client)
+    static auto Squash(std::vector<CommandContext>& cmds, Sender* sender, ExecContext* ctx)
         -> size_t;
 
     auto Squash(std::vector<CommandContext>& cmds, Sender* sender) -> void;
